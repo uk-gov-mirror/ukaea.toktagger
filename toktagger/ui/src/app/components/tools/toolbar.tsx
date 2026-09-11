@@ -137,10 +137,6 @@ export default function ToolBar() {
       ),
     });
 
-    // The automatic annotators exist only to write annotations, and each POSTs to
-    // /annotator/* from an effect as soon as it is enabled -- which for a sample that
-    // already holds its suggestions happens on mount. Disabling the controls would
-    // not stop that, so they are left out entirely for a viewer.
     if (canAnnotate) {
       tools.push({
         name: "Peak Detection",
