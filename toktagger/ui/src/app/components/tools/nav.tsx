@@ -1,5 +1,11 @@
 "use client";
-import { Project, type Annotation, type NavAdapter } from "@/types";
+import {
+  Project,
+  ProjectMemberSchema,
+  type Annotation,
+  type NavAdapter,
+} from "@/types";
+import { z } from "zod/v4";
 import {
   Flex,
   ActionButton,
@@ -565,20 +571,15 @@ export function NavigationBar({ project_id, sample_id }: NavigationBarInfo) {
     let cancelled = false;
     apiFetch(`${BACKEND_API_URL}/users/me/memberships`)
       .then((response) => (response.ok ? response.json() : []))
-      .then(
-        (
-          memberships: Array<{
-            project_id: string;
-            show_others_annotations: boolean;
-          }>,
-        ) => {
-          if (cancelled) return;
-          const membership = memberships.find(
-            (candidate) => candidate.project_id === project_id,
-          );
-          setShowOthers(membership?.show_others_annotations ?? true);
-        },
-      )
+      .then((data: unknown) => {
+        if (cancelled) return;
+        const parsed = z.array(ProjectMemberSchema).safeParse(data);
+        if (!parsed.success) return;
+        const membership = parsed.data.find(
+          (candidate) => candidate.project_id === project_id,
+        );
+        setShowOthers(membership?.show_others_annotations ?? true);
+      })
       .catch(() => {
         // Leave the default in place - the server is the authority on the filter.
       });
