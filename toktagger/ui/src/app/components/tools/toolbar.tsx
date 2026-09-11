@@ -120,6 +120,22 @@ export default function ToolBar() {
     defaultExpanded?: boolean;
   }[] = [];
 
+  // Profile2D shows shot labels even without data (see comment below); the
+  // other tasks need data loaded first, matching their branch's own gating.
+  const showShotLabels =
+    project.task === TaskType.Profile2D ||
+    (Boolean(data) &&
+      (project.task === TaskType.TimeSeries ||
+        project.task === TaskType.Video));
+
+  if (showShotLabels) {
+    const labels = project.shot_labels || ["Valid Shot", "Invalid Shot"];
+    tools.push({
+      name: "Shot Labels",
+      component: <ShotLabels labels={labels} canAnnotate={canAnnotate} />,
+    });
+  }
+
   if (data && project.task == TaskType.TimeSeries) {
     const result = MultiVariateTimeSeriesDataSchema.safeParse(data);
 
@@ -129,13 +145,6 @@ export default function ToolBar() {
     }
 
     const tsData = result.data;
-    const labels = project.shot_labels || ["Valid Shot", "Invalid Shot"];
-    tools.push({
-      name: "Shot Labels",
-      component: (
-        <ShotLabels labels={labels} canAnnotate={canAnnotate}></ShotLabels>
-      ),
-    });
 
     if (canAnnotate) {
       tools.push({
@@ -184,14 +193,6 @@ export default function ToolBar() {
     }
   } else if (project.task == TaskType.Profile2D) {
     // Not gated on data so the signal picker below still lets the user recover.
-    const labels = project.shot_labels || ["Valid Shot", "Invalid Shot"];
-    tools.push({
-      name: "Shot Labels",
-      component: (
-        <ShotLabels labels={labels} canAnnotate={canAnnotate}></ShotLabels>
-      ),
-    });
-
     tools.push({
       name: "View Parameters",
       component: <Profile2DViewParamsWidget />,
@@ -216,13 +217,6 @@ export default function ToolBar() {
       });
     }
   } else if (data && project.task === TaskType.Video) {
-    const labels = project.shot_labels || ["Valid Shot", "Invalid Shot"];
-
-    tools.push({
-      name: "Shot Labels",
-      component: <ShotLabels labels={labels} canAnnotate={canAnnotate} />,
-    });
-
     tools.push({
       name: "Video Tools",
       component: <VideoToolbox />,
