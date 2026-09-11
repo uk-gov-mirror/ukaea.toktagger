@@ -396,7 +396,10 @@ function ClearButton({
   canAnnotate,
   showOthers,
 }: ClearButtonInfo) {
-  const handleClick = async () => {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleConfirm = async () => {
+    setConfirmOpen(false);
     try {
       // Clear whatever the user can see: everything when others' annotations are on
       // display, only their own when they are not.
@@ -422,7 +425,7 @@ function ClearButton({
       <TooltipTrigger delay={1000} placement="bottom">
         <ActionButton
           aria-label="Clear"
-          onPress={handleClick}
+          onPress={() => setConfirmOpen(true)}
           isDisabled={!canAnnotate}
         >
           <Delete />
@@ -436,6 +439,22 @@ function ClearButton({
               : "Discard your own annotations for this sample."}
         </Tooltip>
       </TooltipTrigger>
+      <DialogContainer onDismiss={() => setConfirmOpen(false)}>
+        {confirmOpen && (
+          <AlertDialog
+            title="Clear annotations?"
+            variant="destructive"
+            primaryActionLabel="Clear"
+            cancelLabel="Cancel"
+            onPrimaryAction={handleConfirm}
+            onCancel={() => setConfirmOpen(false)}
+          >
+            {showOthers
+              ? "This will discard all annotations for this sample, including other users'. This can't be undone."
+              : "This will discard your own annotations for this sample. This can't be undone."}
+          </AlertDialog>
+        )}
+      </DialogContainer>
     </View>
   );
 }
