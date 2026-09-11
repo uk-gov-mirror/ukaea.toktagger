@@ -74,3 +74,11 @@ npm --prefix toktagger/ui run build
 ```
 
 This will run vite build and create a production-ready version of the application in the `toktagger/api/static` directory. This is then packaged with the application when pip installed.
+
+## Authenticating against the API docs
+
+The browser sends its session in an httpOnly cookie, and requests that change data must
+also carry a matching `X-CSRF-Token` header. The Swagger UI at `/docs` does not send that
+header, so a `POST`, `PUT` or `DELETE` tried from there while you are signed in to the SPA
+is rejected with a 403. Click **Authorize** in Swagger first and it sends a bearer token
+instead, which needs no CSRF header.

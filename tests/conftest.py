@@ -339,6 +339,25 @@ def admin_token(start_server) -> str:
     return token
 
 
+@pytest.fixture(scope="package")
+def admin_cookies(admin_token) -> dict[str, str]:
+    """The bootstrap admin's session cookies, for seeding browser contexts.
+
+    The browser authenticates by cookie, and the httpOnly session cookie cannot be
+    rebuilt from the token string, so log in again and keep what the server set.
+    Depends on admin_token so must_change_password is already cleared and the seeded
+    session doesn't get held on the profile page.
+    """
+    session = requests.Session()
+    response = session.post(
+        "http://localhost:8002/auth/token",
+        data={"username": "admin", "password": "admin"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert response.status_code == 200, response.text
+    return dict(session.cookies)
+
+
 @pytest.fixture(scope="function")
 def server_setup(start_server, admin_token):
     yield

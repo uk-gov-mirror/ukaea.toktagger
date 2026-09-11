@@ -1,11 +1,16 @@
+import secrets
+
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 
+from toktagger.api import config
 from toktagger.api.auth.core import decode_token, get_internal_token
 from toktagger.api.crud import utils
 from toktagger.api.schemas.users import ProjectMember, UserOut
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
+
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 _INTERNAL_USER = UserOut(
     id="000000000000000000000001",
@@ -15,10 +20,31 @@ _INTERNAL_USER = UserOut(
 )
 
 
+def _require_csrf(request: Request, payload: dict):
+    """Reject unsafe cookie-authenticated requests without a matching CSRF header.
+
+    The expected value is read from the signed token rather than the CSRF cookie, so
+    an attacker who can set cookies on this host still cannot forge a matching pair.
+    """
+    if request.method in _SAFE_METHODS:
+        return
+
+    expected = payload.get("csrf")
+    submitted = request.headers.get("X-CSRF-Token", "")
+    if not isinstance(expected, str) or not secrets.compare_digest(submitted, expected):
+        raise HTTPException(
+            status_code=403,
+            detail="CSRF token missing or invalid. Please sign in again.",
+        )
+
+
 async def get_current_user(
     request: Request,
-    token: str | None = Depends(oauth2_scheme),
+    header_token: str | None = Depends(oauth2_scheme),
 ) -> UserOut:
+    # Header first: Ray-worker callbacks, scripts and tests never send a cookie, and an
+    # explicit header should beat whatever session the same browser happens to hold.
+    token = header_token or request.cookies.get(config.settings.auth.cookie_name)
     if token is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -33,6 +59,11 @@ async def get_current_user(
             raise ValueError("Token is missing a subject claim")
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    # A bearer header cannot be attached by a cross-site caller, so only the ambient
+    # cookie credential needs CSRF cover.
+    if header_token is None:
+        _require_csrf(request, payload)
 
     db_client = request.app.state.db_client
     user = await utils.get_user_by_username(db_client, username)

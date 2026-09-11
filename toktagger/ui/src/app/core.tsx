@@ -12,22 +12,51 @@ import type {
 } from "@/types";
 import { RJSFSchema } from "@rjsf/utils";
 
-export let BACKEND_API_URL = "http://localhost:8002";
+// Empty in a production build so requests stay on whatever origin served the app,
+// which is what lets the session cookie be sent under any hostname or scheme.
+export let BACKEND_API_URL = import.meta.env.DEV ? "http://localhost:8002" : "";
 if (import.meta.env.VITE_DATA_API_URL) {
   BACKEND_API_URL = import.meta.env.VITE_DATA_API_URL;
 }
 
-export function apiFetch(
+const CSRF_COOKIE = "tt_csrf";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function readCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+let onUnauthorized: (() => void) | null = null;
+
+// Registered by AuthProvider. The session cookie can expire at any point and is
+// unreadable from here, so a 401 is the only signal that it has gone.
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
+export async function apiFetch(
   url: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  const token = localStorage.getItem("tt_access_token");
+  // The session token lives in an httpOnly cookie the browser attaches itself, so
+  // credentials must be included even cross-origin against the dev server.
+  const method = (options.method ?? "GET").toUpperCase();
+  const csrf = SAFE_METHODS.has(method) ? null : readCookie(CSRF_COOKIE);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) ?? {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(csrf ? { "X-CSRF-Token": csrf } : {}),
   };
-  return fetch(url, { ...options, headers });
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+  if (response.status === 401) {
+    onUnauthorized?.();
+  }
+  return response;
 }
 
 export class ApiError extends Error {
