@@ -10,3 +10,7 @@ export const annotatorCreatedBy = (type: AnnotatorTypes) =>
   `annotators::${type}`;
 
 export const modelCreatedBy = (modelType: string) => `model::${modelType}`;
+
+// Display only; the raw created_by value is kept for filtering, exports, etc.
+export const displayCreatedBy = (createdBy: string) =>
+  createdBy.replace(/^(model|annotators)::/, "");

@@ -12,11 +12,7 @@ import {
   Flex,
 } from "@adobe/react-spectrum";
 import { useTimeSeriesState } from "@/app/contexts/TimeSeriesContext";
-
-// Strip the internal "model::" / "annotators::" namespacing for display only;
-// the raw created_by value is kept everywhere else (filtering, exports, etc).
-const displayCreatedBy = (createdBy: string) =>
-  createdBy.replace(/^(model|annotators)::/, "");
+import { displayCreatedBy } from "@/app/components/annotators/types";
 
 interface MarkerProps {
   color: string;
