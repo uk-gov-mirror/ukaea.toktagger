@@ -402,11 +402,7 @@ class BaseUltralyticsDetection(Model):
 
     def get_device(self) -> torch.device:
         """Return the device assigned to this model actor."""
-        if self.gpu_available() and torch.cuda.is_available():
-            return torch.device("cuda")
-
-        # return mps or cpu if cuda isn't available.
-        return get_torch_device()
+        return get_torch_device(use_cuda=self.gpu_available())
 
     def define_model(self) -> str:
         """Return the default model identifier without downloading it."""
