@@ -125,6 +125,19 @@ class UltralyticsDetectionItem(pydantic.BaseModel):
     ratio_pad: tuple[tuple[float, float], tuple[float, float]]
 
 
+class UltralyticsDetectionBatch(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    img: torch.Tensor
+    cls: torch.Tensor
+    bboxes: torch.Tensor
+    batch_idx: torch.Tensor
+    im_file: list[str]
+    ori_shape: list[tuple[int, int]]
+    resized_shape: list[tuple[int, int]]
+    ratio_pad: list[tuple[tuple[float, float], tuple[float, float]]]
+
+
 class UltralyticsDetectionDataset(Dataset):
     """In-memory image dataset for Ultralytics detection training.
 
@@ -254,16 +267,16 @@ class UltralyticsDetectionDataset(Dataset):
             resized_shapes.append(sample.resized_shape)
             ratio_pads.append(sample.ratio_pad)
 
-        return {
-            "img": torch.stack(images, dim=0),
-            "cls": torch.cat(classes, dim=0),
-            "bboxes": torch.cat(bboxes, dim=0),
-            "batch_idx": torch.cat(batch_indices, dim=0),
-            "im_file": image_files,
-            "ori_shape": original_shapes,
-            "resized_shape": resized_shapes,
-            "ratio_pad": ratio_pads,
-        }
+        return UltralyticsDetectionBatch(
+            img=torch.stack(images, dim=0),
+            cls=torch.cat(classes, dim=0),
+            bboxes=torch.cat(bboxes, dim=0),
+            batch_idx=torch.cat(batch_indices, dim=0),
+            im_file=image_files,
+            ori_shape=original_shapes,
+            resized_shape=resized_shapes,
+            ratio_pad=ratio_pads,
+        ).model_dump()
 
 
 class ToktaggerDetectionTrainer(DetectionTrainer):
