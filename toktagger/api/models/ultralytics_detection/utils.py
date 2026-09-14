@@ -65,31 +65,36 @@ def _find_first_useful_frame(
     if _is_useful_frame(initial_frame):
         return initial_frame
 
-    previous_offset = 0
+    previous_coarse_offset = 0
 
-    for offset in range(
+    # Probe coarse intervals until a useful frame is found or the video ends.
+    for coarse_offset in range(
         _BLACK_FRAME_COARSE_STEP,
         _BLACK_FRAME_MAX_SCAN + 1,
         _BLACK_FRAME_COARSE_STEP,
     ):
         try:
-            candidate_frame = data_loader.get_sample(
+            coarse_frame = data_loader.get_sample(
                 sample,
                 ImageParams(
                     name="image",
-                    frame=initial_frame.frame + offset,
+                    frame=initial_frame.frame + coarse_offset,
                     return_raw=True,
                 ),
             )
         except FrameNotFoundError:
             fallback_frame = initial_frame
         else:
-            if not _is_useful_frame(candidate_frame):
-                previous_offset = offset
+            if not _is_useful_frame(coarse_frame):
+                previous_coarse_offset = coarse_offset
                 continue
-            fallback_frame = candidate_frame
+            fallback_frame = coarse_frame
 
-        for refinement_offset in range(previous_offset + 1, offset):
+        # Scan the interval frame by frame to find the earliest useful frame.
+        for refinement_offset in range(
+            previous_coarse_offset + 1,
+            coarse_offset,
+        ):
             try:
                 refinement_frame = data_loader.get_sample(
                     sample,
