@@ -85,7 +85,6 @@ class YoloP2TrainParams(YoloTrainParams):
     )
 
 
-# https://docs.python.org/3/library/contextlib.html#contextlib.contextmanager
 @contextmanager
 def quiet_ultralytics_logging(
     enabled: bool = True,
