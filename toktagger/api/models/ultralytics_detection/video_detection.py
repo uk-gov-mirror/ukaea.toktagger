@@ -50,7 +50,7 @@ class YoloPredictParams(pydantic.BaseModel):
         default=0.2,
         ge=0,
         le=1,
-        description="Intersection-over-union threshold.",
+        description="Overlap threshold for removing duplicate detections. Lower values remove more overlapping boxes.",
     )
     max_det: int = pydantic.Field(
         default=5,
