@@ -19,6 +19,8 @@ from toktagger.api.schemas.samples import Sample
 
 logger = logging.getLogger(__name__)
 
+_CANONICAL_WEIGHTS_FILENAMES = ("best.pt", "last.pt")
+
 _BLACK_FRAME_MEAN_THRESHOLD = 13
 _BLACK_FRAME_MAX_THRESHOLD = 50
 _BLACK_FRAME_STD_THRESHOLD = 5
@@ -207,6 +209,16 @@ def get_toktagger_cache_dir() -> Path:
     return cache_dir
 
 
+def get_canonical_weights_path(results_dir: Path, source_filename: str) -> Path:
+    """Return the canonical path for an Ultralytics checkpoint."""
+    filename = (
+        source_filename
+        if source_filename in _CANONICAL_WEIGHTS_FILENAMES
+        else _CANONICAL_WEIGHTS_FILENAMES[0]
+    )
+    return results_dir / "weights" / filename
+
+
 def resolve_weights_path(
     results_dir: Path,
     weights_filename: str | None = None,
@@ -226,10 +238,8 @@ def resolve_weights_path(
         return weights_path
 
     # Use the default Ultralytics checkpoint
-    # ultralytics weights are saved in weights directory
-    weights_dir = results_dir.joinpath("weights")
-    for filename in ("best.pt", "last.pt"):
-        weights_path = weights_dir.joinpath(filename)
+    for filename in _CANONICAL_WEIGHTS_FILENAMES:
+        weights_path = get_canonical_weights_path(results_dir, filename)
 
         if weights_path.is_file():
             return weights_path

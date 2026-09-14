@@ -24,6 +24,7 @@ from toktagger.api.schemas.samples import Sample
 
 from toktagger.api.models.ultralytics_detection.utils import (
     check_pretrained_model_availability,
+    get_canonical_weights_path,
     get_toktagger_cache_dir,
     get_torch_device,
     prepare_ultralytics_amp_weights,
@@ -583,18 +584,8 @@ class BaseUltralyticsDetection(Model):
         if not source_path.is_file():
             raise FileNotFoundError(f"Could not find model weights at {source_path}")
 
-        # ultralytics weights reside in the weights directory.
-        weights_dir = results_dir.joinpath("weights")
-        weights_dir.mkdir(parents=True, exist_ok=True)
-
-        if source_path.name in {"best.pt", "last.pt"}:
-            target_name = source_path.name
-        else:
-            # Give imported checkpoints a compatible name so normal model
-            # restoration can find them without a supplied filename.
-            # external file → in-memory YOLO model → MODEL_STORAGE/<model_id>/weights/best.pt
-            target_name = "best.pt"
-        target_path = weights_dir.joinpath(target_name)
+        target_path = get_canonical_weights_path(results_dir, source_path.name)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
 
         # each external weight submission receives a different model ID
         if source_path.resolve() != target_path.resolve():
