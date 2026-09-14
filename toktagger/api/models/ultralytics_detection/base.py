@@ -59,7 +59,7 @@ class YoloTrainParams(pydantic.BaseModel):
         description="Initial learning rate. Use 0 for the Ultralytics default.",
     )
     epochs: int = pydantic.Field(
-        default=2,
+        default=100,
         gt=0,
         description="Number of training epochs.",
     )
