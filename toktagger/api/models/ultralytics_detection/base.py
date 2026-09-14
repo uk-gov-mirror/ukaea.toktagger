@@ -2,7 +2,7 @@ from __future__ import annotations  # store type hints as strings
 
 import logging
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 import shutil
 
 import cv2
@@ -113,7 +113,9 @@ class DetectionRecord(pydantic.BaseModel):
     classes: list[int]
 
 
-class UltralyticsDetectionItem(TypedDict):
+class UltralyticsDetectionItem(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
     img: torch.Tensor
     cls: torch.Tensor
     bboxes: torch.Tensor
@@ -209,18 +211,18 @@ class UltralyticsDetectionDataset(Dataset):
             np.ascontiguousarray(letterboxed_image.transpose(2, 0, 1))
         )
 
-        return {
-            "img": image_tensor,
-            "cls": classes,
-            "bboxes": bboxes,
-            "im_file": (f"shot-{record.shot_id}/frame-{record.frame}"),
-            "ori_shape": (original_height, original_width),
-            "resized_shape": (self.imgsz, self.imgsz),
-            "ratio_pad": (
+        return UltralyticsDetectionItem(
+            img=image_tensor,
+            cls=classes,
+            bboxes=bboxes,
+            im_file=f"shot-{record.shot_id}/frame-{record.frame}",
+            ori_shape=(original_height, original_width),
+            resized_shape=(self.imgsz, self.imgsz),
+            ratio_pad=(
                 (gain, gain),
                 (padding_width, padding_height),
             ),
-        }
+        )
 
     @staticmethod
     def collate_fn(batch: list[UltralyticsDetectionItem]) -> dict[str, Any]:
@@ -235,22 +237,22 @@ class UltralyticsDetectionDataset(Dataset):
         ratio_pads = []
 
         for batch_index, sample in enumerate(batch):
-            images.append(sample["img"])
-            classes.append(sample["cls"])
-            bboxes.append(sample["bboxes"])
+            images.append(sample.img)
+            classes.append(sample.cls)
+            bboxes.append(sample.bboxes)
 
             batch_indices.append(
                 torch.full(
-                    (len(sample["bboxes"]),),
+                    (len(sample.bboxes),),
                     batch_index,
                     dtype=torch.int64,
                 )
             )
 
-            image_files.append(sample["im_file"])
-            original_shapes.append(sample["ori_shape"])
-            resized_shapes.append(sample["resized_shape"])
-            ratio_pads.append(sample["ratio_pad"])
+            image_files.append(sample.im_file)
+            original_shapes.append(sample.ori_shape)
+            resized_shapes.append(sample.resized_shape)
+            ratio_pads.append(sample.ratio_pad)
 
         return {
             "img": torch.stack(images, dim=0),
