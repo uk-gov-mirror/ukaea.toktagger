@@ -68,9 +68,9 @@ class YoloTrainParams(pydantic.BaseModel):
         description="Pretrained YOLO checkpoint to fine-tune.",
     )
     # Boolean fields render as checkboxes
-    show_training_output: bool = pydantic.Field(
+    enable_debug_logging: bool = pydantic.Field(
         default=False,
-        description="Show detailed Ultralytics training output in the server logs.",
+        description="Enable detailed Ultralytics logging during training.",
     )
     skip_initial_black_frames: bool = pydantic.Field(
         default=False,
@@ -516,7 +516,7 @@ class BaseUltralyticsDetection(Model):
 
         # Suppress detailed output unless explicitly requested.
         with quiet_ultralytics_logging(
-            enabled=not params.show_training_output,
+            enabled=not params.enable_debug_logging,
         ):
             # trainer dump Ultralytics version banner and configuration
             trainer = ToktaggerDetectionTrainer(
