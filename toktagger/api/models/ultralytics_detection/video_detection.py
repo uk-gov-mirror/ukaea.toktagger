@@ -52,7 +52,7 @@ class YoloPredictParams(pydantic.BaseModel):
         le=1,
         description="Overlap threshold for removing duplicate detections. Lower values remove more overlapping boxes.",
     )
-    max_det: int = pydantic.Field(
+    max_detections: int = pydantic.Field(
         default=5,
         ge=1,
         le=100,
@@ -343,7 +343,7 @@ class YoloVideoDetectionModel(BaseUltralyticsDetection):
                     source=image,
                     conf=params.confidence_threshold,
                     iou=params.iou_threshold,
-                    max_det=params.max_det,
+                    max_det=params.max_detections,
                     device=self.get_device().type,
                     verbose=False,
                 )
