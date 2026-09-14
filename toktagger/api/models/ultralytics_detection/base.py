@@ -2,7 +2,7 @@ from __future__ import annotations  # store type hints as strings
 
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 import shutil
 
 import cv2
@@ -113,6 +113,16 @@ class DetectionRecord(pydantic.BaseModel):
     classes: list[int]
 
 
+class UltralyticsDetectionItem(TypedDict):
+    img: torch.Tensor
+    cls: torch.Tensor
+    bboxes: torch.Tensor
+    im_file: str
+    ori_shape: tuple[int, int]
+    resized_shape: tuple[int, int]
+    ratio_pad: tuple[tuple[float, float], tuple[float, float]]
+
+
 class UltralyticsDetectionDataset(Dataset):
     """In-memory image dataset for Ultralytics detection training.
 
@@ -138,7 +148,7 @@ class UltralyticsDetectionDataset(Dataset):
     def __len__(self) -> int:
         return len(self.records)
 
-    def __getitem__(self, index: int) -> dict[str, Any]:
+    def __getitem__(self, index: int) -> UltralyticsDetectionItem:
         record = self.records[index]
 
         encoded_image = np.frombuffer(record.image, dtype=np.uint8)
@@ -213,7 +223,7 @@ class UltralyticsDetectionDataset(Dataset):
         }
 
     @staticmethod
-    def collate_fn(batch: list[dict[str, Any]]) -> dict[str, Any]:
+    def collate_fn(batch: list[UltralyticsDetectionItem]) -> dict[str, Any]:
         """Combine image records into the batch format Ultralytics expects."""
         images = []
         classes = []
