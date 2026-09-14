@@ -12,6 +12,7 @@ from ultralytics.engine.results import Boxes
 
 from toktagger.api.core.data_loaders import FrameNotFoundError
 from toktagger.api.models.ultralytics_detection import video_detection
+from toktagger.api.models.ultralytics_detection import utils as ultralytics_utils
 from toktagger.api.schemas.annotations import VideoBoundingBox
 from toktagger.api.schemas.data import ImageData, ImageParams
 from toktagger.api.schemas.samples import Sample, ShotData
@@ -37,6 +38,18 @@ class FakePredictionModel:
         return self.results
 
 
+class FrameSearchDataLoader:
+    def __init__(self, last_valid_frame=None):
+        self.last_valid_frame = last_valid_frame
+        self.calls = []
+
+    def get_sample(self, sample, params):
+        self.calls.append(params.frame)
+        if self.last_valid_frame is not None and params.frame > self.last_valid_frame:
+            raise FrameNotFoundError
+        return ImageData(frame=params.frame, values=[])
+
+
 def make_sample() -> Sample:
     return Sample(
         shot_id=30421,
@@ -53,6 +66,46 @@ def make_model(data_loader, prediction_model):
     model.data_loader = data_loader
     model.get_device = lambda: SimpleNamespace(type="cpu")
     return model
+
+
+def test_find_first_useful_frame_refines_coarse_probe(monkeypatch):
+    sample = make_sample()
+    data_loader = FrameSearchDataLoader()
+    initial_frame = ImageData(frame=0, values=[])
+    monkeypatch.setattr(
+        ultralytics_utils,
+        "_is_useful_frame",
+        lambda frame_image: frame_image.frame >= 10,
+    )
+
+    selected_frame = ultralytics_utils._find_first_useful_frame(
+        data_loader,
+        sample,
+        initial_frame,
+    )
+
+    assert selected_frame.frame == 10
+    assert data_loader.calls == [25, *range(1, 11)]
+
+
+def test_find_first_useful_frame_scans_short_video_boundary(monkeypatch):
+    sample = make_sample()
+    data_loader = FrameSearchDataLoader(last_valid_frame=20)
+    initial_frame = ImageData(frame=0, values=[])
+    monkeypatch.setattr(
+        ultralytics_utils,
+        "_is_useful_frame",
+        lambda frame_image: frame_image.frame >= 10,
+    )
+
+    selected_frame = ultralytics_utils._find_first_useful_frame(
+        data_loader,
+        sample,
+        initial_frame,
+    )
+
+    assert selected_frame.frame == 10
+    assert data_loader.calls == [25, *range(1, 11)]
 
 
 def test_iter_sample_frames_stops_at_end_of_video():
