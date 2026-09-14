@@ -4,11 +4,109 @@ import shutil
 from pathlib import Path
 from urllib.request import urlopen
 
+import cv2
 from filelock import FileLock
+import numpy as np
 import torch
 from ultralytics import settings
 
+from toktagger.api.core.data_loaders import (
+    DataLoader as TokTaggerDataLoader,
+)
+from toktagger.api.core.data_loaders import FrameNotFoundError
+from toktagger.api.schemas.data import ImageData, ImageParams
+from toktagger.api.schemas.samples import Sample
+
 logger = logging.getLogger(__name__)
+
+_BLACK_FRAME_MEAN_THRESHOLD = 13
+_BLACK_FRAME_MAX_THRESHOLD = 50
+_BLACK_FRAME_STD_THRESHOLD = 5
+_BLACK_FRAME_COARSE_STEP = 25
+_BLACK_FRAME_MAX_SCAN = 500
+
+
+def decode_frame_image(frame_image: ImageData) -> np.ndarray:
+    """Decode raw TokTagger image bytes for Ultralytics prediction."""
+    if isinstance(frame_image.values, str):
+        raise TypeError("Expected raw image bytes but received a base64 string.")
+
+    encoded_image = np.frombuffer(
+        bytes(frame_image.values),
+        dtype=np.uint8,
+    )
+    image = cv2.imdecode(
+        encoded_image,
+        cv2.IMREAD_COLOR,
+    )
+
+    if image is None:
+        raise ValueError(f"Could not decode frame {frame_image.frame}.")
+
+    return image
+
+
+def _is_useful_frame(frame_image: ImageData) -> bool:
+    image = decode_frame_image(frame_image)
+    return bool(
+        image.mean() > _BLACK_FRAME_MEAN_THRESHOLD
+        or image.max() > _BLACK_FRAME_MAX_THRESHOLD
+        or image.std() > _BLACK_FRAME_STD_THRESHOLD
+    )
+
+
+def _find_first_useful_frame(
+    data_loader: TokTaggerDataLoader,
+    sample: Sample,
+    initial_frame: ImageData,
+) -> ImageData:
+    if _is_useful_frame(initial_frame):
+        return initial_frame
+
+    previous_offset = 0
+
+    for offset in range(
+        _BLACK_FRAME_COARSE_STEP,
+        _BLACK_FRAME_MAX_SCAN + 1,
+        _BLACK_FRAME_COARSE_STEP,
+    ):
+        try:
+            candidate_frame = data_loader.get_sample(
+                sample,
+                ImageParams(
+                    name="image",
+                    frame=initial_frame.frame + offset,
+                    return_raw=True,
+                ),
+            )
+        except FrameNotFoundError:
+            fallback_frame = initial_frame
+        else:
+            if not _is_useful_frame(candidate_frame):
+                previous_offset = offset
+                continue
+            fallback_frame = candidate_frame
+
+        for refinement_offset in range(previous_offset + 1, offset):
+            try:
+                refinement_frame = data_loader.get_sample(
+                    sample,
+                    ImageParams(
+                        name="image",
+                        frame=initial_frame.frame + refinement_offset,
+                        return_raw=True,
+                    ),
+                )
+            except FrameNotFoundError:
+                return initial_frame
+
+            if _is_useful_frame(refinement_frame):
+                return refinement_frame
+
+        return fallback_frame
+
+    return initial_frame
+
 
 # Pretrained checkpoints available from the Ultralytics v8.4.0 assets release.
 _ULTRALYTICS_ASSET_BASE_URL = (

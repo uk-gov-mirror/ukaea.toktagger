@@ -4,8 +4,6 @@ import logging
 from collections.abc import Iterator
 from pathlib import Path
 
-import cv2
-import numpy as np
 import pydantic
 from ultralytics import YOLO
 
@@ -24,6 +22,8 @@ from toktagger.api.models.ultralytics_detection.base import (
 )
 from toktagger.api.models.ultralytics_detection.utils import (
     check_pretrained_model_availability,
+    decode_frame_image,
+    _find_first_useful_frame,
     resolve_weights_path,
 )
 from toktagger.api.schemas.annotations import (
@@ -35,12 +35,6 @@ from toktagger.api.schemas.data import DataParamTypes, ImageData, ImageParams
 from toktagger.api.schemas.samples import Sample
 
 logger = logging.getLogger(__name__)
-
-_BLACK_FRAME_MEAN_THRESHOLD = 13
-_BLACK_FRAME_MAX_THRESHOLD = 50
-_BLACK_FRAME_STD_THRESHOLD = 5
-_BLACK_FRAME_COARSE_STEP = 25
-_BLACK_FRAME_MAX_SCAN = 500
 
 
 class YoloPredictParams(pydantic.BaseModel):
@@ -72,68 +66,6 @@ class YoloPredictParams(pydantic.BaseModel):
         default=False,
         description="Use a coarse-to-fine search to skip initial black frames for full-video prediction; ignored for individual-frame predictions.",
     )
-
-
-def _is_useful_frame(frame_image: ImageData) -> bool:
-    image = decode_frame_image(frame_image)
-    return bool(
-        image.mean() > _BLACK_FRAME_MEAN_THRESHOLD
-        or image.max() > _BLACK_FRAME_MAX_THRESHOLD
-        or image.std() > _BLACK_FRAME_STD_THRESHOLD
-    )
-
-
-def _find_first_useful_frame(
-    data_loader: TokTaggerDataLoader,
-    sample: Sample,
-    initial_frame: ImageData,
-) -> ImageData:
-    if _is_useful_frame(initial_frame):
-        return initial_frame
-
-    previous_offset = 0
-
-    for offset in range(
-        _BLACK_FRAME_COARSE_STEP,
-        _BLACK_FRAME_MAX_SCAN + 1,
-        _BLACK_FRAME_COARSE_STEP,
-    ):
-        try:
-            candidate_frame = data_loader.get_sample(
-                sample,
-                ImageParams(
-                    name="image",
-                    frame=initial_frame.frame + offset,
-                    return_raw=True,
-                ),
-            )
-        except FrameNotFoundError:
-            fallback_frame = initial_frame
-        else:
-            if not _is_useful_frame(candidate_frame):
-                previous_offset = offset
-                continue
-            fallback_frame = candidate_frame
-
-        for refinement_offset in range(previous_offset + 1, offset):
-            try:
-                refinement_frame = data_loader.get_sample(
-                    sample,
-                    ImageParams(
-                        name="image",
-                        frame=initial_frame.frame + refinement_offset,
-                        return_raw=True,
-                    ),
-                )
-            except FrameNotFoundError:
-                return initial_frame
-
-            if _is_useful_frame(refinement_frame):
-                return refinement_frame
-
-        return fallback_frame
-
-    return initial_frame
 
 
 def iter_sample_frames(
@@ -290,26 +222,6 @@ def build_video_frame_manifest(
     )
 
     return frame_manifest
-
-
-def decode_frame_image(frame_image: ImageData) -> np.ndarray:
-    """Decode raw TokTagger image bytes for Ultralytics prediction."""
-    if isinstance(frame_image.values, str):
-        raise TypeError("Expected raw image bytes but received a base64 string.")
-
-    encoded_image = np.frombuffer(
-        bytes(frame_image.values),
-        dtype=np.uint8,
-    )
-    image = cv2.imdecode(
-        encoded_image,
-        cv2.IMREAD_COLOR,
-    )
-
-    if image is None:
-        raise ValueError(f"Could not decode frame {frame_image.frame}.")
-
-    return image
 
 
 @ModelRegistry.register(
