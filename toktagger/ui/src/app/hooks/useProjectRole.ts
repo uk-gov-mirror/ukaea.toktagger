@@ -20,15 +20,6 @@ export type ProjectRoleInfo = {
   loading: boolean;
 };
 
-// Fetches the current user's membership for a project and derives the permission
-// booleans every gated button/control needs. A global admin bypasses membership
-// checks entirely, matching the backend's dependencies in api/auth/dependencies.py.
-//
-// isAdmin/canAnnotate default true and only correct downward once the membership
-// check resolves. The backend is the real authority either way (these booleans only
-// drive client-side disabling), and defaulting closed instead would briefly disable
-// controls for a legitimate admin/annotator on every fresh mount - a window narrow in
-// wall-clock time but long enough to swallow a click that fires before it clears.
 export function useProjectRole(
   project_id: string | null | undefined,
 ): ProjectRoleInfo {
@@ -39,6 +30,8 @@ export function useProjectRole(
 
   useEffect(() => {
     if (!user || !project_id) {
+      setRole(null);
+      setRestricted(false);
       setLoading(false);
       return;
     }
@@ -78,15 +71,6 @@ export type MyProjectRoles = {
   loading: boolean;
 };
 
-// The same permission booleans as useProjectRole, but for every project the user
-// belongs to in a single request. The projects list gates each row, and mounting
-// useProjectRole per row costs one /projects/{id}/members request per row.
-//
-// Unlike useProjectRole this reports "not permitted" while loading rather than
-// defaulting open: the list only shows or hides whole controls, so failing open
-// would flash Edit/Delete buttons on every row and then withdraw them. There is no
-// click to swallow, because the buttons are simply not rendered yet. A global admin
-// resolves synchronously from the auth context and never waits.
 export function useMyProjectRoles(): MyProjectRoles {
   const { user } = useAuth();
   const [roles, setRoles] = useState<Record<string, ProjectRole>>({});
@@ -95,7 +79,12 @@ export function useMyProjectRoles(): MyProjectRoles {
   const isGlobalAdmin = user?.global_role === "admin";
 
   useEffect(() => {
-    if (!user || isGlobalAdmin) {
+    if (!user) {
+      setRoles({});
+      setLoading(false);
+      return;
+    }
+    if (isGlobalAdmin) {
       setLoading(false);
       return;
     }
