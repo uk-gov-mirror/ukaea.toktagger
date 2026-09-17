@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, BACKEND_API_URL, setUnauthorizedHandler } from "@/app/core";
-import type { CurrentUser } from "@/types";
+import { CurrentUserSchema, type CurrentUser } from "@/types";
 
 interface AuthContextType {
   user: CurrentUser | null;
@@ -20,6 +20,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const fetchCurrentUser = async (): Promise<CurrentUser | null> => {
+  const res = await apiFetch(`${BACKEND_API_URL}/auth/me`);
+  if (!res.ok) return null;
+  const parsed = CurrentUserSchema.safeParse(await res.json());
+  return parsed.success ? parsed.data : null;
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,10 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   const refreshUser = async () => {
-    const res = await apiFetch(`${BACKEND_API_URL}/auth/me`);
-    if (res.ok) {
-      setUser((await res.json()) as CurrentUser);
-    }
+    const me = await fetchCurrentUser();
+    if (me) setUser(me);
   };
 
   // Force a password change before anything else - an admin knows the password they
@@ -58,8 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // One-off cleanup: sessions predating the cookie left a readable token behind.
       localStorage.removeItem("tt_access_token");
       try {
-        const res = await apiFetch(`${BACKEND_API_URL}/auth/me`);
-        setUser(res.ok ? ((await res.json()) as CurrentUser) : null);
+        setUser(await fetchCurrentUser());
       } catch {
         setUser(null);
       } finally {
@@ -82,11 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(data?.detail ?? "Login failed");
     }
 
-    const meRes = await apiFetch(`${BACKEND_API_URL}/auth/me`);
-    if (!meRes.ok) {
+    const me = await fetchCurrentUser();
+    if (!me) {
       throw new Error("Login failed: could not load user profile");
     }
-    setUser((await meRes.json()) as CurrentUser);
+    setUser(me);
   };
 
   const logout = async () => {
