@@ -345,10 +345,6 @@ export const TimeSeriesProvider = ({
     syncAnnotations();
   }, [syncAnnotations, syncCounter]);
 
-  // A new annotation belongs to whoever is drawing it, so it carries their username
-  // from the moment it appears in the table - the same value the server stamps on it
-  // when it is saved. "manual" is only a fallback for the brief window before the
-  // auth context resolves.
   const createAnnotation = useCallback(
     (type: TimeSeriesAnnotationType, label: string): TimeSeriesAnnotation => {
       const id = uuidv4();
