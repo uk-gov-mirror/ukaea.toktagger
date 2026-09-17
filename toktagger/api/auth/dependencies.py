@@ -1,10 +1,16 @@
 import secrets
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordBearer
 
 from toktagger.api import config
-from toktagger.api.auth.core import decode_token, get_internal_token
+from toktagger.api.auth.core import (
+    ACCESS_TOKEN_RENEW_AFTER_SECONDS,
+    create_access_token,
+    decode_token_with_age,
+    get_internal_token,
+)
+from toktagger.api.auth.cookies import set_session_cookies
 from toktagger.api.crud import utils
 from toktagger.api.schemas.users import ProjectMember, UserOut
 
@@ -38,8 +44,21 @@ def _require_csrf(request: Request, payload: dict):
         )
 
 
+def _renew_session(request: Request, response: Response, payload: dict):
+    """Slide the session window by re-issuing the cookies on the current response.
+
+    The csrf claim is carried over unchanged, so a request already in flight with the
+    old header still validates against the new token.
+    """
+    csrf = payload.get("csrf")
+    if not isinstance(csrf, str):
+        return
+    set_session_cookies(request, response, create_access_token(dict(payload)), csrf)
+
+
 async def get_current_user(
     request: Request,
+    response: Response,
     header_token: str | None = Depends(oauth2_scheme),
 ) -> UserOut:
     # Header first: Ray-worker callbacks, scripts and tests never send a cookie, and an
@@ -53,7 +72,7 @@ async def get_current_user(
         return _INTERNAL_USER
 
     try:
-        payload = decode_token(token)
+        payload, token_age = decode_token_with_age(token)
         username = payload.get("sub")
         if not username or not isinstance(username, str):
             raise ValueError("Token is missing a subject claim")
@@ -71,6 +90,10 @@ async def get_current_user(
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is inactive")
+
+    # Only the ambient cookie slides; a bearer caller manages its own token.
+    if header_token is None and token_age >= ACCESS_TOKEN_RENEW_AFTER_SECONDS:
+        _renew_session(request, response, payload)
     return user
 
 

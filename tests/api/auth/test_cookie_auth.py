@@ -7,7 +7,8 @@ callers keep using a bearer header. Both paths run through get_current_user.
 import pytest
 
 from tests.api.auth.conftest import get_auth_token
-from toktagger.api.auth.core import get_internal_token
+from toktagger.api.auth import dependencies
+from toktagger.api.auth.core import decode_token_with_age, get_internal_token
 from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
 from toktagger.api.config import settings
 
@@ -183,3 +184,83 @@ async def test_internal_token_still_accepted_with_cookie_present(auth_setup):
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["username"] == "__internal__"
+
+
+def has_set_cookie(resp, name: str) -> bool:
+    return any(h.startswith(f"{name}=") for h in resp.headers.get_list("set-cookie"))
+
+
+@pytest.fixture
+def renewal_due(monkeypatch):
+    """Make every authenticated request look old enough to renew."""
+    monkeypatch.setattr(dependencies, "ACCESS_TOKEN_RENEW_AFTER_SECONDS", 0)
+
+
+@pytest.mark.asyncio
+async def test_fresh_session_is_not_renewed(auth_setup):
+    """A session under half its life is left alone, so most responses set no cookie."""
+    client = auth_setup["client"]
+    await login(client)
+
+    resp = await client.get("/auth/me")
+
+    assert not has_set_cookie(resp, settings.auth.cookie_name)
+
+
+@pytest.mark.asyncio
+async def test_stale_session_is_renewed_on_use(auth_setup, renewal_due):
+    client = auth_setup["client"]
+    await login(client)
+
+    resp = await client.get("/auth/me")
+
+    assert resp.status_code == 200, resp.text
+    assert "Max-Age=86400" in set_cookie_header(resp, settings.auth.cookie_name)
+    # The token string is unchanged within the same second - itsdangerous timestamps
+    # are whole seconds - so check the window itself slid rather than the bytes.
+    _, age = decode_token_with_age(client.cookies[settings.auth.cookie_name])
+    assert age < 5
+    assert (await client.get("/auth/me")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_renewal_keeps_the_csrf_token_usable(project_setup, renewal_due):
+    """A renewal must not invalidate the CSRF value the page is already holding."""
+    client = project_setup["client"]
+    await login(client)
+    csrf = client.cookies[CSRF_COOKIE_NAME]
+
+    await client.get("/auth/me")
+
+    assert client.cookies[CSRF_COOKIE_NAME] == csrf
+    resp = await client.delete(
+        f"/projects/{project_setup['project_id']}",
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_bearer_caller_is_never_renewed(auth_setup, renewal_due):
+    """Scripts and Ray callbacks hold their own token; handing them a cookie is wrong."""
+    client = auth_setup["client"]
+    token = await get_auth_token(client, "admin", "admin_pass")
+
+    resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 200, resp.text
+    assert not has_set_cookie(resp, settings.auth.cookie_name)
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_cookies_when_a_renewal_is_due(auth_setup, renewal_due):
+    """The dependency renews before the handler clears — the clear has to win."""
+    client = auth_setup["client"]
+    await login(client)
+
+    resp = await client.post(
+        "/auth/logout", headers={"X-CSRF-Token": client.cookies[CSRF_COOKIE_NAME]}
+    )
+
+    assert resp.status_code == 204, resp.text
+    assert (await client.get("/auth/me")).status_code == 401

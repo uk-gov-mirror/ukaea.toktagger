@@ -1,7 +1,7 @@
 import hashlib
 import os
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -9,6 +9,9 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from toktagger.api import config
 
 ACCESS_TOKEN_EXPIRE_SECONDS = 60 * 60 * 24  # 24 hours
+# A session past this age is re-issued on use, so an active user is never signed
+# out mid-task while an idle one still expires on schedule.
+ACCESS_TOKEN_RENEW_AFTER_SECONDS = ACCESS_TOKEN_EXPIRE_SECONDS // 2
 _SALT = "toktagger-auth-v1"
 
 _serializer: URLSafeTimedSerializer | None = None
@@ -82,10 +85,20 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return _get_serializer().dumps(data)
 
 
-def decode_token(token: str) -> dict:
+def decode_token_with_age(token: str) -> tuple[dict, float]:
+    """Decode a token, returning its payload and how long ago it was issued."""
     try:
-        return _get_serializer().loads(token, max_age=ACCESS_TOKEN_EXPIRE_SECONDS)
+        payload, issued_at = _get_serializer().loads(
+            token, max_age=ACCESS_TOKEN_EXPIRE_SECONDS, return_timestamp=True
+        )
     except SignatureExpired:
         raise ValueError("Token has expired")
     except BadSignature:
         raise ValueError("Invalid token")
+    age = (datetime.now(timezone.utc) - issued_at).total_seconds()
+    return payload, age
+
+
+def decode_token(token: str) -> dict:
+    payload, _ = decode_token_with_age(token)
+    return payload

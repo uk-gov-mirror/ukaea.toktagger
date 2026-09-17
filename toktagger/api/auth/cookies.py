@@ -45,11 +45,25 @@ def set_session_cookies(request: Request, response: Response, token: str, csrf: 
     )
 
 
+def _drop_queued_cookies(response: Response, names: tuple[str, ...]):
+    """Remove Set-Cookie headers already queued for `names` on this response."""
+    prefixes = tuple(f"{name}=".encode() for name in names)
+    response.raw_headers[:] = [
+        (key, value)
+        for key, value in response.raw_headers
+        if not (key == b"set-cookie" and value.startswith(prefixes))
+    ]
+
+
 def clear_session_cookies(request: Request, response: Response):
     """Expire both session cookies, matching the attributes they were set with."""
     secure = _cookie_secure(request)
     samesite = config.settings.auth.cookie_samesite
-    for name in (config.settings.auth.cookie_name, CSRF_COOKIE_NAME):
+    names = (config.settings.auth.cookie_name, CSRF_COOKIE_NAME)
+    # A renewal queued by get_current_user would otherwise sit alongside the expiry
+    # below and keep the session alive through logout.
+    _drop_queued_cookies(response, names)
+    for name in names:
         response.delete_cookie(
             name,
             secure=secure,
