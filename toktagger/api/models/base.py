@@ -571,7 +571,7 @@ class ActorRegistry:
         stale_actor = None
         # Check GPU limit first
         gpu_count = sum(1 for gpu in self.actors.values() if gpu)
-        if self.gpu_enabled and gpu_count > self.max_gpu_actors:
+        if self._gpu_enabled and gpu_count > self.max_gpu_actors:
             # Find first actor which requires GPU
             stale_actor = next(
                 (actor for actor, gpu in self.actors.items() if gpu), None
