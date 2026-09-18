@@ -4,6 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from filelock import FileLock
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from toktagger.api import config
@@ -37,6 +38,26 @@ def get_internal_token() -> str:
     return _internal_token
 
 
+def _read_or_create_secret(cache_dir: Path) -> str:
+    """Return the persisted signing key, generating it on first use."""
+    key_file = cache_dir / "secret.key"
+    if key_file.exists():
+        return key_file.read_text().strip()
+
+    # Workers race here on a shared cache dir, and each caches its own serializer for
+    # life - without the lock they persist different keys and reject each other's
+    # session cookies. Re-checked inside the lock so only the winner generates.
+    with FileLock(str(cache_dir / "secret.key.lock"), timeout=30):
+        if key_file.exists():
+            return key_file.read_text().strip()
+        secret = secrets.token_hex(32)
+        # 0600 because this key signs every session cookie.
+        fd = os.open(key_file, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(secret)
+        return secret
+
+
 def _get_serializer() -> URLSafeTimedSerializer:
     global _serializer
     if _serializer is not None:
@@ -47,12 +68,7 @@ def _get_serializer() -> URLSafeTimedSerializer:
     else:
         cache_dir = Path(config.settings.server.cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        key_file = cache_dir / "secret.key"
-        if key_file.exists():
-            secret = key_file.read_text().strip()
-        else:
-            secret = secrets.token_hex(32)
-            key_file.write_text(secret)
+        secret = _read_or_create_secret(cache_dir)
 
     _serializer = URLSafeTimedSerializer(secret, salt=_SALT)
     return _serializer
