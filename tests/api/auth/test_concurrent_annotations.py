@@ -596,3 +596,42 @@ async def test_cross_project_annotation_edit_is_scoped_out(project_setup):
     assert len(untouched) == 1
     assert untouched[0]["label"] == "other_project_ann"
     assert untouched[0]["created_by"] == "bob"
+
+
+@pytest.mark.asyncio
+async def test_claiming_another_users_annotation_does_not_copy_it(project_setup):
+    """Authorship of an existing annotation comes from the database, not the body.
+
+    A client that re-sends bob's annotation with created_by set to itself would
+    otherwise route it into the replace step, which is scoped to the caller's own
+    rows - so bob's original survives and the "edit" lands as a second copy under
+    the caller.
+    """
+    client = project_setup["client"]
+    admin_token = project_setup["admin_token"]
+    project_id = project_setup["project_id"]
+    sample_id = project_setup["sample_id"]
+
+    for username in ("alice", "bob"):
+        await add_member(client, admin_token, project_id, username, "annotator")
+    alice_token = await get_auth_token(client, "alice", "alice_pass")
+    bob_token = await get_auth_token(client, "bob", "bob_pass")
+
+    await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
+    loaded = await get_annotations(client, project_id, sample_id, alice_token)
+    assert len(loaded) == 1
+
+    # Alice relabels bob's annotation but claims it as her own work.
+    loaded[0]["label"] = "claimed_by_alice"
+    loaded[0]["created_by"] = "alice"
+    resp = await client.put(
+        f"/projects/{project_id}/samples/{sample_id}/annotations",
+        json=loaded,
+        headers={"Authorization": f"Bearer {alice_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    annotations = await get_annotations(client, project_id, sample_id, admin_token)
+    assert len(annotations) == 1, "the spoofed author must not produce a second copy"
+    assert annotations[0]["created_by"] == "bob", "authorship must be unchanged"
+    assert annotations[0]["label"] == "claimed_by_alice", "the edit still applies"

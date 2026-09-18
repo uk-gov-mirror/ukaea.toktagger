@@ -228,13 +228,20 @@ async def update_annotations(
     )
 
     is_internal = current_user.username == "__internal__"
+    # Whose an existing annotation is comes from the database, never from the body -
+    # a client claiming someone else's row as its own would otherwise route it into
+    # the replace step below and have it re-inserted as a second copy.
+    stored_authors = await utils.get_annotation_authors(
+        db_client, project_id, sample_id
+    )
     owned_annotations = []
     edited_ids = []
     for annotation in annotations:
         is_other_authors = (
             annotation.id is not None
             and not is_internal
-            and annotation.created_by != current_user.username
+            and stored_authors.get(annotation.id, annotation.created_by)
+            != current_user.username
         )
         if is_other_authors:
             # The replace step below is scoped to the caller's own created_by, so
