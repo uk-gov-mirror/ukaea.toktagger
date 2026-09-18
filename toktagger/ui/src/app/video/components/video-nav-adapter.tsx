@@ -25,7 +25,8 @@ export function VideoNavAdapterBridge({
         if (
           annotation.type === "video_bounding_box" ||
           annotation.type === "video_polygon" ||
-          annotation.type === "video_point"
+          annotation.type === "video_point" ||
+          annotation.type === "video_frame_label"
         ) {
           return {
             ...annotation,
