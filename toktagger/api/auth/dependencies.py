@@ -68,7 +68,7 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     # Internal server-to-server token used by Ray-worker callbacks (sender.py).
-    if token == get_internal_token():
+    if secrets.compare_digest(token, get_internal_token()):
         return _INTERNAL_USER
 
     try:
