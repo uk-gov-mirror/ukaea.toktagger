@@ -30,9 +30,7 @@ export function useNavAdapterOptional(): NavAdapter | null {
   return useContext(NavAdapterContext);
 }
 
-// Deletes what the user removed but a save cannot: the batch save replaces only the
-// caller's own annotations, so another author's stays until deleted outright. Shared
-// with the video adapter, which works from the same sample-wide annotation set.
+// Handles deletions explicitly since a batch save only replaces the caller's own annotations.
 export function useSyncRemovals(): () => Promise<void> {
   const { annotations, serverAnnotations, project, sample } = useSample();
   const { user } = useAuth();
@@ -72,10 +70,7 @@ export function useNavAdapter(): NavAdapter {
       );
     },
     clear: async (includeOthers?: boolean) => {
-      // Clearing what the user can see means clearing other users' annotations and
-      // model predictions too. A save cannot do that - its replace step is scoped to
-      // the caller's own created_by - so they are deleted here explicitly, and the
-      // local view is only emptied once that succeeds.
+      // Deleted explicitly since a save's replace step is scoped to the caller's own created_by.
       if (includeOthers) {
         if (project?._id && sample?._id) {
           await deleteSampleAnnotations(project._id, sample._id);
@@ -84,10 +79,7 @@ export function useNavAdapter(): NavAdapter {
         return;
       }
 
-      // "Show others" is off, so the user can only see their own annotations and
-      // only those are cleared. They are removed from the local view alone; the save
-      // that follows is what deletes them server-side. "manual" is the placeholder
-      // used until the auth context resolves, so it belongs to whoever is drawing.
+      // "manual" is the placeholder created_by used until the auth context resolves.
       setAnnotations((previousAnnotations: Annotation[]) =>
         previousAnnotations.filter(
           (annotation) =>
