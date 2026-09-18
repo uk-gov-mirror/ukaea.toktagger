@@ -86,10 +86,12 @@ async def get_current_user(
 
     db_client = request.app.state.db_client
     user = await utils.get_user_by_username(db_client, username)
+    # 401 rather than 404/403: the signature is good but the credential no longer
+    # identifies a usable account, and 401 is what the frontend signs out on.
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="User no longer exists")
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account is inactive")
+        raise HTTPException(status_code=401, detail="Account is inactive")
 
     # Only the ambient cookie slides; a bearer caller manages its own token.
     if header_token is None and token_age >= ACCESS_TOKEN_RENEW_AFTER_SECONDS:

@@ -264,3 +264,45 @@ async def test_logout_clears_cookies_when_a_renewal_is_due(auth_setup, renewal_d
 
     assert resp.status_code == 204, resp.text
     assert (await client.get("/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_session_of_a_deleted_user_is_401(auth_setup):
+    """401, not 404 — apiFetch only signs out on 401.
+
+    On anything else the browser keeps a logged-in UI in which every request fails.
+    """
+    client = auth_setup["client"]
+    admin_token = await get_auth_token(client, "admin", "admin_pass")
+    alice_token = await get_auth_token(client, "alice", "alice_pass")
+
+    resp = await client.delete(
+        f"/users/{auth_setup['alice_id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {alice_token}"}
+    )
+    assert resp.status_code == 401, resp.text
+
+
+@pytest.mark.asyncio
+async def test_session_of_a_deactivated_user_is_401(auth_setup):
+    """Same reasoning as a deleted user: the credential no longer authenticates."""
+    client = auth_setup["client"]
+    admin_token = await get_auth_token(client, "admin", "admin_pass")
+    alice_token = await get_auth_token(client, "alice", "alice_pass")
+
+    resp = await client.put(
+        f"/users/{auth_setup['alice_id']}",
+        json={"is_active": False},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {alice_token}"}
+    )
+    assert resp.status_code == 401, resp.text
