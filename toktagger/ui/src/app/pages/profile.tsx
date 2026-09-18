@@ -21,9 +21,8 @@ export default function ProfilePage() {
   }, [user]);
 
   const onPasswordChanged = async () => {
-    const wasForced = user?.must_change_password;
     await refreshUser();
-    if (wasForced) navigate("/ui/projects");
+    if (user?.must_change_password) navigate("/ui/projects");
   };
 
   return (
