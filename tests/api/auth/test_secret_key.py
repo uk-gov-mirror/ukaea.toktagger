@@ -23,6 +23,16 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 BARRIER_TIMEOUT_S = 120
 
 
+@pytest.fixture(autouse=True)
+def _no_configured_secret(monkeypatch):
+    """Exercise the generate-and-persist path without leaking into other tests.
+
+    config.settings is a module-level singleton shared by the whole session, so
+    assigning to it directly would outlive these tests.
+    """
+    monkeypatch.setattr(config.settings.auth, "secret_key", None)
+
+
 def _spawn(cache_dir: Path, prefix: str, barrier: bool = False) -> subprocess.Popen:
     args = [sys.executable, str(WORKER), str(cache_dir), prefix]
     if barrier:
@@ -73,7 +83,6 @@ def test_concurrent_workers_agree_on_one_key(tmp_path):
 
 def test_generated_key_is_not_world_readable(tmp_path):
     """The key signs every session cookie, so other local accounts must not read it."""
-    config.settings.auth.secret_key = None
     secret = _read_or_create_secret(tmp_path)
     assert secret
 
@@ -83,7 +92,6 @@ def test_generated_key_is_not_world_readable(tmp_path):
 
 def test_key_is_reused_on_a_second_call(tmp_path):
     """A restart must not invalidate sessions signed before it."""
-    config.settings.auth.secret_key = None
     first = _read_or_create_secret(tmp_path)
     assert _read_or_create_secret(tmp_path) == first
 
@@ -104,7 +112,6 @@ def test_late_worker_reads_the_existing_key(tmp_path, workers):
     """A worker starting after the key exists reads it rather than replacing it."""
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
-    config.settings.auth.secret_key = None
     existing = _read_or_create_secret(cache_dir)
 
     for i in range(workers):

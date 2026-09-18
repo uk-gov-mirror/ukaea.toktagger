@@ -2,8 +2,10 @@
 
 Exercised against the undecorated class rather than a live Ray actor: the eviction
 choice is plain logic, and driving it through ray.remote would need a cluster to
-assert something no cluster is involved in.
+assert something the cluster plays no part in.
 """
+
+from unittest.mock import patch
 
 import pytest
 
@@ -15,6 +17,22 @@ from toktagger.api.models.base import ActorRegistry
 Registry = ActorRegistry.__ray_metadata__.modified_class
 
 pytestmark = pytest.mark.models_enabled
+
+
+@pytest.fixture(autouse=True)
+def _no_ray_cluster():
+    """Keep the eviction path from reaching Ray.
+
+    ray.get_actor starts a cluster implicitly when none is running, and it would come
+    up with no GPUs - ray_session's later ray.init(num_gpus=1) passes
+    ignore_reinit_error and so would silently keep that GPU-less cluster, breaking
+    every later test that expects one. Raising ValueError is the "actor is already
+    gone" case update_actors handles, so eviction still completes.
+    """
+    with patch(
+        "toktagger.api.models.base.ray.get_actor", side_effect=ValueError
+    ) as get_actor:
+        yield get_actor
 
 
 def test_gpu_eviction_is_skipped_when_gpu_support_is_off():
