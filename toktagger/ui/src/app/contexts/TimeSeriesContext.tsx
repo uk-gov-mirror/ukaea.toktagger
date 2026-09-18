@@ -243,10 +243,31 @@ export const TimeSeriesProvider = ({
   // only its own and carry the rest through untouched. Without this, annotations it
   // cannot represent - shot labels, for example - are lost on every edit.
   const mergeTimeSeriesAnnotations = useCallback(
-    (previous: Annotation[], updated: TimeSeriesAnnotation[]): Annotation[] => [
-      ...previous.filter((annotation) => !isTimeSeriesAnnotation(annotation)),
-      ...parseTimeSeriesAnnotations(updated),
-    ],
+    (previous: Annotation[], updated: TimeSeriesAnnotation[]): Annotation[] => {
+      // This view shows no validated or uncertainty control, so the conversion back
+      // has to invent both. Right for a shape drawn here, but for an annotation that
+      // already exists those invented values would be written over the stored ones -
+      // downgrading somebody else's validated work on any edit, before a save.
+      const stored = new Map(
+        previous
+          .filter((annotation) => annotation._id)
+          .map((annotation) => [annotation._id, annotation]),
+      );
+      return [
+        ...previous.filter((annotation) => !isTimeSeriesAnnotation(annotation)),
+        ...parseTimeSeriesAnnotations(updated).map((annotation) => {
+          const existing = annotation._id
+            ? stored.get(annotation._id)
+            : undefined;
+          if (!existing) return annotation;
+          return {
+            ...annotation,
+            validated: existing.validated,
+            uncertainty: existing.uncertainty,
+          };
+        }),
+      ];
+    },
     [parseTimeSeriesAnnotations],
   );
 

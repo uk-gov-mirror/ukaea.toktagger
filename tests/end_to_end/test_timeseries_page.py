@@ -860,3 +860,63 @@ def test_timeseries_models_disabled(server_setup, page: Page):
 
     # Check model prediction tool is not visible
     expect(page.get_by_role("button", name="Model Prediction")).to_be_hidden()
+
+
+def test_editing_a_sample_keeps_another_users_validated_flag(
+    server_setup, admin_token, browser, page: Page
+):
+    """Drawing in this view must not downgrade a colleague's validated annotation.
+
+    The view has no validated or uncertainty control, so converting back to the
+    stored shape has to invent both, and the conversion runs over every annotation
+    on the sample after each draw - not only the one being drawn.
+    """
+    create_user("annotator_hazel", "hazel_pass123")
+    project_id = create_project("Validated Flag Project", "time-series", "tabular")
+    ids = create_local_samples(
+        project_id, [10000], pathlib.Path(__file__).parents[1], ["Ip"]
+    )
+    sample_id = ids[0]
+    add_project_member(project_id, "annotator_hazel", role="annotator")
+
+    hazel_page = login_as(browser, "annotator_hazel", "hazel_pass123")
+    hazel_page.goto(
+        f"http://localhost:8002/ui/projects/{project_id}/samples/{sample_id}"
+    )
+    expect(hazel_page.get_by_label("time-series")).to_be_visible()
+    add_annotation(hazel_page, "TIME POINT", "Disruption")
+    with hazel_page.expect_response(
+        lambda r: (
+            f"samples/{sample_id}/annotations" in r.url and r.request.method == "PUT"
+        )
+    ):
+        hazel_page.get_by_role("button", name="Save").click(force=True)
+    hazel_page.context.close()
+
+    stored = session.get(
+        f"http://localhost:8002/projects/{project_id}/samples/{sample_id}/annotations"
+    ).json()
+    assert [a["validated"] for a in stored] == [True], stored
+
+    # Admin opens the same sample and draws their own annotation alongside hazel's.
+    page.goto(f"http://localhost:8002/ui/projects/{project_id}/samples/{sample_id}")
+    expect(page.get_by_label("time-point").first).to_be_visible()
+    add_annotation(page, "TIME REGION", "Flat Top")
+    with page.expect_response(
+        lambda r: (
+            f"samples/{sample_id}/annotations" in r.url and r.request.method == "PUT"
+        )
+    ):
+        page.get_by_role("button", name="Save").click(force=True)
+
+    stored = session.get(
+        f"http://localhost:8002/projects/{project_id}/samples/{sample_id}/annotations"
+    ).json()
+    by_author = {a["created_by"]: a for a in stored}
+    assert set(by_author) == {"annotator_hazel", "admin"}, stored
+    assert by_author["annotator_hazel"]["validated"] is True, (
+        "hazel's validated flag must survive an edit by somebody else"
+    )
+    assert by_author["annotator_hazel"]["uncertainty"] == 0, (
+        "a validated annotation keeps uncertainty 0, not the invented default of 1"
+    )
