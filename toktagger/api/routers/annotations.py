@@ -236,6 +236,7 @@ async def update_annotations(
     )
     owned_annotations = []
     edited_ids = []
+    machine_authors: set[str] = set()
     for annotation in annotations:
         is_other_authors = (
             annotation.id is not None
@@ -260,20 +261,26 @@ async def update_annotations(
         if annotation.id is None and not is_internal:
             # A just-run model prediction or annotator suggestion keeps its synthetic
             # author; otherwise the server is authoritative for identity.
-            if not (annotation.created_by or "").startswith(
-                RESERVED_CREATED_BY_PREFIXES
-            ):
+            if (annotation.created_by or "").startswith(RESERVED_CREATED_BY_PREFIXES):
+                machine_authors.add(annotation.created_by)
+            else:
                 annotation.created_by = current_user.username
 
         annotation.shot_id = sample.shot_id
         owned_annotations.append(annotation)
 
+    # Machine rows arrive with no id - /annotator/{type} and the predict endpoints
+    # return them unsaved - so the client can never send one back for in-place edit,
+    # and a delete scoped only to the caller would leave the previous save behind and
+    # stack up another copy on every save. Replace them by author instead, which is
+    # well defined because the prefix names the annotator or model, not a user.
     result = await utils.update_annotations(
         db_client,
         project_id,
         sample_id,
         owned_annotations,
         created_by=current_user.username,
+        also_replace=machine_authors,
     )
     result.extend(edited_ids)
 

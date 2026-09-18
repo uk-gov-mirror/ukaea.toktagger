@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal
 
@@ -435,13 +436,16 @@ async def update_annotations(
     sample_id: str,
     annotations: list[AnnotationBatchTypes],
     created_by: str | None = None,
+    also_replace: Iterable[str] = (),
 ) -> list[str]:
-    await delete_annotations(
-        db_client=db_client,
-        project_id=project_id,
-        sample_id=sample_id,
-        created_by=created_by,
-    )
+    """Replace a sample's annotations for `created_by`, plus any author in `also_replace`."""
+    for author in (created_by, *also_replace):
+        await delete_annotations(
+            db_client=db_client,
+            project_id=project_id,
+            sample_id=sample_id,
+            created_by=author,
+        )
 
     if len(annotations) == 0:
         return []
