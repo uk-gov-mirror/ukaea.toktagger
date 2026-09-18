@@ -224,9 +224,6 @@ export default function ProjectView() {
       setLoadError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
-        // A non-member is told plainly that access is refused, rather than that the
-        // project does not exist. This does confirm the project exists to anyone who
-        // guesses its ID, which is the accepted trade for an actionable message.
         setLoadError({
           forbidden: true,
           message: err.message || "You are not a member of this project.",
