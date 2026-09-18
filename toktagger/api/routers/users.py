@@ -4,6 +4,7 @@ from toktagger.api.auth.core import hash_password
 from toktagger.api.auth.dependencies import (
     get_current_user,
     require_global_admin,
+    require_password_changed,
     require_project_admin_role,
 )
 from toktagger.api.crud import utils
@@ -19,7 +20,12 @@ from toktagger.api.schemas.users import (
     UserUpdate,
 )
 
+# Authenticate every endpoint, but gate the forced password change per-endpoint
+# instead: update_user is how a held account replaces its password, so it is the one
+# route that must stay reachable while the flag is set.
 router = APIRouter(tags=["Users"], dependencies=[Depends(get_current_user)])
+
+_PASSWORD_CHANGED = Depends(require_password_changed)
 
 
 # ---------------------------------------------------------------------------
@@ -27,7 +33,7 @@ router = APIRouter(tags=["Users"], dependencies=[Depends(get_current_user)])
 # ---------------------------------------------------------------------------
 
 
-@router.get("/users", response_model=list[UserOut])
+@router.get("/users", response_model=list[UserOut], dependencies=[_PASSWORD_CHANGED])
 async def list_users(
     request: Request,
     _: UserOut = Depends(require_global_admin),
@@ -35,7 +41,7 @@ async def list_users(
     return await utils.get_all_users(request.app.state.db_client)
 
 
-@router.post("/users", response_model=dict)
+@router.post("/users", response_model=dict, dependencies=[_PASSWORD_CHANGED])
 async def create_user(
     request: Request,
     body: UserCreate,
@@ -62,7 +68,11 @@ async def create_user(
     return {"_id": user_id}
 
 
-@router.get("/users/me/memberships", response_model=list[ProjectMember])
+@router.get(
+    "/users/me/memberships",
+    response_model=list[ProjectMember],
+    dependencies=[_PASSWORD_CHANGED],
+)
 async def list_my_memberships(
     request: Request,
     current_user: UserOut = Depends(get_current_user),
@@ -78,7 +88,9 @@ async def list_my_memberships(
     )
 
 
-@router.get("/users/{user_id}", response_model=UserOut)
+@router.get(
+    "/users/{user_id}", response_model=UserOut, dependencies=[_PASSWORD_CHANGED]
+)
 async def get_user(
     request: Request,
     user_id: str = Path(...),
@@ -114,6 +126,20 @@ async def update_user(
             detail="Only an admin can change global_role or is_active",
         )
 
+    # Clearing your own forced change without supplying a password would leave the
+    # account on the password someone else handed you - the bootstrap admin on the
+    # public default, in the worst case. Applies whatever your global role is, so an
+    # admin cannot excuse itself; clearing it for somebody else stays allowed.
+    if (
+        current_user.id == user_id
+        and body.must_change_password is False
+        and body.password is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="A new password is required to clear a forced password change",
+        )
+
     db_client: MongoDBClient = request.app.state.db_client
 
     # Prevent demoting or deactivating the last active admin
@@ -133,7 +159,7 @@ async def update_user(
     await utils.update_user(db_client, user_id, body)
 
 
-@router.delete("/users/{user_id}")
+@router.delete("/users/{user_id}", dependencies=[_PASSWORD_CHANGED])
 async def delete_user(
     request: Request,
     user_id: str = Path(...),
@@ -168,6 +194,7 @@ async def delete_user(
 @router.get(
     "/projects/{project_id}/members",
     response_model=list[ProjectMemberOut],
+    dependencies=[_PASSWORD_CHANGED],
 )
 async def list_project_members(
     request: Request,
@@ -184,7 +211,11 @@ async def list_project_members(
     return await utils.get_project_members(db_client, project_id)
 
 
-@router.post("/projects/{project_id}/members", response_model=dict)
+@router.post(
+    "/projects/{project_id}/members",
+    response_model=dict,
+    dependencies=[_PASSWORD_CHANGED],
+)
 async def add_project_member(
     request: Request,
     body: ProjectMemberCreate,
@@ -201,7 +232,9 @@ async def add_project_member(
     return {"_id": member_id}
 
 
-@router.put("/projects/{project_id}/members/{user_id}")
+@router.put(
+    "/projects/{project_id}/members/{user_id}", dependencies=[_PASSWORD_CHANGED]
+)
 async def update_project_member(
     request: Request,
     body: ProjectMemberUpdate,
@@ -226,7 +259,9 @@ async def update_project_member(
     await utils.update_project_member(db_client, project_id, user_id, body)
 
 
-@router.delete("/projects/{project_id}/members/{user_id}")
+@router.delete(
+    "/projects/{project_id}/members/{user_id}", dependencies=[_PASSWORD_CHANGED]
+)
 async def remove_project_member(
     request: Request,
     project_id: str = Path(...),

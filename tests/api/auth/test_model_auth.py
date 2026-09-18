@@ -11,7 +11,7 @@ Tests for model × auth interactions:
 
 import pytest
 
-from tests.api.auth.conftest import get_auth_token
+from tests.api.auth.conftest import create_user, get_auth_token
 from toktagger.api.auth.core import get_internal_token
 
 
@@ -209,16 +209,7 @@ async def test_user_save_does_not_corrupt_model_prefixed_predictions(project_set
     sample_id = project_setup["sample_id"]
 
     # Create a human user whose name matches a model type (the collision scenario).
-    create_resp = await client.post(
-        "/users",
-        json={
-            "username": "disruption_cnn",
-            "password": "pass123",
-            "global_role": "user",
-        },
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    assert create_resp.status_code == 200
+    await create_user(client, admin_token, "disruption_cnn", "pass123")
 
     # Insert a model prediction via the internal tokens.
     internal_token = get_internal_token()

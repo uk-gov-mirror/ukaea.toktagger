@@ -126,6 +126,40 @@ async def create_project(
     return resp.json()["_id"]
 
 
+async def create_user(
+    client: AsyncClient,
+    admin_token: str,
+    username: str,
+    password: str,
+    role: str = "user",
+    must_change_password: bool = False,
+) -> str:
+    """Create a user as an admin and return its id.
+
+    POST /users always forces a password change, which require_password_changed then
+    refuses every other request for. Accounts under test should be usable straight
+    away, so clear it here; pass must_change_password=True to test the hold itself.
+    """
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    resp = await client.post(
+        "/users",
+        json={"username": username, "password": password, "global_role": role},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    user_id = resp.json()["_id"]
+
+    if not must_change_password:
+        resp = await client.put(
+            f"/users/{user_id}",
+            json={"must_change_password": False},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+    return user_id
+
+
 async def add_member(
     client: AsyncClient, token: str, project_id: str, username: str, role: str
 ) -> None:

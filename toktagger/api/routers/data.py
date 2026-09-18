@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from toktagger.api.auth.dependencies import get_current_user, require_project_viewer
+from toktagger.api.auth.dependencies import (
+    require_password_changed,
+    require_project_viewer,
+)
 from toktagger.api.core.data_loaders import DataLoaderError, LoaderRegistry
 from toktagger.api.core.views import DATA_VIEWS
 from toktagger.api.crud import utils
@@ -12,7 +15,7 @@ from toktagger.api.schemas.views import ViewParams, ViewParamTypes
 router = APIRouter(
     prefix="/projects/{project_id}/samples/{sample_id}/data",
     tags=["Data"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(require_password_changed)],
 )
 
 

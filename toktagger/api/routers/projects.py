@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from toktagger.api.auth.dependencies import (
     get_current_user,
     require_global_admin,
+    require_password_changed,
     require_project_annotator,
     require_project_viewer,
 )
@@ -17,7 +18,7 @@ from toktagger.api.schemas.users import UserOut
 router = APIRouter(
     prefix="/projects",
     tags=["Projects"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(require_password_changed)],
 )
 
 

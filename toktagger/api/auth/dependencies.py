@@ -97,6 +97,24 @@ async def get_current_user(
     return user
 
 
+async def require_password_changed(
+    current_user: UserOut = Depends(get_current_user),
+) -> UserOut:
+    """Hold an account on a forced password change until it supplies a new one.
+
+    The bootstrap admin ships with a public default password, so until it is replaced
+    the account is treated as not yet usable. Applied to the data routers rather than
+    inside get_current_user, so /auth/me and the self-service password change stay
+    reachable for the account being held.
+    """
+    if current_user.must_change_password:
+        raise HTTPException(
+            status_code=403,
+            detail="You must change your password before using TokTagger.",
+        )
+    return current_user
+
+
 async def require_global_admin(
     current_user: UserOut = Depends(get_current_user),
 ) -> UserOut:

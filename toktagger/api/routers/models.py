@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from toktagger.api import config
 from toktagger.api.auth.dependencies import (
-    get_current_user,
+    require_password_changed,
     require_project_admin_role,
     require_project_annotator,
     require_project_viewer,
@@ -134,7 +134,7 @@ router = APIRouter(
     # so it would return 503 to a non-member before their role was ever checked.
     # Each endpoint declares it after its role dependency instead, so permission
     # errors take precedence over "ML extras not installed".
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(require_password_changed)],
 )
 
 
