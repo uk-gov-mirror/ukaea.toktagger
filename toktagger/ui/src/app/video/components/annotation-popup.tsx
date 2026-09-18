@@ -32,7 +32,7 @@ export function AnnotationPopup(props: {
 
   return (
     <div
-      className="z-[60] pointer-events-auto"
+      className="pointer-events-auto"
       role="dialog"
       aria-label="Annotation actions"
     >
