@@ -1,18 +1,22 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import { defineConfig } from "eslint/config";
+import typescriptPlugin from "@typescript-eslint/eslint-plugin";
+import typescriptParser from "@typescript-eslint/parser";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import jsxA11y from "eslint-plugin-jsx-a11y";
+import svelte from "eslint-plugin-svelte";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const typescriptRules = {
+  "@typescript-eslint/no-unused-vars": [
+    "error",
+    {
+      argsIgnorePattern: "^_",
+    },
+  ],
+  "@typescript-eslint/no-explicit-any": "warn",
+};
 
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
+export default defineConfig([
   {
     ignores: [
       "dist/**",
@@ -25,14 +29,13 @@ const eslintConfig = [
   {
     files: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
     plugins: {
-      "@typescript-eslint": (await import("@typescript-eslint/eslint-plugin"))
-        .default,
+      "@typescript-eslint": typescriptPlugin,
       react,
       "react-hooks": reactHooks,
       "jsx-a11y": jsxA11y,
     },
     languageOptions: {
-      parser: (await import("@typescript-eslint/parser")).default,
+      parser: typescriptParser,
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module",
@@ -47,13 +50,7 @@ const eslintConfig = [
       },
     },
     rules: {
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        {
-          argsIgnorePattern: "^_",
-        },
-      ],
-      "@typescript-eslint/no-explicit-any": "warn",
+      ...typescriptRules,
 
       // React rules
       "react/react-in-jsx-scope": "off", // Not needed with React 17+
@@ -75,6 +72,27 @@ const eslintConfig = [
       "jsx-a11y/no-static-element-interactions": "warn",
     },
   },
-];
-
-export default eslintConfig;
+  svelte.configs.recommended,
+  {
+    files: ["**/*.svelte", "**/*.svelte.ts"],
+    languageOptions: {
+      parserOptions: {
+        parser: typescriptParser,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": typescriptPlugin,
+    },
+    rules: typescriptRules,
+  },
+  svelte.configs.prettier,
+  {
+    files: [
+      "src/app/video/components/point-editor/point-editor-host.svelte.ts",
+    ],
+    rules: {
+      // The Sets store event handlers, not reactive UI state.
+      "svelte/prefer-svelte-reactivity": "off",
+    },
+  },
+]);
