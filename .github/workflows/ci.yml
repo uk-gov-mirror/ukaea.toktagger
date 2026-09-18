@@ -59,6 +59,9 @@ jobs:
       - name: Run ESLint
         run: npx eslint .
 
+      - name: Run Svelte check
+        run: npm run check:svelte
+
   prettier:
     name: Prettier Lint
     runs-on: ubuntu-latest
