@@ -25,42 +25,37 @@ export function useProjectRole(
 ): ProjectRoleInfo {
   const { user } = useAuth();
   const [role, setRole] = useState<ProjectRole>(null);
-  const [restricted, setRestricted] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const isGlobalAdmin = user?.global_role === "admin";
+  const unrestricted = !project_id || isGlobalAdmin;
+
   useEffect(() => {
-    if (!user || !project_id) {
-      setRole(null);
-      setRestricted(false);
+    if (unrestricted || !user || !project_id) {
       setLoading(false);
       return;
     }
-    if (user.global_role === "admin") {
-      setRole("admin");
-      setRestricted(false);
-      setLoading(false);
-      return;
-    }
+    // Cleared first, so a role held for the previous project cannot grant anything
+    // against this one while the request is in flight.
+    setRole(null);
     setLoading(true);
     apiFetch(`${BACKEND_API_URL}/projects/${project_id}/members`)
       .then((r) => r.json())
       .then((members: Array<{ user_id: string; role: ProjectRole }>) => {
-        const membership = members.find((m) => m.user_id === user._id);
-        setRole(membership?.role ?? null);
-        setRestricted(true);
+        setRole(members.find((m) => m.user_id === user._id)?.role ?? null);
       })
-      .catch(() => {
-        setRole(null);
-        setRestricted(true); // fail closed on a real error
-      })
+      .catch(() => setRole(null)) // fail closed on a real error
       .finally(() => setLoading(false));
-  }, [project_id, user]);
+  }, [project_id, user, unrestricted]);
 
+  // No role means no permission, so an unresolved membership is closed rather than
+  // open - a viewer would otherwise get a window of enabled Save and Clear controls
+  // on every project they open.
   return {
-    role,
-    isAdmin: restricted ? role === "admin" : true,
-    canAnnotate: restricted ? role === "admin" || role === "annotator" : true,
-    loading,
+    role: isGlobalAdmin ? "admin" : role,
+    isAdmin: unrestricted || role === "admin",
+    canAnnotate: unrestricted || role === "admin" || role === "annotator",
+    loading: unrestricted ? false : loading,
   };
 }
 

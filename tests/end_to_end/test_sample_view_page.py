@@ -4,6 +4,7 @@ pytest.importorskip("playwright")
 import json
 import pathlib
 import tempfile
+import threading
 import time
 
 import pytest
@@ -1129,3 +1130,44 @@ def test_validated_alertbox(server_setup, page: Page):
         f"http://localhost:8002/ui/projects/{project_id}/samples/{sample_ids[3]}"
     )
     expect(page.get_by_text("Annotations Validated")).to_be_visible()
+
+
+def test_viewer_controls_start_disabled_before_the_role_resolves(
+    server_setup, admin_token, browser
+):
+    """Save must not be enabled during the window where the role is still unknown.
+
+    The membership request is held open so the window is deterministic rather than a
+    race. Defaulting to open here meant a viewer could press Save on every project
+    they opened and only be stopped by the resulting 403.
+    """
+    username = "rolewindow_viewer"
+    create_user(username, f"{username}_pass123")
+    project_id = create_project("Role Window Project", "time-series", "tabular")
+    sample_ids = create_local_samples(
+        project_id, [10000], pathlib.Path(__file__).parents[1], ["Ip"]
+    )
+    sample_id = sample_ids[0]
+    add_project_member(project_id, username, role="viewer")
+
+    user_page = login_as(browser, username, f"{username}_pass123")
+
+    release = threading.Event()
+
+    def hold_members(route):
+        release.wait(timeout=15)
+        route.continue_()
+
+    user_page.route(f"**/projects/{project_id}/members", hold_members)
+    user_page.goto(
+        f"http://localhost:8002/ui/projects/{project_id}/samples/{sample_id}"
+    )
+
+    save_button = user_page.get_by_role("button", name="Save")
+    expect(save_button).to_be_disabled()
+
+    release.set()
+    # Still disabled once the role lands, since they really are a viewer.
+    expect(save_button).to_be_disabled()
+
+    user_page.context.close()
