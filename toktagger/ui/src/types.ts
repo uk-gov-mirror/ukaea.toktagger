@@ -402,10 +402,6 @@ export type TimeSeriesAnnotation = {
   signal_name?: string | null;
 };
 
-// ---------------------------------------------------------------------------
-// Auth / User types
-// ---------------------------------------------------------------------------
-
 export const CurrentUserSchema = z.object({
   _id: z.string(),
   username: z.string(),
