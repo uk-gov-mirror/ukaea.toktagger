@@ -94,11 +94,15 @@ async def import_annotations(
     """Update or add annotations for this project."""
     db_client: MongoDBClient = request.app.state.db_client
     # Every human caller — admins included — is recorded as the author of the
-    # annotations they import, so authorship is always auditable. Only the internal
-    # Ray-worker user may supply its own created_by (e.g. "model::<type>" predictions).
+    # annotations they import, so authorship is always auditable. Machine authorship
+    # is kept as-is, matching the sample-level save, so re-importing an export does
+    # not reassign every prediction to whoever imported it.
     if current_user.username != "__internal__":
         for annotation in annotations:
-            annotation.created_by = current_user.username
+            if not (annotation.created_by or "").startswith(
+                RESERVED_CREATED_BY_PREFIXES
+            ):
+                annotation.created_by = current_user.username
     await utils.import_annotations(db_client, project_id, annotations)
 
 

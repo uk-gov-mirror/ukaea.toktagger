@@ -252,3 +252,41 @@ async def test_user_save_does_not_corrupt_model_prefixed_predictions(project_set
     labels_by_author = {a["created_by"]: a["label"] for a in annotations}
     assert labels_by_author.get("model::disruption_cnn") == "model_pred"
     assert labels_by_author.get("disruption_cnn") == "human_ann"
+
+
+@pytest.mark.asyncio
+async def test_import_preserves_machine_created_by(project_setup):
+    """Re-importing an export must not reassign predictions to the importer.
+
+    Matches the sample-level save, which already exempts the reserved prefixes.
+    """
+    client = project_setup["client"]
+    admin_token = project_setup["admin_token"]
+    project_id = project_setup["project_id"]
+
+    await client.post(
+        f"/projects/{project_id}/members",
+        json={"username": "alice", "role": "annotator"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    alice_token = await get_auth_token(client, "alice", "alice_pass")
+
+    resp = await client.put(
+        f"/projects/{project_id}/annotations",
+        json=annotation_payload(created_by="model::disruption_cnn")
+        + annotation_payload(label="suggested", created_by="annotators::peak_detection")
+        + annotation_payload(label="hand_drawn", created_by="bob"),
+        headers={"Authorization": f"Bearer {alice_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    get_resp = await client.get(
+        f"/projects/{project_id}/annotations",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    authors = sorted(a["created_by"] for a in get_resp.json())
+    assert authors == [
+        "alice",  # the spoofed human author is still replaced
+        "annotators::peak_detection",
+        "model::disruption_cnn",
+    ], authors
