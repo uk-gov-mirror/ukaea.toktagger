@@ -20,7 +20,10 @@ export default function ForbiddenView({ message }: { message?: string }) {
         <View marginBottom="size-200">
           <LockClosed aria-hidden="true" size="XXL" />
         </View>
-        <Text maxWidth="500px" UNSAFE_style={{ color: "#666", textAlign: "center" }}>
+        <Text
+          maxWidth="500px"
+          UNSAFE_style={{ color: "#666", textAlign: "center" }}
+        >
           {message ||
             "You do not have access to this project. Ask a project admin to add you as a member."}
         </Text>

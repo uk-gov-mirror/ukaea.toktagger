@@ -61,7 +61,9 @@ export default function LoginPage() {
         borderRadius="large"
         padding="size-500"
         minWidth="size-4600"
-        UNSAFE_style={{ boxShadow: "var(--spectrum-alias-dropshadow-color) 0 10px 40px" }}
+        UNSAFE_style={{
+          boxShadow: "var(--spectrum-alias-dropshadow-color) 0 10px 40px",
+        }}
       >
         <Heading level={2} marginBottom="size-300">
           TokTagger — Sign In

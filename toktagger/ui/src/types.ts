@@ -417,15 +417,21 @@ export const CurrentUserSchema = z.object({
 });
 export type CurrentUser = z.infer<typeof CurrentUserSchema>;
 
+// Mirrors the backend's ProjectMember, as GET /users/me/memberships returns it.
 export const ProjectMemberSchema = z.object({
-  _id: z.string(),
   project_id: z.string(),
   user_id: z.string(),
-  username: z.string(),
   role: z.enum(["admin", "annotator", "viewer"]),
   show_others_annotations: z.boolean(),
 });
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>;
+
+// Mirrors ProjectMemberOut: what GET /projects/{id}/members adds for the member list.
+export const ProjectMemberOutSchema = ProjectMemberSchema.extend({
+  _id: z.string(),
+  username: z.string(),
+});
+export type ProjectMemberOut = z.infer<typeof ProjectMemberOutSchema>;
 
 export type ToolingCallbacks = {
   start: (

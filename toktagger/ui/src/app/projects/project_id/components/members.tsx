@@ -26,7 +26,7 @@ import UserGroup from "@spectrum-icons/workflow/UserGroup";
 import Delete from "@spectrum-icons/workflow/Delete";
 import { z } from "zod/v4";
 import { BACKEND_API_URL, apiFetch } from "@/app/core";
-import { ProjectMemberSchema, type ProjectMember } from "@/types";
+import { ProjectMemberOutSchema, type ProjectMemberOut } from "@/types";
 
 interface Props {
   projectId: string;
@@ -34,14 +34,16 @@ interface Props {
 }
 
 export function ProjectMembersDialog({ projectId, isProjectAdmin }: Props) {
-  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [members, setMembers] = useState<ProjectMemberOut[]>([]);
 
   const refresh = useCallback(async () => {
     const res = await apiFetch(
       `${BACKEND_API_URL}/projects/${projectId}/members`,
     );
     if (res.ok) {
-      const parsed = z.array(ProjectMemberSchema).safeParse(await res.json());
+      const parsed = z
+        .array(ProjectMemberOutSchema)
+        .safeParse(await res.json());
       if (parsed.success) {
         setMembers(parsed.data);
       }

@@ -619,6 +619,18 @@ def test_deleting_another_authors_annotation_is_saved(server_setup, page: Page):
     assert response.json() == []
 
 
+def _confirm_clear(page: Page):
+    """Press Clear and confirm it in the dialog that asks.
+
+    Named rather than scoped by role alone, because Spectrum's toasts are
+    alertdialogs too and a save toast may still be on screen.
+    """
+    page.get_by_role("button", name="Clear", exact=True).click()
+    page.get_by_role("alertdialog", name="Clear annotations?").get_by_role(
+        "button", name="Clear", exact=True
+    ).click()
+
+
 def test_clear_button_showing_others_clears_everything(server_setup, page: Page):
     """With "Show Others' Annotations" on, Clear discards every annotation shown.
 
@@ -643,7 +655,7 @@ def test_clear_button_showing_others_clears_everything(server_setup, page: Page)
     expect(page.get_by_text("Annotations Validated")).to_be_visible()
 
     # Press Clear - everything on display goes, whoever created it
-    page.get_by_role("button", name="Clear").click()
+    _confirm_clear(page)
 
     expect(page.get_by_label("time-point")).to_have_count(0)
     expect(page.get_by_label("time-zone")).to_have_count(0)
@@ -672,7 +684,7 @@ def test_clear_button_hiding_others_clears_own_only(server_setup, page: Page):
     expect(page.get_by_label("time-zone")).to_have_count(0)
     expect(page.get_by_label("time-point").first).to_be_visible()
 
-    page.get_by_role("button", name="Clear").click()
+    _confirm_clear(page)
     expect(page.get_by_label("time-point")).to_have_count(0)
     expect(page.get_by_text("Annotations Not Validated")).to_be_visible()
 

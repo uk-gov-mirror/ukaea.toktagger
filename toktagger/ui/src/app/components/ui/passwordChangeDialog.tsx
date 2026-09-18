@@ -28,7 +28,7 @@ type PasswordChangeDialogProps = {
   /** Controlled open state, e.g. to auto-open when the caller must change their password. */
   isOpen?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
-  /** False makes the dialog un-cancellable (no Cancel button, no outside-click/Escape dismiss). */
+  /** False makes the dialog un-cancellable (no Cancel button, no Escape dismiss). */
   isDismissable?: boolean;
   onSuccess?: () => void | Promise<void>;
 };
@@ -94,9 +94,11 @@ export function PasswordChangeDialog({
   };
 
   return (
+    // Deliberately not `isDismissable`: Spectrum hides a dismissable dialog's whole
+    // ButtonGroup, which would take Cancel and the confirm button with it.
     <DialogTrigger
       isOpen={isOpen}
-      isDismissable={isDismissable}
+      isKeyboardDismissDisabled={!isDismissable}
       onOpenChange={(open) => {
         if (!open) reset();
         onOpenChange?.(open);
