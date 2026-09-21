@@ -38,9 +38,7 @@ from toktagger.api.schemas.data import MultiVariateTimeSeriesData, TimeSeriesDat
 
 pytestmark = pytest.mark.models_enabled
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
+# --- Shared helpers ---
 
 
 def make_model_instance(cls):
@@ -88,9 +86,7 @@ def make_sample() -> MagicMock:
     return s
 
 
-# ---------------------------------------------------------------------------
-# DTW Motif
-# ---------------------------------------------------------------------------
+# --- DTW Motif ---
 
 
 def _make_trained_dtw_motif(
@@ -177,9 +173,7 @@ def test_dtw_motif_backward_compat_load():
     assert "signal_name" not in model.model or model.model.get("signal_names")
 
 
-# ---------------------------------------------------------------------------
-# STUMPY Motif
-# ---------------------------------------------------------------------------
+# --- STUMPY Motif ---
 
 
 def _make_trained_stumpy_motif(
@@ -230,9 +224,7 @@ def test_stumpy_motif_predict_threshold_controls_detection_extent():
     background = rng.standard_normal(n)
     template_raw = rng.standard_normal(window_size)
 
-    # Inject an exact copy of the template at a known location so its MASS
-    # distance from the trained template is ~0, while the surrounding
-    # background (unrelated noise) has a much larger distance.
+    # Inject an exact copy of the template so its MASS distance from the trained template is ~0, unlike the noisy background.
     inject_start = 150
     values = background.copy()
     values[inject_start : inject_start + window_size] = template_raw
@@ -306,9 +298,7 @@ def test_stumpy_motif_multivariate_train_predict_uses_second_channel():
     model.data_loader.get_sample.side_effect = [train_data, predict_data]
     sample = make_sample()
     ann = make_annotation(2.0, 3.0)
-    # Averaging Ip's mismatched-noise distance (~9-10) with dalpha's near-0
-    # match brings the combined distance to ~5; background elsewhere
-    # averages ~9-10 on both channels, so 7.0 only catches the true match.
+    # Averaging Ip's mismatched-noise distance (~9-10) with dalpha's near-0 match gives ~5, vs ~9-10 for background elsewhere, so 7.0 only catches the true match.
     params = StumpyMotifTrainParams(signal_names=["Ip", "dalpha"], threshold=7.0)
     model.train([sample], [[ann]], params)
     model._trained = True
@@ -370,9 +360,7 @@ def test_stumpy_motif_backward_compat_load():
     assert model.model["signal_names"] == ["Ip"]
 
 
-# ---------------------------------------------------------------------------
-# MiniRocket
-# ---------------------------------------------------------------------------
+# --- MiniRocket ---
 
 
 def _make_trained_minirocket(signal_names: list[str]) -> MiniRocketModel:
@@ -433,16 +421,14 @@ def test_minirocket_train_uses_background_only_sample_as_negatives():
         num_kernels=100,
         class_label="Event",
     )
-    # background_sample has no annotations, i.e. it was reviewed and confirmed
-    # to hold no events, so it should still contribute negative windows.
+    # background_sample has no annotations because it was reviewed and confirmed to hold no events, so it should still contribute negative windows.
     score = model.train([event_sample, background_sample], [[ann], []], params)
     assert isinstance(score, float)
 
 
 def test_minirocket_train_raises_without_negative_windows():
     model = make_model_instance(MiniRocketModel)
-    # Annotation spans almost the entire signal, so no window-sized gap is
-    # left to sample a background window from.
+    # Annotation spans almost the entire signal, so no window-sized gap is left to sample a background window from.
     data = make_mv_data(["Ip"], n=60)
     model.data_loader.get_sample.return_value = data
     sample = make_sample()
@@ -463,8 +449,7 @@ def test_minirocket_train_pads_window_size_below_minirocket_minimum():
     model.data_loader.get_sample.return_value = data
     event_sample = make_sample()
     background_sample = make_sample()
-    # Very short annotation duration infers a window_size below the 9-sample
-    # minimum sktime's MiniRocket transform requires.
+    # Very short annotation duration infers a window_size below the 9-sample minimum sktime's MiniRocket transform requires.
     ann = make_annotation(2.0, 2.1)
     params = MiniRocketTrainParams(
         signal_names=["Ip"],
@@ -492,9 +477,7 @@ def test_minirocket_backward_compat_load():
     assert model.model["signal_names"] == ["Ip"]
 
 
-# ---------------------------------------------------------------------------
-# Shapelet Transform
-# ---------------------------------------------------------------------------
+# --- Shapelet Transform ---
 
 
 @pytest.fixture(scope="module")
@@ -531,9 +514,7 @@ def test_shapelet_train_predict(sktime):
     assert all(isinstance(a, AnnotationBase) for a in result[0])
 
 
-# ---------------------------------------------------------------------------
-# Signal loading and alignment
-# ---------------------------------------------------------------------------
+# --- Signal loading and alignment ---
 
 
 def make_ranged_data(

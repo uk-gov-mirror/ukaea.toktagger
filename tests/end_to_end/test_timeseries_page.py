@@ -593,13 +593,10 @@ def test_timeseries_model_predict(
 
     page.get_by_role("option", name=model_name, exact=True).click()
 
-    # Model-specific form (including GPU switch) only renders once a model
-    # type is selected and its training schema has loaded
+    # Model-specific form (including GPU switch) only renders once a model type is selected and its training schema has loaded
     expect(page.get_by_role("switch", name="Allocate GPU")).to_be_visible()
 
-    # Model Name is required before the Train button becomes enabled - fill it
-    # in before form_check so its Train click below is only blocked by the
-    # custom-param validation it's testing, not a missing Model Name too
+    # Fill Model Name (required for Train to enable) so form_check's Train click below is only blocked by the custom-param validation it's testing
     page.get_by_role("textbox", name="Model Name").fill(model_name)
 
     # If params model chosen, new form should open

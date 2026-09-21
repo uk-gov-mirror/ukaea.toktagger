@@ -47,8 +47,7 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
     models.find((model) => model._id === selectedModelId) ?? null;
   const selectedModelType = selectedModel?.type ?? null;
 
-  // Refetch when the tool is switched on, so a model trained from this page
-  // without a reload still shows up in the list.
+  // Refetch when the tool is switched on, so a model trained from this page without a reload still shows up in the list.
   useEffect(() => {
     (async () => {
       const response = await getModels(project_id);
@@ -70,8 +69,7 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
     })();
   }, [project_id, isEnabled]);
 
-  // Start out enabled if this sample already has predictions from one of the
-  // project's models, but only take over the switch before the user touches it.
+  // Start out enabled if this sample already has predictions from one of the project's models, but only before the user touches the switch.
   useEffect(() => {
     if (didAutoEnable.current || models.length === 0) {
       return;
@@ -154,8 +152,7 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
     if (!taskId || !selectedModelType || !isEnabled) return;
 
     let pollCounter = 0;
-    // Poll for result from GET predictions endpoint every 3 seconds.
-    // DTW inference can take several seconds so polling faster just spams the server.
+    // Poll for result from GET predictions endpoint every 3 seconds; DTW inference can take several seconds so polling faster just spams the server.
     const interval = setInterval(async () => {
       const response = await getSamplePredictions(
         project_id,
@@ -175,8 +172,7 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
         }
       } else if (response.ok) {
         setAnnotations((previousAnnotations: Annotations) => {
-          // Replace any unvalidated predictions from this model with the new
-          // results rather than appending, so repeated runs don't stack up.
+          // Replace any unvalidated predictions from this model with the new results rather than appending, so repeated runs don't stack up.
           const withoutStale = previousAnnotations.filter(
             (ann: Annotation) =>
               ann.model_id !== selectedModelId || ann.validated,

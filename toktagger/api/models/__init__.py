@@ -9,13 +9,10 @@ def models_dependencies_installed() -> bool:
     return importlib.util.find_spec("ray") is not None
 
 
-# When the driver is launched via `uv run`, Ray by default re-launches every worker
-# through a fresh `uv run` subprocess to mirror the driver's environment. That
-# re-resolves the project from the worker's cwd on every spawn and is prone to
-# VIRTUAL_ENV mismatches that crash workers with ModuleNotFoundError: ray. Disable
-# it so workers just reuse the driver's already-working interpreter instead. This
-# is a no-op unless the driver is actually run via `uv run`, so it's always safe.
-# Must be set before `ray` is imported anywhere, since Ray reads it at import time.
+# Ray re-launches workers via `uv run` to mirror the driver's env, which re-resolves the project from the worker's
+# cwd and can crash workers with VIRTUAL_ENV mismatches (ModuleNotFoundError: ray); disable that so workers just
+# reuse the driver's interpreter (a no-op otherwise, so always safe). Must be set before `ray` is imported, since
+# Ray reads this env var at import time.
 os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
 
 

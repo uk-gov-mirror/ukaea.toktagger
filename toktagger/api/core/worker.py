@@ -149,10 +149,8 @@ def train_model(
         return {"project_id": project.id, "model_id": model.id, "score": score}
 
     except Exception as e:
-        # If anything goes wrong, update model to failed status.
-        # This is important as if this does not happen, your model will be stuck
-        # in 'training' forever, preventing you from ever starting a new training
-        # session again. TODO: should we have some kind of timeout in case this fails?
+        # Update model to failed status so it doesn't stay stuck in 'training' forever, blocking new training sessions.
+        # TODO: should we have some kind of timeout in case this fails?
         logger.error(e)
         send_model_updates(
             project_id=project.id,

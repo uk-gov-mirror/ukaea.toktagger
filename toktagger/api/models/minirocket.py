@@ -25,8 +25,7 @@ from toktagger.api.schemas.samples import Sample
 
 logger = logging.getLogger("ray")
 
-# sktime's MiniRocket transform requires at least this many samples per
-# series to generate its fixed set of dilations.
+# sktime's MiniRocket transform requires at least this many samples per series to generate its fixed set of dilations.
 MINIROCKET_MIN_WINDOW = 9
 
 
@@ -93,10 +92,7 @@ class MiniRocketModel(Model):
 
         self.log_progress(status="training", progress=0)
 
-        # A sample with no annotations has already been validated as pure
-        # background (see routers/models.py, which only trains on validated
-        # samples) rather than being unreviewed, so it stays in as a source
-        # of negative windows instead of being dropped here.
+        # A sample with no annotations has already been validated as pure background (see routers/models.py, which only trains on validated samples) rather than being unreviewed, so it stays in as a source of negative windows.
         paired = list(zip(samples, annotations))
         if not paired:
             raise ValueError("No samples provided for training.")

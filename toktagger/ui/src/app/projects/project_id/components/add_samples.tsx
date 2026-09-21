@@ -175,8 +175,7 @@ export const AddSamplesEditor = ({
   };
 
   useEffect(() => {
-    // ShotData projects never show the directory fields, so a listing of the
-    // server's working directory must not overwrite the range-derived shot IDs.
+    // ShotData projects never show the directory fields, so a listing of the server's working directory must not overwrite the range-derived shot IDs.
     if (!isFileData) return;
 
     async function fetchFileSamples() {
@@ -201,10 +200,7 @@ export const AddSamplesEditor = ({
           setShotIds(extractedShotIds);
           setShotFileMap(new Map());
         } else {
-          // Files: build a shot-ID → file-path map.
-          // Priority 1: filename is exactly <shotId>.<fileType>  → use the full path directly.
-          // Priority 2: parent directory is exactly <shotId>     → use a per-directory glob
-          //             e.g. data/10000/signal.parquet  →  data/10000/*.parquet
+          // Files: build a shot-ID → file-path map. Priority 1: filename is exactly <shotId>.<fileType> → use the full path directly. Priority 2: parent directory is exactly <shotId> → use a per-directory glob, e.g. data/10000/signal.parquet → data/10000/*.parquet.
           const fileNameRegex = new RegExp(`^(\\d+)\\.${fileType}$`);
           const map = new Map<number, string>();
 
@@ -282,8 +278,7 @@ export const AddSamplesEditor = ({
           if (useDirectories) {
             fileName = dirPath + "/" + shotId.toString();
           } else {
-            // Use the resolved path from the file map; fall back to the
-            // flat convention for manually-entered shot ranges.
+            // Use the resolved path from the file map; fall back to the flat convention for manually-entered shot ranges.
             fileName =
               shotFileMap.get(shotId) ??
               dirPath + "/" + shotId.toString() + "." + fileType;

@@ -203,9 +203,7 @@ export function ModelTrainModal({
       }
     };
 
-    // Fetch immediately on open or tab switch (trainingModelId is null),
-    // but not right after submitting a job — the "added to queue" message
-    // should stay visible until the next regular interval tick.
+    // Fetch immediately on open or tab switch (trainingModelId is null), but not right after submitting a job, so the "added to queue" message stays visible until the next interval tick.
     if (!trainingModelId) {
       fetchModels();
     }

@@ -147,18 +147,14 @@ async def get_model_training_schema(
 
     if "class_label" in properties:
         labels = list(project.time_region_labels or [])
-        # Fields with a default (e.g. the optional filter on template-matching
-        # models) allow an unselected/blank value, so it must stay a valid
-        # enum choice. Required fields (e.g. minirocket/shapelet) must not
-        # offer a blank option, since the user must always pick a real label.
+        # Fields with a default (e.g. the optional filter on template-matching models) allow a blank value, so it must stay a valid enum choice; required fields (e.g. minirocket/shapelet) must not offer one.
         if "class_label" not in schema.get("required", []):
             labels = [""] + labels
         properties["class_label"]["enum"] = labels
 
     if "signal_names" in properties:
         signals = await get_project_signals(db_client, project)
-        # An empty enum would leave the user unable to fill in a required field,
-        # so projects with no readable signals keep the free-text input.
+        # An empty enum would leave the user unable to fill in a required field, so projects with no readable signals keep the free-text input.
         if signals:
             properties["signal_names"]["items"]["enum"] = signals
 

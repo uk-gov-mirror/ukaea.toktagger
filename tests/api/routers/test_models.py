@@ -284,8 +284,7 @@ async def test_model_sample_predict_keeps_previous_run_until_next_succeeds(
     )
     assert len(first_run) == 1
 
-    # Submitting another run leaves the results of the first one in place, so a
-    # failure does not cost the user the predictions they already had
+    # Submitting another run leaves the results of the first one in place, so a failure doesn't cost the user the predictions they already had
     await models_api_client.post(url)
 
     annotations = await db_client.get_filtered_documents(
