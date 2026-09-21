@@ -13,8 +13,16 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from toktagger.api.models.dtw_motif import DTWMotifModel, DTWMotifTrainParams
-from toktagger.api.models.event_detection_utils import zscore
+from toktagger.api.models.dtw_motif import (
+    DTWMotifModel,
+    DTWMotifPredictParams,
+    DTWMotifTrainParams,
+)
+from toktagger.api.models.event_detection_utils import (
+    MissingSignalError,
+    SignalAlignmentError,
+    zscore,
+)
 from toktagger.api.models.minirocket import MiniRocketModel, MiniRocketTrainParams
 from toktagger.api.models.stumpy_motif import (
     StumpyMotifModel,
@@ -461,3 +469,78 @@ def test_shapelet_train_predict(sktime):
     assert isinstance(result, list)
     assert len(result) == 1
     assert all(isinstance(a, AnnotationBase) for a in result[0])
+
+
+# ---------------------------------------------------------------------------
+# Signal loading and alignment
+# ---------------------------------------------------------------------------
+
+
+def make_ranged_data(
+    ranges: dict[str, tuple[float, float, int]], seed: int = 0
+) -> MultiVariateTimeSeriesData:
+    """Return data where each signal covers its own time range and rate."""
+    rng = np.random.default_rng(seed)
+    return MultiVariateTimeSeriesData(
+        values={
+            name: TimeSeriesData(
+                time=np.linspace(start, stop, n).tolist(),
+                values=rng.standard_normal(n).tolist(),
+            )
+            for name, (start, stop, n) in ranges.items()
+        }
+    )
+
+
+def test_train_skips_sample_which_misses_a_signal():
+    model = make_model_instance(DTWMotifModel)
+    model.data_loader.get_sample.side_effect = [
+        make_mv_data(["dalpha"], n=500),
+        make_mv_data(["Ip"], n=500),
+    ]
+    ann = make_annotation(2.0, 3.0)
+    params = DTWMotifTrainParams(signal_names=["Ip"], window_size=50)
+    score = model.train([make_sample(), make_sample()], [[ann], [ann]], params)
+    assert isinstance(score, float)
+
+
+def test_train_raises_when_no_sample_holds_the_signals():
+    model = make_model_instance(DTWMotifModel)
+    model.data_loader.get_sample.return_value = make_mv_data(["dalpha"], n=500)
+    ann = make_annotation(2.0, 3.0)
+    params = DTWMotifTrainParams(signal_names=["Ip"], window_size=50)
+    with pytest.raises(ValueError, match="No annotated sample holds usable data"):
+        model.train([make_sample()], [[ann]], params)
+
+
+def test_predict_raises_when_a_signal_is_missing():
+    model = _make_trained_dtw_motif(["Ip"])
+    model.data_loader.get_sample.return_value = make_mv_data(["dalpha"], n=500)
+    with pytest.raises(MissingSignalError, match="Ip"):
+        model.predict([make_sample()], DTWMotifPredictParams())
+
+
+def test_predict_raises_when_signals_have_no_common_time_range():
+    model = _make_trained_dtw_motif(["Ip", "dalpha"])
+    model.data_loader.get_sample.return_value = make_ranged_data(
+        {"Ip": (0.0, 4.0, 200), "dalpha": (6.0, 10.0, 200)}
+    )
+    with pytest.raises(SignalAlignmentError, match="no common time range"):
+        model.predict([make_sample()], DTWMotifPredictParams())
+
+
+def test_multivariate_predictions_stay_inside_the_shared_time_range():
+    model = make_model_instance(DTWMotifModel)
+    data = make_ranged_data({"Ip": (0.0, 10.0, 1000), "dalpha": (2.0, 8.0, 600)})
+    model.data_loader.get_sample.return_value = data
+    sample = make_sample()
+    ann = make_annotation(3.0, 4.0)
+    params = DTWMotifTrainParams(
+        signal_names=["Ip", "dalpha"], threshold=1e9, window_size=50
+    )
+    model.train([sample], [[ann]], params)
+    model._trained = True
+
+    detections = model.predict([sample], DTWMotifPredictParams(step_size=10))[0]
+    assert detections
+    assert all(2.0 <= d.time_min and d.time_max <= 8.0 for d in detections)

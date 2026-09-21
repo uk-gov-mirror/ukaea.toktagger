@@ -9,6 +9,7 @@ from toktagger.api.schemas.models import (
     Model,
     ModelIn,
     ModelUpdate,
+    PredictionBatch,
     LocalLoadParams,
     GitlabLoadParams,
     HuggingfaceLoadParams,
@@ -199,6 +200,14 @@ async def delete_models(
 
     # Delete from DB
     for model in models_to_delete:
+        # Validated annotations are human-owned now, so they outlive their model.
+        await utils.delete_annotations(
+            db_client,
+            project_id=project_id,
+            model_id=model.id,
+            validated=False,
+        )
+
         await utils.delete_model(
             db_client=db_client, project_id=project_id, model_id=model.id
         )
@@ -714,14 +723,16 @@ async def delete_predictions(
             detail=f"This model type is not valid for your current project! Valid types are: {project.model_types}",
         )
 
-    # Annotations record the model name, so collect the names of every model of
-    # this type before deleting.
     models = await utils.get_models(db_client, project_id, model_type=model_type)
-    names = list({model.annotator_name for model in models})
+    model_ids = [model.id for model in models]
 
     result = await request.app.state.db_client.delete_filtered_documents(
         collection="annotations",
-        filters={"project_id": ObjectId(project.id), "created_by": {"$in": names}},
+        filters={
+            "project_id": ObjectId(project.id),
+            "model_id": {"$in": model_ids},
+            "validated": False,
+        },
     )
 
     if result.deleted_count == 0:
@@ -729,6 +740,35 @@ async def delete_predictions(
             status_code=404,
             detail=f"No annotations produced by {model_type} could be found for this Project.",
         )
+
+
+@router.put("/models/{model_id}/predictions")
+async def replace_model_predictions(
+    request: Request,
+    predictions: PredictionBatch,
+    project_id: str = Path(
+        description="The ID of the project these predictions belong to."
+    ),
+    model_id: str = Path(
+        description="The ID of the model which produced these predictions."
+    ),
+) -> None:
+    """
+    Store a completed prediction run, replacing this model's previous predictions.
+    ------------------------------------------------------------------------------
+    Predictions a human has already validated are kept, and the samples which were
+    predicted on only lose their old predictions as the new ones are written.
+    """
+    db_client = request.app.state.db_client
+    await utils.get_project(db_client, project_id)
+
+    await utils.replace_predictions(
+        db_client,
+        project_id=project_id,
+        model_id=model_id,
+        sample_ids=predictions.sample_ids,
+        annotations=predictions.annotations,
+    )
 
 
 @router.post("/samples/{sample_id}/models/{model_type}/predict")
@@ -785,16 +825,6 @@ async def create_sample_predictions(
     params_validated = validate_model_params(model_type, "prediction", params)
 
     sample = await utils.get_sample(db_client, project_id, sample_id)
-
-    # Remove any unvalidated predictions from a previous run of this model so
-    # that stale annotations don't accumulate in the DB across prediction runs.
-    await utils.delete_annotations(
-        db_client,
-        project_id=project_id,
-        sample_id=sample_id,
-        created_by=model.annotator_name,
-        validated=False,
-    )
 
     task_registry.update_actors(model.id, use_gpu)
 
@@ -871,7 +901,7 @@ async def get_sample_predictions(
                 detail="Model used for this task does not match!", status_code=422
             )
 
-        prediction_annotations = result.get("annotations_batch")
+        prediction_annotations = result["predictions_batch"].annotations
 
         # Check that annotations contain results for this sample ID
         if prediction_annotations and not all(

@@ -3,11 +3,20 @@ import pytest
 from unittest.mock import MagicMock
 
 from toktagger.api.models.event_detection_utils import (
+    MissingSignalError,
+    SignalAlignmentError,
     compute_window_size,
     extract_segment,
+    load_aligned_signals,
+    load_sample_signals,
     merge_detections,
     select_training_label,
     zscore,
+)
+from toktagger.api.schemas.data import (
+    ImageData,
+    MultiVariateTimeSeriesData,
+    TimeSeriesData,
 )
 
 
@@ -148,3 +157,153 @@ def test_merge_detections_overlapping_windows_merge():
     positions = [0, 10, 20, 30]
     results = merge_detections(positions, 100, t, "event", "dtw_motif")
     assert len(results) == 1
+
+
+def _pair(start, stop, n, slope=1.0):
+    t = np.linspace(start, stop, n)
+    return t, slope * t
+
+
+def test_load_aligned_signals_single_channel_returns_1d():
+    time_array, values = load_aligned_signals({"Ip": _pair(0.0, 10.0, 100)})
+    assert values.ndim == 1
+    assert len(time_array) == 100
+
+
+def test_load_aligned_signals_uses_densest_grid():
+    time_array, values = load_aligned_signals(
+        {"Ip": _pair(0.0, 10.0, 100), "dalpha": _pair(0.0, 10.0, 1000)}
+    )
+    assert values.shape == (2, 1000)
+    assert np.allclose(time_array, np.linspace(0.0, 10.0, 1000))
+
+
+def test_load_aligned_signals_keeps_channel_order():
+    _, values = load_aligned_signals(
+        {
+            "Ip": _pair(0.0, 10.0, 100, slope=1.0),
+            "dalpha": _pair(0.0, 10.0, 100, slope=-1.0),
+        }
+    )
+    assert values[0][-1] > 0
+    assert values[1][-1] < 0
+
+
+def test_load_aligned_signals_crops_to_shared_range():
+    time_array, values = load_aligned_signals(
+        {"Ip": _pair(0.0, 10.0, 1000), "dalpha": _pair(2.0, 8.0, 100)}
+    )
+    assert time_array[0] >= 2.0
+    assert time_array[-1] <= 8.0
+    assert values.shape[1] == len(time_array)
+
+
+def test_load_aligned_signals_does_not_extrapolate_edges():
+    """A shorter channel must never be padded with its repeated end values."""
+    time_array, values = load_aligned_signals(
+        {"Ip": _pair(0.0, 10.0, 1000), "dalpha": _pair(2.0, 8.0, 100, slope=2.0)}
+    )
+    assert np.allclose(values[1], 2.0 * time_array, atol=1e-6)
+    assert values[1].min() >= 4.0 - 1e-6
+    assert values[1].max() <= 16.0 + 1e-6
+
+
+def test_load_aligned_signals_identical_grids_keep_exact_values():
+    t = np.linspace(0.0, 1.0, 50)
+    v = np.sin(t)
+    _, values = load_aligned_signals({"Ip": (t, v), "dalpha": (t, v)})
+    assert np.array_equal(values[0], v)
+    assert np.array_equal(values[1], v)
+
+
+def test_load_aligned_signals_no_overlap_raises():
+    with pytest.raises(SignalAlignmentError, match="no common time range"):
+        load_aligned_signals(
+            {"Ip": _pair(0.0, 5.0, 100), "dalpha": _pair(6.0, 10.0, 100)}
+        )
+
+
+def test_load_aligned_signals_touching_ranges_raise():
+    with pytest.raises(SignalAlignmentError, match="no common time range"):
+        load_aligned_signals(
+            {"Ip": _pair(0.0, 5.0, 100), "dalpha": _pair(5.0, 10.0, 100)}
+        )
+
+
+def test_load_aligned_signals_too_few_shared_samples_raises():
+    with pytest.raises(SignalAlignmentError, match="overlap only between"):
+        load_aligned_signals(
+            {
+                "Ip": (np.array([0.0, 1.0, 2.0]), np.array([1.0, 2.0, 3.0])),
+                "dalpha": (np.array([1.5, 3.0]), np.array([1.0, 2.0])),
+            }
+        )
+
+
+def test_load_aligned_signals_mismatched_lengths_raise():
+    with pytest.raises(SignalAlignmentError, match="time points but"):
+        load_aligned_signals({"Ip": (np.arange(10.0), np.arange(9.0))})
+
+
+def test_load_aligned_signals_single_sample_raises():
+    with pytest.raises(SignalAlignmentError, match="at least 2"):
+        load_aligned_signals({"Ip": (np.array([0.0]), np.array([1.0]))})
+
+
+def test_load_aligned_signals_non_finite_time_raises():
+    time_array = np.array([0.0, 1.0, np.nan, 3.0])
+    with pytest.raises(SignalAlignmentError, match="not finite"):
+        load_aligned_signals({"Ip": (time_array, np.arange(4.0))})
+
+
+def test_load_aligned_signals_unsorted_time_raises():
+    time_array = np.array([0.0, 2.0, 1.0, 3.0])
+    with pytest.raises(SignalAlignmentError, match="do not increase"):
+        load_aligned_signals({"Ip": (time_array, np.arange(4.0))})
+
+
+def test_load_aligned_signals_duplicate_time_points_raise():
+    time_array = np.array([0.0, 1.0, 1.0, 2.0])
+    with pytest.raises(SignalAlignmentError, match="do not increase"):
+        load_aligned_signals({"Ip": (time_array, np.arange(4.0))})
+
+
+def test_load_aligned_signals_no_signals_raises():
+    with pytest.raises(MissingSignalError, match="No signals"):
+        load_aligned_signals({})
+
+
+def _mv_data(**signals):
+    return MultiVariateTimeSeriesData(
+        values={
+            name: None
+            if pair is None
+            else TimeSeriesData(time=list(pair[0]), values=list(pair[1]))
+            for name, pair in signals.items()
+        }
+    )
+
+
+def test_load_sample_signals_returns_aligned_channels():
+    data = _mv_data(Ip=_pair(0.0, 10.0, 200), dalpha=_pair(0.0, 10.0, 100))
+    time_array, values = load_sample_signals(data, ["Ip", "dalpha"], "sample_1")
+    assert values.shape == (2, 200)
+    assert len(time_array) == 200
+
+
+def test_load_sample_signals_missing_signal_raises():
+    data = _mv_data(Ip=_pair(0.0, 10.0, 200), dalpha=None)
+    with pytest.raises(MissingSignalError, match="sample_1"):
+        load_sample_signals(data, ["Ip", "dalpha"], "sample_1")
+
+
+def test_load_sample_signals_unknown_signal_raises():
+    data = _mv_data(Ip=_pair(0.0, 10.0, 200))
+    with pytest.raises(MissingSignalError, match=r"\['dalpha'\]"):
+        load_sample_signals(data, ["Ip", "dalpha"], "sample_1")
+
+
+def test_load_sample_signals_wrong_data_type_raises():
+    data = ImageData(frame=0, values="")
+    with pytest.raises(MissingSignalError, match="ImageData"):
+        load_sample_signals(data, ["Ip"], "sample_1")

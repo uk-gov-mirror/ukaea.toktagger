@@ -1,7 +1,21 @@
+from collections.abc import Sequence
+
 import numpy as np
 from scipy.interpolate import interp1d
 
 from toktagger.api.schemas.annotations import TimeRegion
+from toktagger.api.schemas.data import DataResponseType, MultiVariateTimeSeriesData
+
+
+SignalArray = Sequence[float] | np.ndarray
+
+
+class MissingSignalError(ValueError):
+    """A sample does not hold a signal which the model needs."""
+
+
+class SignalAlignmentError(ValueError):
+    """The signals of a sample cannot go onto one common time grid."""
 
 
 def compute_window_size(ann_time_pairs: list[tuple]) -> int:
@@ -59,39 +73,147 @@ def zscore(arr: np.ndarray) -> np.ndarray:
     return (arr - np.mean(arr)) / (std + 1e-8)
 
 
+def _validate_signal(
+    name: str, time: SignalArray, values: SignalArray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a signal as float arrays, or raise if its data is unusable."""
+    time_array = np.asarray(time, dtype=float)
+    value_array = np.asarray(values, dtype=float)
+
+    if time_array.ndim != 1 or value_array.ndim != 1:
+        raise SignalAlignmentError(
+            f"Signal '{name}' must be one dimensional, but its time array has "
+            f"shape {time_array.shape} and its value array has shape "
+            f"{value_array.shape}."
+        )
+    if time_array.size != value_array.size:
+        raise SignalAlignmentError(
+            f"Signal '{name}' has {time_array.size} time points but "
+            f"{value_array.size} values."
+        )
+    if time_array.size < 2:
+        raise SignalAlignmentError(
+            f"Signal '{name}' has {time_array.size} sample(s), but at least 2 "
+            "are necessary."
+        )
+    if not np.all(np.isfinite(time_array)):
+        raise SignalAlignmentError(
+            f"Signal '{name}' has time points which are not finite."
+        )
+    if np.any(np.diff(time_array) <= 0):
+        raise SignalAlignmentError(
+            f"Signal '{name}' has time points which do not increase."
+        )
+    return time_array, value_array
+
+
 def load_aligned_signals(
-    signal_data: list[tuple[np.ndarray, np.ndarray]],
+    signals: dict[str, tuple[SignalArray, SignalArray]],
 ) -> tuple[np.ndarray, np.ndarray]:
     """Align one or more signals onto a common time grid.
 
     Parameters
     ----------
-    signal_data : list of (time_array, values) pairs, one per channel.
+    signals : dict of signal name to a (time_array, values) pair, one entry per
+        channel. The channels keep the order of the dictionary.
 
     Returns
     -------
     (time_array, values) where values is 1D if a single channel was given,
-    otherwise a 2D array of shape (n_channels, n_samples). When multiple
-    channels are given, every channel is linearly resampled onto the time
-    grid of the densest (most-sampled) input signal, so channels recorded
-    at different sampling rates can still be combined.
-    """
-    if len(signal_data) == 1:
-        ta, va = signal_data[0]
-        return np.asarray(ta, dtype=float), np.asarray(va, dtype=float)
+    otherwise a 2D array of shape (n_channels, n_samples). Multiple channels
+    are cropped to the time range which all of them cover, then linearly
+    resampled onto the grid of the densest channel in that range. Thus
+    channels recorded at different sampling rates can be combined, and no
+    channel is extrapolated past the range it actually records.
 
-    ref_idx = max(range(len(signal_data)), key=lambda i: len(signal_data[i][0]))
-    ref_time = np.asarray(signal_data[ref_idx][0], dtype=float)
+    Raises
+    ------
+    MissingSignalError
+        If no signals were given.
+    SignalAlignmentError
+        If the data of a signal is unusable, or if the signals have no common
+        time range.
+    """
+    if not signals:
+        raise MissingSignalError("No signals were given to align.")
+
+    validated = {
+        name: _validate_signal(name, time, values)
+        for name, (time, values) in signals.items()
+    }
+
+    if len(validated) == 1:
+        return next(iter(validated.values()))
+
+    time_min = max(time_array[0] for time_array, _ in validated.values())
+    time_max = min(time_array[-1] for time_array, _ in validated.values())
+    if time_max <= time_min:
+        ranges = ", ".join(
+            f"'{name}' [{time_array[0]:g}, {time_array[-1]:g}]"
+            for name, (time_array, _) in validated.items()
+        )
+        raise SignalAlignmentError(
+            f"Signals have no common time range: {ranges}. Select signals which "
+            "overlap in time."
+        )
+
+    masks = {
+        name: (time_array >= time_min) & (time_array <= time_max)
+        for name, (time_array, _) in validated.items()
+    }
+    reference = max(masks, key=lambda name: int(masks[name].sum()))
+    reference_time = validated[reference][0][masks[reference]]
+    if reference_time.size < 2:
+        raise SignalAlignmentError(
+            f"Signals overlap only between {time_min:g} and {time_max:g}, which "
+            "holds fewer than 2 samples of each signal."
+        )
 
     aligned = []
-    for ta, va in signal_data:
-        ta = np.asarray(ta, dtype=float)
-        va = np.asarray(va, dtype=float)
-        if ta.shape == ref_time.shape and np.array_equal(ta, ref_time):
-            aligned.append(va)
+    for name, (time_array, value_array) in validated.items():
+        if name == reference:
+            aligned.append(value_array[masks[name]])
+        elif np.array_equal(time_array, reference_time):
+            aligned.append(value_array)
         else:
-            aligned.append(np.interp(ref_time, ta, va))
-    return ref_time, np.array(aligned)
+            aligned.append(np.interp(reference_time, time_array, value_array))
+    return reference_time, np.array(aligned)
+
+
+def load_sample_signals(
+    data: DataResponseType,
+    signal_names: list[str],
+    sample_id: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load the named signals of one sample onto a common time grid.
+
+    Raises
+    ------
+    MissingSignalError
+        If the sample does not hold one of the named signals.
+    SignalAlignmentError
+        If the signals of the sample cannot be aligned.
+    """
+    if not isinstance(data, MultiVariateTimeSeriesData):
+        raise MissingSignalError(
+            f"Sample {sample_id} holds {type(data).__name__}, which has no "
+            f"time series signals {signal_names}."
+        )
+
+    signals: dict[str, tuple[SignalArray, SignalArray]] = {}
+    missing: list[str] = []
+    for name in signal_names:
+        signal = data.values.get(name)
+        if signal is None:
+            missing.append(name)
+        else:
+            signals[name] = (signal.time, signal.values)
+
+    if missing:
+        raise MissingSignalError(
+            f"Sample {sample_id} does not hold the necessary signal(s) {missing}."
+        )
+    return load_aligned_signals(signals)
 
 
 def select_training_label(

@@ -13,13 +13,14 @@ from pydantic import ValidationError
 from toktagger.api.schemas.models import (
     Model,
     ModelUpdate,
+    PredictionBatch,
     LocalLoadParams,
     GitlabLoadParams,
     HuggingfaceLoadParams,
 )
 from toktagger.api.core.sender import (
     send_batch_samples,
-    send_batch_annotations,
+    send_batch_predictions,
     send_model_updates,
 )
 import logging
@@ -203,21 +204,29 @@ def get_predictions(
             annotation["project_id"] = project.id
             annotation["shot_id"] = sample.shot_id
             annotation["created_by"] = model.annotator_name
+            annotation["model_id"] = model.id
             try:
                 annotation = AnnotationBatchTypeAdapter.validate_python(annotation)
             except ValidationError as e:
                 logger.error(f"Failed to validate annotation: {e}")
             annotations_batch.append(annotation)
 
+    predictions_batch = PredictionBatch(
+        sample_ids=[sample.id for sample in samples], annotations=annotations_batch
+    )
+
     # Return predictions over rest API to server
     send_batch_samples(project.id, samples_batch)
-    send_batch_annotations(project.id, annotations_batch)
+    send_batch_predictions(
+        project_id=project.id, model_id=model.id, predictions=predictions_batch
+    )
 
     logger.info(f"Predictions for project {project.id} complete!")
 
     return {
         "project_id": project.id,
+        "model_id": model.id,
         "model_type": model.type,
         "samples_batch": samples_batch,
-        "annotations_batch": annotations_batch,
+        "predictions_batch": predictions_batch,
     }

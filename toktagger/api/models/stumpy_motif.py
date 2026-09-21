@@ -7,9 +7,11 @@ import pydantic
 
 from toktagger.api.models.base import Model, ModelRegistry
 from toktagger.api.models.event_detection_utils import (
+    MissingSignalError,
+    SignalAlignmentError,
     compute_window_size,
     extract_segment,
-    load_aligned_signals,
+    load_sample_signals,
     merge_detections,
     non_max_suppression,
 )
@@ -88,17 +90,11 @@ class StumpyMotifModel(Model):
 
         for sample, anns in paired:
             data = self.data_loader.get_sample(sample, DataParams())
-            missing = [n for n in params.signal_names if data.values.get(n) is None]
-            if missing:
-                logger.warning(f"Signals {missing} not found in sample {sample.id}.")
+            try:
+                ta, va = load_sample_signals(data, params.signal_names, str(sample.id))
+            except (MissingSignalError, SignalAlignmentError) as error:
+                logger.warning(f"Skipping sample {sample.id}: {error}")
                 continue
-
-            ta, va = load_aligned_signals(
-                [
-                    (data.values[n].time, data.values[n].values)
-                    for n in params.signal_names
-                ]
-            )
 
             for ann in anns:
                 ann_time_pairs.append((ann, ta))
@@ -106,7 +102,9 @@ class StumpyMotifModel(Model):
 
         if not ann_time_pairs:
             raise ValueError(
-                f"Signals {params.signal_names} not found in any annotated sample."
+                "No annotated sample holds usable data for signals "
+                f"{params.signal_names}. See the training log for the reason "
+                "each sample was skipped."
             )
 
         window_size = compute_window_size(ann_time_pairs)
@@ -166,14 +164,8 @@ class StumpyMotifModel(Model):
 
         for sample in samples:
             data = self.data_loader.get_sample(sample, data_params or DataParams())
-            missing = [n for n in signal_names if data.values.get(n) is None]
-            if missing:
-                logger.warning(f"Signals {missing} not found in sample {sample.id}.")
-                results.append([])
-                continue
-
-            time_array, signal_vals = load_aligned_signals(
-                [(data.values[n].time, data.values[n].values) for n in signal_names]
+            time_array, signal_vals = load_sample_signals(
+                data, signal_names, str(sample.id)
             )
 
             detections = non_max_suppression(

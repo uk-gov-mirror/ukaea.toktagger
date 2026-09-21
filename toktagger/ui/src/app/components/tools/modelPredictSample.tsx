@@ -46,11 +46,6 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
   const selectedModel =
     models.find((model) => model._id === selectedModelId) ?? null;
   const selectedModelType = selectedModel?.type ?? null;
-  // Predictions are recorded against the model name, so match annotations on the
-  // same value the backend stamps them with.
-  const annotatorName = selectedModel
-    ? (selectedModel.name ?? selectedModel.type)
-    : null;
 
   // Refetch when the tool is switched on, so a model trained from this page
   // without a reload still shows up in the list.
@@ -81,8 +76,13 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
     if (didAutoEnable.current || models.length === 0) {
       return;
     }
-    const names = new Set(models.map((model) => model.name ?? model.type));
-    if (annotations.some((annotation) => names.has(annotation.created_by))) {
+    const modelIds = new Set(models.map((model) => model._id));
+    if (
+      annotations.some(
+        (annotation) =>
+          annotation.model_id !== null && modelIds.has(annotation.model_id),
+      )
+    ) {
       didAutoEnable.current = true;
       setIsEnabled(true);
     }
@@ -104,12 +104,12 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
   const onEnable = (newIsEnabled: boolean) => {
     didAutoEnable.current = true;
     setIsEnabled(newIsEnabled);
-    if (!newIsEnabled) {
+    if (!newIsEnabled && selectedModelId) {
       // Remove previous annotations from this model
       setAnnotations((previousAnnotations: Annotations) => {
         const otherAnnotations = previousAnnotations.filter(
           (annotation: Annotation) =>
-            annotation.created_by !== annotatorName || annotation.validated,
+            annotation.model_id !== selectedModelId || annotation.validated,
         );
         return otherAnnotations;
       });
@@ -179,7 +179,7 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
           // results rather than appending, so repeated runs don't stack up.
           const withoutStale = previousAnnotations.filter(
             (ann: Annotation) =>
-              ann.created_by !== annotatorName || ann.validated,
+              ann.model_id !== selectedModelId || ann.validated,
           );
           return [...withoutStale, ...payload];
         });
@@ -197,7 +197,7 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
     project_id,
     sample_id,
     selectedModelType,
-    annotatorName,
+    selectedModelId,
     taskId,
     setAnnotations,
     isEnabled,

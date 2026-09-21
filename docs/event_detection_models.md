@@ -19,6 +19,8 @@ All four models:
 
 - Support single-channel or multi-channel (multivariate) signals — pass one or more entries in `signal_names`.
   The training form shows a dropdown of the signals in the project's samples, so you select the channels instead of typing them.
+- Put multi-channel signals onto one common time grid. The models crop the channels to the time range that all of the channels cover, then resample each channel onto the time points of the channel that has the most samples in that range. Thus channels recorded at different sampling rates can be combined, and no channel receives values outside the range that it records.
+- Reject data that they cannot use. If a sample does not contain a signal in `signal_names`, or if the selected signals have no common time range, prediction stops with an error. Training writes a warning to the log and skips that sample, and stops with an error only if no annotated sample remains.
 - z-normalise signal windows before comparison, so detection is based on shape rather than absolute amplitude.
 - Merge adjacent positive detections into a single `TimeRegion`, then run greedy non-maximum suppression (NMS) to remove heavily overlapping regions of the same label.
 - Only train on `TimeRegion` (start/end time) annotations — point annotations are ignored.
