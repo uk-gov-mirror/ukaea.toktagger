@@ -107,7 +107,7 @@ class StumpyMotifModel(Model):
                 "each sample was skipped."
             )
 
-        window_size = compute_window_size(ann_time_pairs)
+        window_size = compute_window_size(ann_time_pairs, params.class_label)
         logger.info(f"StumpyMotif: inferred window_size={window_size}")
 
         multivariate = len(params.signal_names) > 1

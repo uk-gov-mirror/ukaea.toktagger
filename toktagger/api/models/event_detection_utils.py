@@ -18,17 +18,23 @@ class SignalAlignmentError(ValueError):
     """The signals of a sample cannot go onto one common time grid."""
 
 
-def compute_window_size(ann_time_pairs: list[tuple]) -> int:
+def compute_window_size(ann_time_pairs: list[tuple], class_label: str = "") -> int:
     """Return median annotation duration converted to sample count.
 
     Parameters
     ----------
     ann_time_pairs : list of (Annotation, np.ndarray) pairs
         Each pair is an annotation and the time array of its parent signal.
+    class_label : str
+        Use only the annotations which carry this label. Leave blank to use
+        every label present, which is correct only when the model also builds
+        its templates from every label.
     """
     durations = []
     for ann, time_array in ann_time_pairs:
         if not (hasattr(ann, "time_min") and hasattr(ann, "time_max")):
+            continue
+        if class_label and ann.label != class_label:
             continue
         if len(time_array) < 2:
             continue
@@ -40,6 +46,12 @@ def compute_window_size(ann_time_pairs: list[tuple]) -> int:
             durations.append(n_samples)
 
     if not durations:
+        if class_label:
+            raise ValueError(
+                f"No valid TimeRegion annotations with label '{class_label}' "
+                "found to infer window size. Ensure the project has TimeRegion "
+                "annotations with that label before training."
+            )
         raise ValueError(
             "No valid TimeRegion annotations found to infer window size. "
             "Ensure the project has TimeRegion annotations before training."

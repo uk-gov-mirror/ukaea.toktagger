@@ -25,6 +25,10 @@ from toktagger.api.schemas.samples import Sample
 
 logger = logging.getLogger("ray")
 
+# sktime's MiniRocket transform requires at least this many samples per
+# series to generate its fixed set of dilations.
+MINIROCKET_MIN_WINDOW = 9
+
 
 class MiniRocketTrainParams(pydantic.BaseModel):
     class_label: str = pydantic.Field(
@@ -89,9 +93,13 @@ class MiniRocketModel(Model):
 
         self.log_progress(status="training", progress=0)
 
-        paired = [(s, a) for s, a in zip(samples, annotations) if a]
+        # A sample with no annotations has already been validated as pure
+        # background (see routers/models.py, which only trains on validated
+        # samples) rather than being unreviewed, so it stays in as a source
+        # of negative windows instead of being dropped here.
+        paired = list(zip(samples, annotations))
         if not paired:
-            raise ValueError("No annotated samples found for training.")
+            raise ValueError("No samples provided for training.")
 
         ann_time_pairs: list[tuple] = []
         sample_data: list[tuple] = []
@@ -116,6 +124,13 @@ class MiniRocketModel(Model):
             )
 
         window_size = compute_window_size(ann_time_pairs)
+        if window_size < MINIROCKET_MIN_WINDOW:
+            logger.info(
+                f"MiniRocket: inferred window_size={window_size} is below "
+                f"MiniRocket's minimum of {MINIROCKET_MIN_WINDOW}; padding "
+                f"windows to {MINIROCKET_MIN_WINDOW} samples."
+            )
+            window_size = MINIROCKET_MIN_WINDOW
         logger.info(f"MiniRocket: inferred window_size={window_size}")
 
         multivariate = len(params.signal_names) > 1
@@ -177,8 +192,15 @@ class MiniRocketModel(Model):
                     labels.append(0)
                     neg_added += 1
 
-        if not windows:
-            raise ValueError("Could not extract training windows.")
+        n_pos = int(np.sum(labels))
+        n_neg = len(labels) - n_pos
+        if n_pos == 0 or n_neg == 0:
+            raise ValueError(
+                "Training requires both event and background windows, got "
+                f"{n_pos} positive and {n_neg} negative. Ensure some samples "
+                f"carry a '{params.class_label}' annotation and others provide "
+                "background."
+            )
 
         if multivariate:
             X = np.array(

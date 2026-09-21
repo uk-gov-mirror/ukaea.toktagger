@@ -32,7 +32,8 @@ import {
 import WorkflowAdd from "@spectrum-icons/workflow/WorkflowAdd";
 import CheckmarkCircle from "@spectrum-icons/workflow/CheckmarkCircle";
 import Alert from "@spectrum-icons/workflow/Alert";
-import { Project, Model } from "@/types";
+import { z } from "zod/v4";
+import { Project, Model, ModelSchema } from "@/types";
 import {
   startTraining,
   getModelTypes,
@@ -114,14 +115,20 @@ export function ModelTrainModal({
 
     (async () => {
       const response = await getModelTypes(project.task);
-      if (response.ok) {
-        const data = await response.json();
-        setModelNames(data as string[]);
-      } else {
+      if (!response.ok) {
         const errorMessage = await response.json();
         setMessage(errorMessage.detail);
         setMessageIcon(<Alert aria-label="Failed" color="negative" size="S" />);
+        return;
       }
+
+      const result = z.array(z.string()).safeParse(await response.json());
+      if (!result.success) {
+        setMessage("Could not read the available model types!");
+        setMessageIcon(<Alert aria-label="Failed" color="negative" size="S" />);
+        return;
+      }
+      setModelNames(result.data);
     })();
   }, [modalOpen, project.task]);
 
@@ -164,7 +171,13 @@ export function ModelTrainModal({
         setMessageIcon(<Alert aria-label="Failed" color="negative" size="S" />);
         return;
       }
-      const data = (await response.json()) as Model[];
+      const result = z.array(ModelSchema).safeParse(await response.json());
+      if (!result.success) {
+        setMessage("Could not read the models for this project!");
+        setMessageIcon(<Alert aria-label="Failed" color="negative" size="S" />);
+        return;
+      }
+      const data = result.data;
       setModels(data);
 
       if (trainingModelId) {

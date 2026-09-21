@@ -58,7 +58,7 @@ Registered as **`stumpy_motif`**.
 
 Template-matching event detector using [STUMPY](https://stumpy.readthedocs.io/)'s FFT-based MASS (Mueen's Algorithm for Similarity Search) distance profile. This computes the same z-normalised Euclidean distance as a brute-force sliding comparison, but does so for every window position in a signal at once using an FFT, making it much faster than DTW Motif for long signals.
 
-**How it works:** training extracts and z-normalises a fixed-length segment around every matching annotation to form templates, with `window_size` inferred automatically as the median annotation duration (in samples) across the training set. During prediction, `stumpy.mass` computes a full distance profile between each template and each sample signal (averaged across channels for multivariate signals); window positions whose distance falls below `threshold` are flagged and assigned the label of their closest template.
+**How it works:** training extracts and z-normalises a fixed-length segment around every matching annotation to form templates, with `window_size` inferred automatically as the median annotation duration (in samples) across the training set. If you set `class_label`, only annotations with that label count towards the median, so events of other labels cannot change the window size. During prediction, `stumpy.mass` computes a full distance profile between each template and each sample signal (averaged across channels for multivariate signals); window positions whose distance falls below `threshold` are flagged and assigned the label of their closest template.
 
 ### Training Parameters
 
@@ -83,7 +83,7 @@ Registered as **`minirocket`**.
 
 Sliding-window binary event classifier using [MiniRocket](https://github.com/angus924/minirocket) convolutional features and a Ridge classifier. MiniRocket applies a large, fixed set of random convolutional kernels to each window and pools the results into a feature vector, which a `RidgeClassifierCV` then classifies as event or background. It is fast to train and typically strong on shape-based classification tasks.
 
-**How it works:** `window_size` is inferred as the median annotation duration (in samples). For each training sample, positive windows are extracted centered on annotations matching `class_label`, and negative ("background") windows are randomly sampled from the remainder of the signal, avoiding overlap with any annotation. A `MiniRocket` (or `MiniRocketMultivariate` for multi-channel signals) transformer is fit on these windows and used to generate features, which train a `RidgeClassifierCV`. During prediction, a sliding window scans each new sample, and every window is transformed and classified; positive windows are merged into detections.
+**How it works:** `window_size` is inferred as the median annotation duration (in samples), padded up to 9 samples if the median duration is shorter, since sktime's MiniRocket transform requires at least 9 samples per window. For each training sample, positive windows are extracted centered on annotations matching `class_label`, and negative ("background") windows are randomly sampled from the remainder of the signal, avoiding overlap with any annotation. A `MiniRocket` (or `MiniRocketMultivariate` for multi-channel signals) transformer is fit on these windows and used to generate features, which train a `RidgeClassifierCV`. During prediction, a sliding window scans each new sample, and every window is transformed and classified; positive windows are merged into detections.
 
 ### Training Parameters
 

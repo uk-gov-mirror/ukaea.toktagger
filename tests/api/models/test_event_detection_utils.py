@@ -76,6 +76,24 @@ def test_compute_window_size_no_valid_annotations_raises():
         compute_window_size([(non_region, t)])
 
 
+def test_compute_window_size_ignores_other_labels():
+    t = np.arange(100, dtype=float)
+    pairs = [
+        (_make_ann(0.0, 10.0, label="elm"), t),
+        (_make_ann(0.0, 14.0, label="elm"), t),
+        (_make_ann(0.0, 80.0, label="h_mode"), t),
+    ]
+    assert compute_window_size(pairs, "elm") == 12
+    assert compute_window_size(pairs) == 14
+
+
+def test_compute_window_size_unmatched_label_raises():
+    t = np.arange(100, dtype=float)
+    pairs = [(_make_ann(0.0, 10.0, label="h_mode"), t)]
+    with pytest.raises(ValueError, match="label 'elm'"):
+        compute_window_size(pairs, "elm")
+
+
 def test_extract_segment_returns_correct_length():
     t = np.arange(100, dtype=float)
     v = np.sin(t / 10)

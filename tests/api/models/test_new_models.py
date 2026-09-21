@@ -23,7 +23,11 @@ from toktagger.api.models.event_detection_utils import (
     SignalAlignmentError,
     zscore,
 )
-from toktagger.api.models.minirocket import MiniRocketModel, MiniRocketTrainParams
+from toktagger.api.models.minirocket import (
+    MINIROCKET_MIN_WINDOW,
+    MiniRocketModel,
+    MiniRocketTrainParams,
+)
 from toktagger.api.models.stumpy_motif import (
     StumpyMotifModel,
     StumpyMotifPredictParams,
@@ -414,6 +418,62 @@ def test_minirocket_multivariate_train_predict():
     result = model.predict([sample])
     assert len(result) == 1
     assert isinstance(result[0], list)
+
+
+def test_minirocket_train_uses_background_only_sample_as_negatives():
+    model = make_model_instance(MiniRocketModel)
+    data = make_mv_data(["Ip"], n=500)
+    model.data_loader.get_sample.return_value = data
+    event_sample = make_sample()
+    background_sample = make_sample()
+    ann = make_annotation(2.0, 3.0)
+    params = MiniRocketTrainParams(
+        signal_names=["Ip"],
+        n_background_per_shot=5,
+        num_kernels=100,
+        class_label="Event",
+    )
+    # background_sample has no annotations, i.e. it was reviewed and confirmed
+    # to hold no events, so it should still contribute negative windows.
+    score = model.train([event_sample, background_sample], [[ann], []], params)
+    assert isinstance(score, float)
+
+
+def test_minirocket_train_raises_without_negative_windows():
+    model = make_model_instance(MiniRocketModel)
+    # Annotation spans almost the entire signal, so no window-sized gap is
+    # left to sample a background window from.
+    data = make_mv_data(["Ip"], n=60)
+    model.data_loader.get_sample.return_value = data
+    sample = make_sample()
+    ann = make_annotation(0.0, 10.0)
+    params = MiniRocketTrainParams(
+        signal_names=["Ip"],
+        n_background_per_shot=3,
+        num_kernels=100,
+        class_label="Event",
+    )
+    with pytest.raises(ValueError, match="requires both event and background"):
+        model.train([sample], [[ann]], params)
+
+
+def test_minirocket_train_pads_window_size_below_minirocket_minimum():
+    model = make_model_instance(MiniRocketModel)
+    data = make_mv_data(["Ip"], n=500)
+    model.data_loader.get_sample.return_value = data
+    event_sample = make_sample()
+    background_sample = make_sample()
+    # Very short annotation duration infers a window_size below the 9-sample
+    # minimum sktime's MiniRocket transform requires.
+    ann = make_annotation(2.0, 2.1)
+    params = MiniRocketTrainParams(
+        signal_names=["Ip"],
+        n_background_per_shot=5,
+        num_kernels=100,
+        class_label="Event",
+    )
+    model.train([event_sample, background_sample], [[ann], []], params)
+    assert model.model["window_size"] == MINIROCKET_MIN_WINDOW
 
 
 def test_minirocket_backward_compat_load():
