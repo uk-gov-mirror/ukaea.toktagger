@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from ultralytics.data.augment import LetterBox
 from ultralytics.models.yolo.detect import DetectionTrainer
+from ultralytics.models.rtdetr.train import RTDETRTrainer
 from ultralytics.utils import LOGGER as ULTRALYTICS_LOGGER, RANK
 
 # Callable to pass functions in another function
@@ -50,9 +51,14 @@ YoloP2ModelName = Literal[
     "yolo26x.pt",
 ]
 
+RTDETRModelName = Literal[
+    "rtdetr-l.pt",
+    "rtdetr-x.pt",
+]
 
-class YoloTrainParams(pydantic.BaseModel):
-    """Parameters exposed by the model-training form."""
+
+class UltralyticsTrainParams(pydantic.BaseModel):
+    """Common parameters exposed by Ultralytics training forms."""
 
     learning_rate: float = pydantic.Field(
         default=0,
@@ -64,11 +70,6 @@ class YoloTrainParams(pydantic.BaseModel):
         gt=0,
         description="Number of training epochs.",
     )
-    yolo_size: YoloModelName = pydantic.Field(
-        default="yolo26n.pt",
-        description="Pretrained YOLO checkpoint to fine-tune.",
-    )
-    # Boolean fields render as checkboxes
     enable_debug_logging: bool = pydantic.Field(
         default=False,
         description="Enable detailed Ultralytics logging during training.",
@@ -79,10 +80,24 @@ class YoloTrainParams(pydantic.BaseModel):
     )
 
 
+class YoloTrainParams(UltralyticsTrainParams):
+    yolo_size: YoloModelName = pydantic.Field(
+        default="yolo26n.pt",
+        description="Pretrained YOLO checkpoint to fine-tune.",
+    )
+
+
 class YoloP2TrainParams(YoloTrainParams):
     yolo_size: YoloP2ModelName = pydantic.Field(
         default="yolo26n.pt",
         description="Pretrained checkpoint initializes compatible layers, new P2-specific layers are randomly initialized.",
+    )
+
+
+class RTDETRTrainParams(UltralyticsTrainParams):
+    rtdetr_size: RTDETRModelName = pydantic.Field(
+        default="rtdetr-l.pt",
+        description="Pretrained RT-DETR checkpoint to fine-tune.",
     )
 
 
@@ -385,6 +400,13 @@ class ToktaggerDetectionTrainer(DetectionTrainer):
         return None
 
 
+class ToktaggerRTDETRTrainer(
+    ToktaggerDetectionTrainer,
+    RTDETRTrainer,
+):
+    """RT-DETR trainer using TokTagger's in-memory dataset."""
+
+
 class BaseUltralyticsDetection(Model):
     """Base class for TokTagger models backed by Ultralytics detection."""
 
@@ -395,6 +417,8 @@ class BaseUltralyticsDetection(Model):
     imgsz: int = 640
     batch: int = 5
     workers: int = 0
+
+    trainer_class = ToktaggerDetectionTrainer
 
     @property
     def class_names(self) -> dict[int, str]:
@@ -413,21 +437,21 @@ class BaseUltralyticsDetection(Model):
         self,
         samples: list[Sample],
         annotations: list[list[Annotation]],
-        params: YoloTrainParams,
+        params: UltralyticsTrainParams,
     ) -> list[DetectionRecord]:
         """Build task-specific image records."""
         raise NotImplementedError
 
     def get_training_model(
         self,
-        params: YoloTrainParams,
+        params: UltralyticsTrainParams,
     ) -> str:
         """Resolve the model selected through the training form."""
-        return str(check_pretrained_model_availability(params.yolo_size))
+        raise NotImplementedError
 
     def get_pretrained_weights(
         self,
-        params: YoloTrainParams,
+        params: UltralyticsTrainParams,
     ) -> str | None:
         """Return separate initialisation weights when required.
         Used by Yolo P2 models.
@@ -486,7 +510,7 @@ class BaseUltralyticsDetection(Model):
         self,
         samples: list[Sample],
         annotations: list[list[Annotation]],
-        params: YoloTrainParams,
+        params: UltralyticsTrainParams,
     ) -> float:
         """Train an Ultralytics detector using TokTagger data."""
         self.log_progress(
@@ -540,7 +564,7 @@ class BaseUltralyticsDetection(Model):
             enabled=not params.enable_debug_logging,
         ):
             # trainer dump Ultralytics version banner and configuration
-            trainer = ToktaggerDetectionTrainer(
+            trainer = self.trainer_class(
                 overrides=overrides,
                 train_dataset=train_dataset,
                 val_dataset=validation_dataset,

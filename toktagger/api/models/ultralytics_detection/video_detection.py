@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pydantic
-from ultralytics import YOLO
+from ultralytics import YOLO, RTDETR
 
 from toktagger.api.core.data_loaders import (
     DataLoader as TokTaggerDataLoader,
@@ -17,6 +17,9 @@ from toktagger.api.models.base import ModelRegistry
 from toktagger.api.models.ultralytics_detection.base import (
     BaseUltralyticsDetection,
     DetectionRecord,
+    RTDETRTrainParams,
+    ToktaggerRTDETRTrainer,
+    UltralyticsTrainParams,
     YoloP2TrainParams,
     YoloTrainParams,
 )
@@ -37,20 +40,14 @@ from toktagger.api.schemas.samples import Sample
 logger = logging.getLogger(__name__)
 
 
-class YoloPredictParams(pydantic.BaseModel):
-    """Parameters exposed by the prediction form."""
+class UltralyticsPredictParams(pydantic.BaseModel):
+    """Common parameters exposed by Ultralytics prediction forms."""
 
     confidence_threshold: float = pydantic.Field(
         default=0.2,
         ge=0,
         le=1,
         description="Minimum confidence required for a detection.",
-    )
-    iou_threshold: float = pydantic.Field(
-        default=0.2,
-        ge=0,
-        le=1,
-        description="Overlap threshold for removing duplicate detections. Lower values remove more overlapping boxes.",
     )
     max_detections: int = pydantic.Field(
         default=5,
@@ -66,6 +63,21 @@ class YoloPredictParams(pydantic.BaseModel):
         default=False,
         description="Use a coarse-to-fine search to skip initial black frames for full-video prediction; ignored for individual-frame predictions.",
     )
+
+
+class YoloPredictParams(UltralyticsPredictParams):
+    # RT-DETR is end-to-end and does not use NMS during prediction.
+    iou_threshold: float = pydantic.Field(
+        default=0.2,
+        ge=0,
+        le=1,
+        description="Overlap threshold for removing duplicate detections. Lower values remove more overlapping boxes.",
+    )
+
+
+class RTDETRPredictParams(UltralyticsPredictParams):
+    # essentially the same parameters without NMS.
+    pass
 
 
 def iter_sample_frames(
@@ -235,15 +247,23 @@ class YoloVideoDetectionModel(BaseUltralyticsDetection):
 
     model_name = "yolo26n.pt"
     model_family = "yolo"
+    prediction_model_class = YOLO
 
     imgsz = 640
     batch = 5
 
+    def get_training_model(
+        self,
+        params: YoloTrainParams,
+    ) -> str:
+        """Resolve the selected YOLO checkpoint."""
+        return str(check_pretrained_model_availability(params.yolo_size))
+    
     def build_manifest(
         self,
         samples: list[Sample],
         annotations: list[list[Annotation]],
-        params: YoloTrainParams,
+        params: UltralyticsTrainParams,
     ) -> list[DetectionRecord]:
         """Build the in-memory video training manifest."""
         labels = sorted(
@@ -283,13 +303,22 @@ class YoloVideoDetectionModel(BaseUltralyticsDetection):
             weights_filename=weights_filename,
         )
 
-        self._prediction_model = YOLO(str(weights_path))
+        self._prediction_model = self.prediction_model_class(str(weights_path))
         self._trained_weights_path = weights_path
+
+    def get_prediction_overrides(
+        self,
+        params: UltralyticsPredictParams,
+    ) -> dict[str, float]:
+        if not isinstance(params, YoloPredictParams):
+            raise TypeError("Expected YOLO prediction parameters.")
+
+        return {"iou": params.iou_threshold}
 
     def predict(
         self,
         samples: list[Sample],
-        params: YoloPredictParams,
+        params: UltralyticsPredictParams,
         data_params: DataParamTypes | None = None,
     ) -> list[list[AnnotationBase]]:
         """Predict bounding boxes for the requested video frames."""
@@ -304,7 +333,9 @@ class YoloVideoDetectionModel(BaseUltralyticsDetection):
         # if load() was called self._prediction_model should exist
         # else we borrow self._trained_weights_path from self.train()
         if not hasattr(self, "_prediction_model"):
-            self._prediction_model = YOLO(str(self._trained_weights_path))
+            self._prediction_model = self.prediction_model_class(
+                str(self._trained_weights_path)
+            )
 
         # in either case, model is not reloaded for every single prediction request
         model = self._prediction_model
@@ -342,10 +373,10 @@ class YoloVideoDetectionModel(BaseUltralyticsDetection):
                 results = model.predict(
                     source=image,
                     conf=params.confidence_threshold,
-                    iou=params.iou_threshold,
                     max_det=params.max_detections,
                     device=self.get_device().type,
                     verbose=False,
+                    **self.get_prediction_overrides(params),
                 )
 
                 if not results:
@@ -462,3 +493,39 @@ class YoloVideoDetectionP2Model(YoloVideoDetectionModel):
     ) -> str:
         """Resolve weights used to initialise compatible P2 layers."""
         return str(check_pretrained_model_availability(params.yolo_size))
+
+
+@ModelRegistry.register(
+    "rtdetr_ufo",
+    ["video"],
+    RTDETRTrainParams,
+    RTDETRPredictParams,
+)
+class RTDETRVideoDetectionModel(YoloVideoDetectionModel):
+    """RT-DETR video bounding-box detector for TokTagger."""
+
+    model_name = "rtdetr-l.pt"
+    model_family = "rtdetr"
+    trainer_class = ToktaggerRTDETRTrainer
+    prediction_model_class = RTDETR
+
+    imgsz = 640
+    batch = 2
+
+    def get_training_model(
+        self,
+        params: RTDETRTrainParams,
+    ) -> str:
+        """Resolve the selected RT-DETR checkpoint."""
+        return str(
+            check_pretrained_model_availability(params.rtdetr_size)
+        )
+
+    def get_prediction_overrides(
+        self,
+        params: UltralyticsPredictParams,
+    ) -> dict[str, float]:
+        if not isinstance(params, RTDETRPredictParams):
+            raise TypeError("Expected RT-DETR prediction parameters.")
+
+        return {}
