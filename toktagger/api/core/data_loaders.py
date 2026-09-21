@@ -303,6 +303,11 @@ class TabularDataLoader(DataLoader):
                     f"Glob pattern '{file_name}' matched no files "
                     f"(cwd: {pathlib.Path().cwd()})"
                 )
+            if len(matched) > 1:
+                raise ValueError(
+                    f"Glob pattern '{file_name}' matched {len(matched)} files "
+                    f"({matched}), but a sample expects exactly one file"
+                )
         else:
             if not pathlib.Path(file_name).exists():
                 raise FileNotFoundError(
@@ -310,27 +315,22 @@ class TabularDataLoader(DataLoader):
                 )
             matched = [file_name]
 
-        def _read_file(path: str) -> pd.DataFrame:
-            if path.endswith(".csv"):
-                return pd.read_csv(path, usecols=item.signal_names)
-            elif path.endswith(".tsv"):
-                return pd.read_csv(path, sep="\t", usecols=item.signal_names)
-            elif path.endswith(".parquet"):
-                return pd.read_parquet(path, columns=item.signal_names)
-            elif path.endswith(".json"):
-                df = pd.read_json(path)
-                return df[item.signal_names]
-            elif path.endswith(".xlsx"):
-                return pd.read_excel(path, usecols=item.signal_names)
-            elif path.endswith(".feather"):
-                return pd.read_feather(path, columns=item.signal_names)
-            else:
-                raise ValueError("Unsupported file format {}".format(Path(path).suffix))
-
-        if len(matched) == 1:
-            df = _read_file(matched[0])
+        path = matched[0]
+        if path.endswith(".csv"):
+            df = pd.read_csv(path, usecols=item.signal_names)
+        elif path.endswith(".tsv"):
+            df = pd.read_csv(path, sep="\t", usecols=item.signal_names)
+        elif path.endswith(".parquet"):
+            df = pd.read_parquet(path, columns=item.signal_names)
+        elif path.endswith(".json"):
+            df = pd.read_json(path)
+            df = df[item.signal_names]
+        elif path.endswith(".xlsx"):
+            df = pd.read_excel(path, usecols=item.signal_names)
+        elif path.endswith(".feather"):
+            df = pd.read_feather(path, columns=item.signal_names)
         else:
-            df = pd.concat([_read_file(p) for p in matched])
+            raise ValueError("Unsupported file format {}".format(Path(path).suffix))
 
         df = df.fillna(0)
 
