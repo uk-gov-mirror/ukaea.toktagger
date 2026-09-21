@@ -35,4 +35,3 @@ if models_dependencies_installed():
         ShapeletTransformModel as ShapeletTransformModel,
     )
     from toktagger.api.models.disruption import DisruptionCNN as DisruptionCNN
-    from toktagger.api.models.temp import VideoCNN as VideoCNN
