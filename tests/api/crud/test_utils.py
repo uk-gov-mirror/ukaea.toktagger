@@ -4,7 +4,6 @@ from tests.db_definitions import PROJECT_1, SAMPLE_1, ANNOTATION_1, ANNOTATION_2
 from toktagger.api.schemas.annotations import TimePointBatch
 from toktagger.api.schemas.samples import SampleUpdate
 from toktagger.api.schemas.models import ModelUpdate, ModelIn
-from toktagger.api.models.base import Model, ModelRegistry
 import toktagger.api.crud.utils as utils
 from fastapi import HTTPException
 import tempfile
@@ -272,32 +271,11 @@ async def test_delete_annotations_by_model_id(db_client, setup_db):
     assert all(annotation.get("model_id") is None for annotation in annotations)
 
 
-@ModelRegistry.register("mock_prediction_model", ["time-series"])
-class _MockPredictionModel(Model):
-    """A model registered without pulling in the models extra, since these
-    tests only exercise generic prediction-replacement CRUD logic."""
-
-    def define_model(self):
-        pass
-
-    def train(self, samples, annotations, *args, **kwargs):
-        pass
-
-    def predict(self, samples, *args, **kwargs):
-        pass
-
-    def save(self, results_dir):
-        pass
-
-    def load(self, results_dir, weights_filename=None):
-        pass
-
-
 async def _add_prediction_model(db_client, project_id) -> str:
     return await db_client.insert(
         "models",
         ModelIn(
-            type="mock_prediction_model",
+            type="disruption_cnn",
             version=1,
             status="completed",
             progress=100,
@@ -313,12 +291,13 @@ def _prediction(model_id: str, label: str, validated: bool = False) -> TimePoint
         time=0.5,
         label=label,
         validated=validated,
-        created_by="mock_prediction_model",
+        created_by="disruption_cnn",
         model_id=model_id,
     )
 
 
 @pytest.mark.asyncio
+@pytest.mark.models_enabled
 async def test_replace_predictions(db_client, setup_db):
     project_id = setup_db["project_id_1"]
     sample_id = setup_db["sample_id_1"]
@@ -355,6 +334,7 @@ async def test_replace_predictions(db_client, setup_db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.models_enabled
 async def test_replace_predictions_keeps_validated(db_client, setup_db):
     project_id = setup_db["project_id_1"]
     sample_id = setup_db["sample_id_1"]
@@ -390,6 +370,7 @@ async def test_replace_predictions_keeps_validated(db_client, setup_db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.models_enabled
 async def test_replace_predictions_with_no_results_clears_sample(db_client, setup_db):
     project_id = setup_db["project_id_1"]
     sample_id = setup_db["sample_id_1"]
@@ -436,6 +417,7 @@ async def test_replace_predictions_model_not_found(db_client, setup_db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.models_enabled
 async def test_replace_predictions_unexpected_sample(db_client, setup_db):
     project_id = setup_db["project_id_1"]
     model_id = await _add_prediction_model(db_client, project_id)
