@@ -45,7 +45,7 @@ async def create_annotations(
     if annotator_type not in ANNOTATORS_PER_TASK[Task(project.task)]:
         raise HTTPException(
             status_code=409,
-            detail=f"The selected annotator cannot be used for {project.task.value} labelling projects.",
+            detail=f"The selected annotator cannot be used for {project.task} labelling projects.",
         )
 
     sample: Sample = await get_sample(db_client, project_id, sample_id)
