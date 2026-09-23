@@ -178,12 +178,16 @@ export const AddSamplesEditor = ({
     // ShotData projects never show the directory fields, so a listing of the server's working directory must not overwrite the range-derived shot IDs.
     if (!isFileData) return;
 
+    let cancelled = false;
+
     async function fetchFileSamples() {
       let apiUrl = `${BACKEND_API_URL}/paths/files?dir_path=${dirPath}&file_type=${fileType}`;
       if (useDirectories) {
         apiUrl = `${BACKEND_API_URL}/paths/directories?dir_path=${dirPath}&file_type=${fileType}`;
       }
       const response = await fetch(apiUrl);
+      // A newer dirPath/fileType change superseded this request; its response is stale and must not clobber the latest state.
+      if (cancelled) return;
 
       if (response.ok) {
         const result = await response.json();
@@ -237,6 +241,9 @@ export const AddSamplesEditor = ({
       }
     }
     fetchFileSamples();
+    return () => {
+      cancelled = true;
+    };
   }, [dirPath, fileType, useDirectories, isFileData]);
 
   const onFormSubmit = async (close: () => void) => {
