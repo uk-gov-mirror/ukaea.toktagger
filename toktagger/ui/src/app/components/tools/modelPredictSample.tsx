@@ -212,6 +212,7 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
           </Switch>
           <ComboBox
             label="Select Model"
+            menuWidth="size-3000"
             validationState={message ? "invalid" : undefined}
             errorMessage={message}
             description={
@@ -229,7 +230,9 @@ export function ModelPredictTool({ project_id, sample_id }: ModelPredictInfo) {
             }}
           >
             {models.map((model) => (
-              <Item key={model._id}>{model.name ?? model.type}</Item>
+              <Item
+                key={model._id}
+              >{`${model.name ?? model.type} (v${model.version})`}</Item>
             ))}
           </ComboBox>
           <ModelForm
