@@ -35,24 +35,21 @@ if models_dependencies_installed():
     import ray
 
 
-def create_api_lifespan(api_app: FastAPI):
-    @asynccontextmanager
-    async def lifespan(_main_app: FastAPI):
-        db_client = MongoDBClient(
-            str(config.settings.database.mongo_url),
-            "annotate_db",
-            str(config.settings.server.cache_dir),
-        )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db_client = MongoDBClient(
+        str(config.settings.database.mongo_url),
+        "annotate_db",
+        str(config.settings.server.cache_dir),
+    )
 
-        api_app.state.db_client = db_client
-        api_app.state.project = None
+    app.state.db_client = db_client
+    app.state.project = None
 
-        try:
-            yield
-        finally:
-            await db_client.client.close()
-
-    return lifespan
+    try:
+        yield
+    finally:
+        await db_client.client.close()
 
 
 class Server:
@@ -149,7 +146,40 @@ class Server:
                     "In testing mode, cache directories must be in temp directory!"
                 )
 
-        self.app = FastAPI()
+        api_app = FastAPI()
+
+        api_app.include_router(annotations_router)
+        api_app.include_router(data_router)
+        api_app.include_router(models_router)
+        api_app.include_router(projects_router)
+        api_app.include_router(samples_router)
+        api_app.include_router(annotators_router)
+        api_app.include_router(paths_router)
+        api_app.include_router(meta_router)
+        api_app.include_router(base_router)
+
+        mcp = FastMCP.from_fastapi(
+            api_app,
+            name="toktagger",
+            instructions=INSTRUCTIONS,
+            route_maps=[
+                # Tagged routers turned into tools
+                RouteMap(
+                    pattern=r"/.*",
+                    tags={"MCP"},
+                    mcp_type=MCPType.TOOL,
+                ),
+                # Routers without MCP tag are excluded
+                RouteMap(
+                    pattern=r".*",
+                    mcp_type=MCPType.EXCLUDE,
+                ),
+            ],
+        )
+
+        self.mcp_app = mcp.http_app("/")
+
+        self.app = FastAPI(lifespan=combine_lifespans(lifespan, self.mcp_app.lifespan))
 
         # Allow requests from the frontend dev server
         origins = [
@@ -172,43 +202,8 @@ class Server:
             StaticFiles(directory=self.frontend_path / "assets"),
             name="assets",
         )
-
-        self.app.include_router(annotations_router)
-        self.app.include_router(data_router)
-        self.app.include_router(models_router)
-        self.app.include_router(projects_router)
-        self.app.include_router(samples_router)
-        self.app.include_router(annotators_router)
-        self.app.include_router(paths_router)
-        self.app.include_router(meta_router)
-        self.app.include_router(base_router)
-
-        mcp = FastMCP.from_fastapi(
-            self.app,
-            name="toktagger",
-            instructions=INSTRUCTIONS,
-            route_maps=[
-                # Tagged routers turned into tools
-                RouteMap(
-                    pattern=r"/.*",
-                    tags={"MCP"},
-                    mcp_type=MCPType.TOOL,
-                ),
-                # Routers without MCP tag are excluded
-                RouteMap(
-                    pattern=r".*",
-                    mcp_type=MCPType.EXCLUDE,
-                ),
-            ],
-        )
-
-        mcp_app = mcp.http_app("/")
-
-        self.main_app = FastAPI(
-            lifespan=combine_lifespans(create_api_lifespan(self.app), mcp_app.lifespan)
-        )
-        self.main_app.mount("/mcp", mcp_app)
-        self.main_app.mount("/", self.app)
+        self.app.include_router(api_app.router)
+        self.app.mount("/mcp", self.mcp_app)
 
     def run(self, host: str | None = None, port: int | None = None):
         """
@@ -244,7 +239,7 @@ class Server:
         if models_dependencies_installed():
             self._setup_ray()
         uvicorn.run(
-            self.main_app,
+            self.app,
             host=config.settings.server.host,
             port=config.settings.server.port,
         )
