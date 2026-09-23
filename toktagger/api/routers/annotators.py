@@ -29,30 +29,41 @@ async def create_annotations(
     data_params: DataParamTypes,
 ):
     """
-    Generate annotations for a sample using a specified annotator model.
-    --------------------------------------------------------------------
+    Generate annotations for a sample using a specified annotator model,
+    returning the predictions *without* saving them to the database.
 
-    MCP Documentation
-    -----------------
-    Purpose:
-        Run an automated annotator on a sample to produce predicted annotations *without* saving them to the database.
-        Some annotators require a set of parameters to be specified - these should be prompted by the user.
-        The annotation will be returned - you should store this in memory in case the user wishes to commit it to the database later.
+    Some annotators require a set of parameters to be specified - these should
+    be prompted by the user. The annotations will be returned by this endpoint.
 
+    Parameters
+    ----------
+    project_id : str
+        The ID of the project the sample belongs to.
+    sample_id : str
+        The ID of the sample to generate annotations for.
+    annotator_type : AnnotatorTypes
+        The type of automated annotator to run.
+    annotator_params : AnnotatorParamTypes
+        Parameters for the selected annotator.
+    data_params : DataParamTypes
+        Parameters for loading the sample data.
+
+    Returns
+    -------
+    list
+        A list of predicted annotations from the selected annotator.
+
+    Notes
+    -----
     Use When:
         - You want to generate annotations automatically using one of the built in annotators
         - You are testing different annotator types on a sample
         - You need initial annotation suggestions for human review
-
     Do Not Use When:
         - You want to save annotations to the database - use toktagger_update_sample_annotations instead
         - You want to train an ML model - use toktagger_start_model_training instead
         - You want to get predictions from an ML model - use toktagger_create_model_predictions or toktagger_create_sample_model_predictions instead
         - You need to inspect diagnostic data - use toktagger_get_sample_data_summary instead
-
-    Returns:
-        A list of predicted annotations from the selected annotator
-
     Example User Requests:
         - "Show me what the peak_detection annotator predicts for this sample"
     """

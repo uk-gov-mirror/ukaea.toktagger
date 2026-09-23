@@ -76,13 +76,30 @@ async def get_data(
     view: Optional[ViewParamTypes] = ViewParams(),
 ) -> DataResponseType:
     """
-    Get data, e.g. time trace, about the given sample required for the given project.
-    ----------------------------------------------------------------------------------
+    Get data, e.g. time trace, about the given sample required for the given
+    project.
 
-    MCP Documentation
-    -----------------
-    This endpoint is not exposed to the MCP server, as it can add potentially very large
-    datasets directly into the agent's context window - use summary endpoints instead.
+    Parameters
+    ----------
+    project_id : str
+        The ID of the project to get data for.
+    sample_id : str
+        The ID of the sample to get data for.
+    params : DataParamTypes | None
+        Parameters for loading the sample data.
+    view : ViewParamTypes | None
+        View transformation to apply to the loaded data.
+
+    Returns
+    -------
+    DataResponseType
+        The data for the sample, e.g. time trace, profile-2d, or image.
+
+    Notes
+    -----
+    This endpoint is not exposed to the MCP server, as it can add potentially
+    very large datasets directly into the agent's context window - use summary
+    endpoints instead.
     """
     db_client = request.app.state.db_client
 
@@ -104,31 +121,41 @@ async def get_sample_data_summary(
     view: Optional[ViewParamTypes] = ViewParams(),
 ) -> SampleSummaryTypes:
     """
-    Get a summary of the data returned for a specific sample.
-    ---------------------------------------------------------
+    Get a summary of the diagnostic data for a specific sample, with optional
+    view transformation (e.g. profile-2d heatmaps).
+    Data formats supported are time-series, 2D profiles, and images.
+    Note that this only returns a summary, not the full dataset - use the
+    Python client to retrieve full data for analysis if requested.
 
-    MCP Documentation
-    -----------------
-    Purpose:
-        Retrieve a summary of diagnostic data for a sample, with optional view transformation (e.g. profile-2d heatmaps).
-        Data formats supported are time-series, 2D profiles, and images.
-        Note that this only returns a summary, not the full dataset. Use the Python client to retrieve full data for analysis if requested.
+    Parameters
+    ----------
+    project_id : str
+        The ID of the project to get a data summary for.
+    sample_id : str
+        The ID of the sample to get a data summary for.
+    params : DataParamTypes | None
+        Parameters for loading the sample data.
+    view : ViewParamTypes | None
+        View transformation to apply to the loaded data.
 
+    Returns
+    -------
+    SampleSummaryTypes
+        Summaries of sample data, containing information such as signal names,
+        max/min/mean values, point counts, etc.
+
+    Notes
+    -----
     Use When:
         - You are asked what kind of data a specific sample / project contains
         - You are asked which signals are present in a sample's data
         - You are asked for max/min/number of points in the dataset for a signal
-
     Do Not Use When:
         - You only need sample metadata (shot_id, validation status) - use toktagger_get_sample instead
         - You need to see the schema of parameters for a given data loader - use toktagger_get_data_schema instead
         - You need the raw signal values (e.g. plasma current, density) for a sample to analyse - use the Python client instead
         - You want to analyse data / create annotations from built-in annotators, use toktagger_create_automated_sample_annotations instead
         - You want to analyse data / create predictions from an ML model - use toktagger_create_model_predictions or toktagger_create_sample_model_predictions instead
-
-    Returns:
-        Summaries of sample data, containing information such as signal names, max/min/mean values, point counts, etc
-
     Example User Requests:
         - "What does the data in this project/sample look like?"
         - "How many signals are present in the data for this project/sample?"

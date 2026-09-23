@@ -23,29 +23,27 @@ def get_app(request: Request):
 )
 async def health_check(request: Request) -> dict:
     """
-    Check the server is running correctly.
-    --------------------------------------
+    Check the server is running correctly, identifying which optional features
+    are currently available.
 
-    MCP Documentation
-    -----------------
-    Purpose:
-        Determine whether the TokTagger backend is operational and identify
-        which optional features are currently available.
+    Returns
+    -------
+    dict
+        Status information describing backend health and available server
+        features: name, version, db_connected, models_enabled, gpu_available,
+        testing_mode.
 
+    Notes
+    -----
     Use When:
         - Verifying if the server is operational before proceeding with other operations
         - Checking the version of the backend server in use
         - Determining if ML model tools are enabled or disabled
         - Determining if GPUs are available for ML model training/prediction
         - Verifying database connectivity is working
-
     Do Not Use When:
         - Reading or modifying project, annotation, model, or dataset data
         - Retrieving detailed system metrics, logs, or diagnostics
-
-    Returns:
-        Status information describing backend health and available server features
-
     Example User Requests:
         - "Is the TokTagger server running?"
         - "Can this server run ML models?"

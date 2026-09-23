@@ -39,25 +39,39 @@ async def get_projects(
     ),
 ) -> list[Project]:
     """
-    Get a list of all available projects.
-    -------------------------------------
+    Get a list of all available projects, with optional sorting, pagination,
+    and filtering by name.
 
-    MCP Documentation
-    -----------------
-    Purpose:
-        Retrieve all projects in the system, with optional sorting, pagination, and filtering by name
+    Parameters
+    ----------
+    sort_by : str
+        Field to sort responses by, by default '_id' (equivalent to timestamp).
+    sort_direction : Literal["ascending", "descending"]
+        Direction to sort responses, by default 'descending'.
+    start : int
+        Index of the first project you want returned when sorted by the
+        above parameter.
+    count : int | None
+        Number of projects you want returned, leave blank to return all entries.
+    name : str | None
+        Name of a project to search for, by default None.
 
+    Returns
+    -------
+    list[Project]
+        A list of Project objects, each containing: name, task,
+        query_strategy, data_loader, time_min, time_max, shot_labels,
+        time_region_labels, time_point_labels, bounding_box_labels,
+        polygon_labels, video_bounding_box_labels, model_types, _id, timestamp.
+
+    Notes
+    -----
     Use When:
         - You need to discover what projects exist and their configurations
         - You need a project _id to use with other endpoints
         - You want to list projects for auditing or summary purposes
-
     Do Not Use When:
         - You need project samples - use toktagger_get_samples instead
-
-    Returns:
-        A list of Project objects, each containing: name, task, query_strategy, data_loader, time_min, time_max, shot_labels, time_region_labels, time_point_labels, bounding_box_labels, polygon_labels, video_bounding_box_labels, model_types, _id, timestamp
-
     Example User Requests:
         - "What projects are available?"
         - "Show me all projects named Disruption"
@@ -86,25 +100,28 @@ async def get_projects(
 )
 async def create_project(request: Request, project: ProjectIn):
     """
-    Create a new project.
-    ---------------------
+    Create a new project with specified task, data loader, query strategy,
+    label sets, and optional model types.
+    The user should be prompted for the required parameters in the ProjectIn
+    schema.
 
-    MCP Documentation
-    -----------------
-    Purpose:
-        Create a new project with specified task, data loader, query strategy, label sets, and optional model types.
-        Users should be prompted for the required parameters in the ProjectIn schema.
+    Parameters
+    ----------
+    project : ProjectIn
+        The configuration for the new project to create.
 
+    Returns
+    -------
+    dict
+        A dict with _id containing the new project's unique identifier.
+
+    Notes
+    -----
     Use When:
         - You are setting up a new annotation workflow for a dataset
         - You are preparing to add samples and annotations
-
     Do Not Use When:
         - The project already exists and you wish to update it - use toktagger_update_project instead
-
-    Returns:
-        A dict with _id containing the new project's unique identifier
-
     Example User Requests:
         - "Create a new time-series annotation project"
         - "Set up a video project with UFO bounding box labels"
@@ -134,11 +151,21 @@ async def get_project(
 ) -> Project:
     """
     Get a single project using its ID.
-    -----------------------------------
 
-    MCP Documentation
-    -----------------
-    This endpoint is not exposed to the MCP server - should use get_projects instead.
+    Parameters
+    ----------
+    project_id : str
+        The ID of the project to return.
+
+    Returns
+    -------
+    Project
+        The project with the specified ID.
+
+    Notes
+    -----
+    This endpoint is not exposed to the MCP server - should use get_projects
+    instead.
     """
     # Return information about a specific project
     # Have put project_id as a string for now, but might want to use ShortUUID?
@@ -168,25 +195,30 @@ async def update_project(
     project_id: str = Path(description="The ID of the project to activate"),
 ):
     """
-    Update a project's information.
-    -----------------------------
+    Update a project's information, modifying an existing project's
+    configuration, including task, labels, time windows, model types, and
+    other settings.
 
-    MCP Documentation
-    -----------------
-    Purpose:
-        Modify an existing project's configuration, including task, labels, time windows, model types, and other settings.
+    Parameters
+    ----------
+    project : Project
+        The updated configuration for the project.
+    project_id : str
+        The ID of the project to update.
 
+    Returns
+    -------
+    None
+        No response body on success.
+
+    Notes
+    -----
     Use When:
         - You need to change a project's annotation labels after creation
         - You want to add or remove model types from a project
         - You are updating project metadata (time windows, query strategy, etc.)
-
     Do Not Use When:
         - You are creating a new project - use toktagger_create_project instead
-
-    Returns:
-        None (no response body on success)
-
     Example User Requests:
         - "Update the label set for this project"
         - "Change the query strategy for this project to sequential"
@@ -209,10 +241,19 @@ async def delete_project(
 ):
     """
     Permanently delete a project.
-    -----------------------------
 
-    MCP Documentation
-    -----------------
+    Parameters
+    ----------
+    project_id : str
+        The ID of the project to delete.
+
+    Returns
+    -------
+    None
+        No response body on success.
+
+    Notes
+    -----
     This endpoint is not exposed to the MCP server.
     """
     db_client = request.app.state.db_client
@@ -232,10 +273,14 @@ async def delete_all_projects(
 ):
     """
     Remove all projects.
-    --------------------
 
-    MCP Documentation
-    -----------------
+    Returns
+    -------
+    None
+        No response body on success.
+
+    Notes
+    -----
     This endpoint is not exposed to the MCP server.
     """
     db_client = request.app.state.db_client
