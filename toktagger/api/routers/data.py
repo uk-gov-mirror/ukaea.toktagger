@@ -9,6 +9,7 @@ from toktagger.api.schemas.data import (
     ImageData,
     MultiVariateTimeSeriesData,
     MultiProfile2DData,
+    Profile2DData,
     SampleSummaryTypes,
     SummaryAxes,
     SummaryValues,
@@ -19,7 +20,7 @@ from toktagger.api.schemas.data import (
     TimeSeriesSampleSummary,
     Profile2DSampleSummary,
 )
-from toktagger.api.schemas.views import ViewParams, ViewParamTypes
+from toktagger.api.schemas.views import ViewParams, ViewParamTypes, Profile2DViewParams
 
 from fastapi import APIRouter, HTTPException, Request
 from toktagger.api.crud.db import MongoDBClient
@@ -32,6 +33,30 @@ import io
 router = APIRouter(
     prefix="/projects/{project_id}/samples/{sample_id}/data", tags=["Data"]
 )
+
+
+def _profile_2d_signal_summary(profile_2d: Profile2DData) -> Signal2DSummary:
+    """Build a Signal2DSummary for a single 2D profile."""
+    arr = numpy.array(profile_2d.values)
+    return Signal2DSummary(
+        time=SummaryAxes(
+            count=len(profile_2d.time),
+            max=numpy.max(profile_2d.time),
+            min=numpy.min(profile_2d.time),
+        ),
+        dim_1=SummaryAxes(
+            count=len(profile_2d.dim_1),
+            max=numpy.max(profile_2d.dim_1),
+            min=numpy.min(profile_2d.dim_1),
+        ),
+        values=Summary2DValues(
+            shape=arr.shape,
+            count=arr.size,
+            max=numpy.max(profile_2d.values),
+            min=numpy.min(profile_2d.values),
+            mean=numpy.mean(profile_2d.values),
+        ),
+    )
 
 
 async def _get_data(
@@ -186,6 +211,7 @@ async def get_sample_data_summary(
             height=arr.shape[0],
             width=arr.shape[1],
             colour_mode=im.mode,
+            count=arr.size,
             max=arr.max(),
             min=arr.min(),
             mean=arr.mean(),
@@ -215,31 +241,26 @@ async def get_sample_data_summary(
         )
 
     if isinstance(data, MultiProfile2DData):
-        signals = {}
-        for signal, profile_2d in data.values.items():
-            arr = numpy.array(profile_2d.values)
-            signals[signal] = Signal2DSummary(
-                time=SummaryAxes(
-                    count=len(profile_2d.time),
-                    max=numpy.max(profile_2d.time),
-                    min=numpy.min(profile_2d.time),
-                ),
-                dim_1=SummaryAxes(
-                    count=len(profile_2d.dim_1),
-                    max=numpy.max(profile_2d.dim_1),
-                    min=numpy.min(profile_2d.dim_1),
-                ),
-                values=Summary2DValues(
-                    shape=arr.shape,
-                    count=arr.flatten().shape(),
-                    max=numpy.max(profile_2d.values),
-                    min=numpy.min(profile_2d.values),
-                    mean=numpy.mean(profile_2d.values),
-                ),
-            )
+        signals = {
+            signal: _profile_2d_signal_summary(profile_2d)
+            for signal, profile_2d in data.values.items()
+        }
         return Profile2DSampleSummary(
             type="profile-2d",
             description="2D profile signals from one or more diagnostics inside a Tokamak (eg, spectrometers). Contains measurements of points along an axis (dim_1) at each time point.",
             num_signals=len(data.values),
             signals=signals,
+        )
+
+    if isinstance(data, Profile2DData):
+        # A single profile, eg the output of the profile_2d view applied to a
+        # time series signal (eg an STFT spectrogram of the mirnov signal)
+        signal_name = (
+            view.signal_name if isinstance(view, Profile2DViewParams) else "profile"
+        )
+        return Profile2DSampleSummary(
+            type="profile-2d",
+            description="2D profile signals from one or more diagnostics inside a Tokamak (eg, spectrometers). Contains measurements of points along an axis (dim_1) at each time point.",
+            num_signals=1,
+            signals={signal_name: _profile_2d_signal_summary(data)},
         )
