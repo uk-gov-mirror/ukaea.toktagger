@@ -164,10 +164,10 @@ async def get_models(
         - You want to see which models have been trained or loaded for a project
         - You need to know available model versions before making predictions
     Do Not Use When:
-        - You need a specific model instance's details - use toktagger_get_model instead
-        - You want to start training - use toktagger_start_model_training instead
-        - You are querying metadata about the project itself - use toktagger_get_projects instead
-        - You need to know which models are available to be trained/loaded within this project/task - use toktagger_get_model_types instead
+        - You need a specific model instance's details - use get_model instead
+        - You want to start training - use start_model_training instead
+        - You are querying metadata about the project itself - use get_projects instead
+        - You need to know which models are available to be trained/loaded within this project/task - use get_model_types instead
     Example User Requests:
         - "What models have been trained for this project?"
         - "Show me all model versions available for disruption_cnn"
@@ -227,8 +227,8 @@ async def get_model(
         - You are checking if a model is ready for predictions (status = "completed")
         - You want to verify a specific model version exists
     Do Not Use When:
-        - You need all models - use toktagger_get_trained_models instead
-        - You want to train a model - use toktagger_start_model_training instead
+        - You need all models - use get_trained_models instead
+        - You want to train a model - use start_model_training instead
     Example User Requests:
         - "What is the status of the disruption_cnn model?"
         - "What accuracy score did version 1 of this model achieve?"
@@ -336,8 +336,8 @@ async def get_training_info(
         - You need to verify a training job is still running
         - You are polling for training completion
     Do Not Use When:
-        - You want to start training - use toktagger_start_model_training instead
-        - The training is already complete - use toktagger_get_model instead
+        - You want to start training - use start_model_training instead
+        - The training is already complete - use get_model instead
     Example User Requests:
         - "How far along is the training of disruption_cnn?"
         - "Is the model still training?"
@@ -399,8 +399,8 @@ async def start_model_training(
     Do Not Use When:
         - There are no validated annotations - the endpoint returns 404
         - Training for this model type is already in progress - returns 409
-        - You want to load pre-trained weights instead - use one of the toktagger_load_model_weights_* tools
-        - You need to know which parameters the model needs from the user to train - use toktagger_get_model_training_schema first
+        - You want to load pre-trained weights instead - use one of the load_model_weights_* tools
+        - You need to know which parameters the model needs from the user to train - use get_model_training_schema first
     Example User Requests:
         - "Start training the disruption_cnn model"
         - "Train this model on GPU with custom hidden layers"
@@ -551,7 +551,7 @@ async def stop_model_training(
         - You need to cancel training of all ML models of a specified type
     Do Not Use When:
         - Training for this model type is not in progress - returns 409
-        - You want to delete a model instance - this is not supported by agentic workflows in TokTagger (use toktagger_delete_models)
+        - You want to delete a model instance - this is not supported by agentic workflows in TokTagger (use delete_models)
     Example User Requests:
         - "Stop training the disruption_cnn model"
         - "Stop training disruption_cnn model version 3, if it is in progress."
@@ -642,7 +642,7 @@ async def load_model_weights_local(
     Do Not Use When:
         - The weights file doesn't exist at the specified path — returns 422
         - Local loading is disabled in config — returns 403
-        - You want to load from GitLab or HuggingFace - use toktagger_load_model_weights_gitlab, or toktagger_load_model_weights_hugging_face instead
+        - You want to load from GitLab or HuggingFace - use load_model_weights_gitlab, or load_model_weights_hugging_face instead
     Example User Requests:
         - "Load model weights for disruption_cnn model from /path/to/model.pt"
     """
@@ -716,7 +716,7 @@ async def load_model_weights_gitlab(
     Do Not Use When:
         - GitLab loading is disabled - returns 403
         - Required env vars (GITLAB_URL, GITLAB_TOKEN) are not set on the server - returns 409
-        - You want to load from local files or HuggingFace - use toktagger_load_model_weights_local, or toktagger_load_model_weights_hugging_face instead
+        - You want to load from local files or HuggingFace - use load_model_weights_local, or load_model_weights_hugging_face instead
     Example User Requests:
         - "Import disruption_cnn weights from GitLab"
     """
@@ -802,7 +802,7 @@ async def load_model_weights_hugging_face(
     Do Not Use When:
         - HuggingFace loading is disabled — returns 403
         - Required userspace/organization is not configured — returns 422
-        - You want to load from local files or GitLab - use toktagger_load_model_weights_local, or toktagger_load_model_weights_gitlab instead
+        - You want to load from local files or GitLab - use load_model_weights_local, or load_model_weights_gitlab instead
     Example User Requests:
         - "Load a disruption_cnn model from Hugging Face"
     """
@@ -880,8 +880,8 @@ async def get_load_model_status(
         - You are polling for load completion before making predictions
         - You want to detect load failures
     Do Not Use When:
-        - You want to actually load weights - use toktagger_load_model_weights_* instead
-        - You want to check training status - use toktagger_get_model_training_info instead
+        - You want to actually load weights - use load_model_weights_* instead
+        - You want to check training status - use get_model_training_info instead
     Example User Requests:
         - "Has the model loading finished?"
         - "Check the status of the weight loading task"
@@ -1015,10 +1015,10 @@ async def predict(
         - You need model-assisted labeling for batch samples
         - You want to evaluate model performance on new data
     Do Not Use When:
-        - The model isn't trained - use toktagger_start_model_training first
-        - You want quick, automated annotations from built in annotators - use toktagger_create_automated_sample_annotations instead
-        - You want predictions for a single specific sample - use toktagger_create_sample_model_predictions instead
-        - You are querying model info - use toktagger_get_trained_models instead
+        - The model isn't trained - use start_model_training first
+        - You want quick, automated annotations from built in annotators - use create_automated_sample_annotations instead
+        - You want predictions for a single specific sample - use create_sample_model_predictions instead
+        - You are querying model info - use get_trained_models instead
     Example User Requests:
         - "Generate predictions using the disruption_cnn model on 20 samples"
     """
@@ -1184,9 +1184,9 @@ async def create_sample_predictions(
         - You are comparing model predictions against your own annotations for a sample
     Do Not Use When:
         - You don't know the required parameters to start predictions - use get_model_prediction_schema to find required parameters.
-        - You need batch predictions across many samples - use toktagger_create_model_predictions instead
-        - You want quick, automated annotations from built in annotators - use toktagger_create_automated_sample_annotations instead
-        - The model isn't trained - use toktagger_start_model_training first
+        - You need batch predictions across many samples - use create_model_predictions instead
+        - You want quick, automated annotations from built in annotators - use create_automated_sample_annotations instead
+        - The model isn't trained - use start_model_training first
     Example User Requests:
         - "Get predictions for shot 30421 using the disruption_cnn model"
         - "Show me the model prediction for this sample before I annotate it"
@@ -1277,8 +1277,8 @@ async def get_sample_predictions(
         - You started a prediction task and need to check if it is complete
         - You want to see model predictions before human annotation
     Do Not Use When:
-        - You want to create predictions - use toktagger_create_model_predictions or toktagger_create_sample_model_predictions instead
-        - You want to retrieve all annotations for a sample - use toktagger_get_sample_annotations instead (optionally filtering by created_by with the model name)
+        - You want to create predictions - use create_model_predictions or create_sample_model_predictions instead
+        - You want to retrieve all annotations for a sample - use get_sample_annotations instead (optionally filtering by created_by with the model name)
     Example User Requests:
         - "Has the disruption_cnn model completed its predictions for this sample?"
         - "Did the most recent model prediction task create predictions for this sample?"

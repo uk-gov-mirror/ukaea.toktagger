@@ -82,8 +82,8 @@ async def get_all_annotations(
         - You need to filter annotations by validated/unvalidated status
         - You need to sort annotations by any of their attributes, eg by uncertainty, or timestamp
     Do Not Use When:
-        - You need annotations for a specific sample — use toktagger_get_sample_annotations instead
-        - You want to create or update annotations — use toktagger_import_annotations or toktagger_update_sample_annotations instead
+        - You need annotations for a specific sample — use get_sample_annotations instead
+        - You want to create or update annotations — use import_annotations or update_sample_annotations instead
     Example User Requests:
         - "Show me all annotations for this project"
         - "Show me validated annotations for this project"
@@ -146,8 +146,8 @@ async def import_annotations(
         - You are importing annotations from an external source (e.g. JSON file)
         - You want to bulk-add annotations to multiple samples at once
     Do Not Use When:
-        - You are adding annotations for a single sample — use toktagger_update_sample_annotations instead
-        - You are querying annotations — use toktagger_get_project_annotations or toktagger_get_sample_annotations instead
+        - You are adding annotations for a single sample — use update_sample_annotations instead
+        - You are querying annotations — use get_project_annotations or get_sample_annotations instead
     Example User Requests:
         - "Import these annotations from this JSON file"
     """
@@ -269,8 +269,8 @@ async def get_annotations(
         - You want to check if a sample's annotations have already been human-validated
         - You are building a sample-level annotation review UI
     Do Not Use When:
-        - You need all annotations for a project — use toktagger_get_project_annotations instead
-        - You are creating/updating annotations — use toktagger_update_sample_annotations instead
+        - You need all annotations for a project — use get_project_annotations instead
+        - You are creating/updating annotations — use update_sample_annotations instead
     Example User Requests:
         - "What annotations exist for this sample?"
         - "Show me the model predictions for this sample"
@@ -355,7 +355,7 @@ async def update_annotations(
         - You are correcting or refining annotations for a single sample
     Do Not Use When:
         - You do not have permission to overwrite existing annotations - check with the user first
-        - You are only querying annotations for a sample - use toktagger_get_sample_annotations instead
+        - You are only querying annotations for a sample - use get_sample_annotations instead
     Example User Requests:
         - "Save my annotations for this sample"
         - "Mark these annotations as validated with my corrections"

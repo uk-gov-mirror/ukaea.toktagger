@@ -31,9 +31,9 @@ async def get_dataloaders(request: Request) -> list[str]:
         - Discovering which data sources are available
         - Validating a data_loader name before creating samples
     Do Not Use When:
-        - You already know the data loader and need its schema - use toktagger_get_data_schema instead
-        - You need to know which dataloader a specific project uses - use toktagger_get_projects instead
-        - You need information about diagnostic data for a sample - use toktagger_get_sample_data_summary instead
+        - You already know the data loader and need its schema - use get_data_schema instead
+        - You need to know which dataloader a specific project uses - use get_projects instead
+        - You need information about diagnostic data for a sample - use get_sample_data_summary instead
     Example User Requests:
         - "What data loaders are available?"
         - "Can I load data from UDA?"
@@ -63,8 +63,8 @@ async def get_data_schema(loader: str) -> dict[str, typing.Any]:
         - You need to know what parameters to pass to the data endpoint
         - You need to know which parameters to prompt the user for when getting data for a sample
     Do Not Use When:
-        - You need to know which dataloader a specific project uses - use toktagger_get_projects instead
-        - You need information about diagnostic data for a sample - use toktagger_get_sample_data_summary instead
+        - You need to know which dataloader a specific project uses - use get_projects instead
+        - You need information about diagnostic data for a sample - use get_sample_data_summary instead
     Example User Requests:
         - "What parameters does the UDA loader need?"
         - "Show me the schema for the tabular data loader"
@@ -98,7 +98,7 @@ async def get_annotator_types(task: Task) -> list[str]:
         - Checking which annotators can be used for a given task
         - Checking which annotators can be used for sample labelling within a project (need to find the tas associated with the project first via toktagget_get_project)
     Do Not Use When:
-        - The user has asked for available ML models - use toktagger_get_model_types
+        - The user has asked for available ML models - use get_model_types
     Example User Requests:
         - "Which annotators are available for time-series tasks?"
         - "Can I use the peak-detection annotator for this project?"
@@ -132,9 +132,9 @@ async def get_model_types(task: Task) -> list[str]:
         - Seeing what models can be trained or used for predictions
         - Validating a model_type before starting training
     Do Not Use When:
-        - The user has asked specifically for 'annotators' or 'automated annotators' - use toktagger_get_annotator_types instead
-        - You need model training parameters - use toktagger_get_model_training_schema instead
-        - You need model prediction parameters - use toktagger_get_model_prediction_schema instead
+        - The user has asked specifically for 'annotators' or 'automated annotators' - use get_annotator_types instead
+        - You need model training parameters - use get_model_training_schema instead
+        - You need model prediction parameters - use get_model_prediction_schema instead
         - ML models are not enabled - this endpoint returns an error if ML is disabled
     Example User Requests:
         - "What ML models are available for time-series tasks?"
@@ -164,8 +164,8 @@ async def get_model_load_methods() -> list[str]:
         - You want to know which weight loading methods are configured and available
         - You are planning to load model weights and need to choose a method
     Do Not Use When:
-        - You want to actually load model weights - use toktagger_load_model_weights_local, toktagger_load_model_weights_gitlab, or toktagger_load_model_weights_hugging_face instead
-        - You need a list of available model types for the given project/task - use toktagger_get_model_types instead
+        - You want to actually load model weights - use load_model_weights_local, load_model_weights_gitlab, or load_model_weights_hugging_face instead
+        - You need a list of available model types for the given project/task - use get_model_types instead
         - ML models are not enabled - this endpoint returns an error if ML is disabled
     Example User Requests:
         - "What methods are available for loading model weights?"
@@ -213,8 +213,8 @@ async def get_model_load_method_allowlist(load_method: LoadMethods) -> str | Non
         - You need the GitLab project ID before calling the GitLab weights loader
         - You need the Hugging Face userspace/organization before loading from HuggingFace
     Do Not Use When:
-        - You want to load weights directly - use toktagger_load_model_weights_gitlab or toktagger_load_model_weights_hugging_face instead
-        - You need the list of enabled load methods - use toktagger_get_model_load_methods instead
+        - You want to load weights directly - use load_model_weights_gitlab or load_model_weights_hugging_face instead
+        - You need the list of enabled load methods - use get_model_load_methods instead
         - ML models are not enabled - this endpoint returns an error if ML is disabled
     Example User Requests:
         - "What GitLab projects can I load models from?"
@@ -261,8 +261,8 @@ async def get_model_training_schema(model: str) -> dict[str, typing.Any] | None:
         - You are about to start model training and need to know what parameters are required
         - You want to validate training parameters before calling the training endpoint
     Do Not Use When:
-        - You want to actually train a model - use toktagger_start_model_training instead
-        - You need prediction parameters - use toktagger_get_model_prediction_schema instead
+        - You want to actually train a model - use start_model_training instead
+        - You need prediction parameters - use get_model_prediction_schema instead
     Example User Requests:
         - "What parameters do I need to train a disruption CNN model?"
     """
@@ -297,8 +297,8 @@ async def get_model_prediction_schema(model: str) -> dict[str, typing.Any] | Non
         - You are about to create model predictions and need to know what parameters are required
         - You want to validate prediction parameters before calling the prediction endpoint
     Do Not Use When:
-        - You want to actually run predictions - use toktagger_create_model_predictions or toktagger_create_sample_model_predictions instead
-        - You need training parameters - use toktagger_get_model_training_schema instead
+        - You want to actually run predictions - use create_model_predictions or create_sample_model_predictions instead
+        - You need training parameters - use get_model_training_schema instead
     Example User Requests:
         - "What parameters do I need to run predictions with the disruption CNN model?"
     """

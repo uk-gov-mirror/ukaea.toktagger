@@ -177,11 +177,11 @@ async def get_sample_data_summary(
         - You are asked which signals are present in a sample's data
         - You are asked for max/min/number of points in the dataset for a signal
     Do Not Use When:
-        - You only need sample metadata (shot_id, validation status) - use toktagger_get_sample instead
-        - You need to see the schema of parameters for a given data loader - use toktagger_get_data_schema instead
+        - You only need sample metadata (shot_id, validation status) - use get_sample instead
+        - You need to see the schema of parameters for a given data loader - use get_data_schema instead
         - You need the raw signal values (e.g. plasma current, density) for a sample to analyse - use the Python client instead
-        - You want to analyse data / create annotations from built-in annotators, use toktagger_create_automated_sample_annotations instead
-        - You want to analyse data / create predictions from an ML model - use toktagger_create_model_predictions or toktagger_create_sample_model_predictions instead
+        - You want to analyse data / create annotations from built-in annotators, use create_automated_sample_annotations instead
+        - You want to analyse data / create predictions from an ML model - use create_model_predictions or create_sample_model_predictions instead
     Example User Requests:
         - "What does the data in this project/sample look like?"
         - "How many signals are present in the data for this project/sample?"

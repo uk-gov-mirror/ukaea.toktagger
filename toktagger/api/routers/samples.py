@@ -82,9 +82,9 @@ async def get_samples(
         - You want to find a sample by its shot ID
         - You need sample metadata (shot_id, data, validated status) without fetching data content
     Do Not Use When:
-        - You only need summary info, such as the number of samples in a project - use toktagger_get_samples_summary instead
-        - You need the next sample to annotate - use toktagger_get_next_sample instead
-        - You need information about diagnostic signal/data values - use toktagger_get_sample_data_summary instead
+        - You only need summary info, such as the number of samples in a project - use get_samples_summary instead
+        - You need the next sample to annotate - use get_next_sample instead
+        - You need information about diagnostic signal/data values - use get_sample_data_summary instead
     Example User Requests:
         - "Show me all samples in this project"
         - "Has shot 30421 been validated?"
@@ -145,8 +145,8 @@ async def add_samples(
         - You are bulk-importing samples from a data source or external list
         - You want to add samples and pre-populate them with human annotations
     Do Not Use When:
-        - You are updating existing samples - use toktagger_update_samples instead
-        - The project does not exist - verify with toktagger_get_projects first
+        - You are updating existing samples - use update_samples instead
+        - The project does not exist - verify with get_projects first
     Example User Requests:
         - "Add shots 30400 to 30500 from UDA to the project"
         - "Add samples from my local directory of files at /path/to/my/files"
@@ -273,7 +273,7 @@ async def update_samples(
     Use When:
         - You need to mark sample(s) as validated after human annotation
     Do Not Use When:
-        - You are creating new samples - use toktagger_add_samples instead
+        - You are creating new samples - use add_samples instead
     Example User Requests:
         - "Mark these samples as validated"
     """
@@ -347,9 +347,9 @@ async def get_next_sample(
         - You want the system to pick samples according to the project's query strategy
         - You are iterating through all samples in a project for annotation
     Do Not Use When:
-        - You need more than one sample at once - use toktagger_get_samples instead
-        - You already know the sample you want - use toktagger_get_samples instead
-        - You need information about diagnostic data from the sample - use toktagger_get_sample_data_summary instead
+        - You need more than one sample at once - use get_samples instead
+        - You already know the sample you want - use get_samples instead
+        - You need information about diagnostic data from the sample - use get_sample_data_summary instead
     Example User Requests:
         - "What's the next sample I need to annotate?"
         - "Give me the next unvalidated sample in this project"
@@ -411,8 +411,8 @@ async def get_sample_summary(
         - You want to check the shot ID range
         - You need sample data type information for a project overview
     Do Not Use When:
-        - You need individual sample details - use toktagger_get_samples instead
-        - You need information about actual diagnostic data - use toktagger_get_sample_data_summary instead
+        - You need individual sample details - use get_samples instead
+        - You need information about actual diagnostic data - use get_sample_data_summary instead
     Example User Requests:
         - "How many samples does this project have?"
         - "Show me the shot ID range for this project"

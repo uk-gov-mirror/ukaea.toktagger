@@ -71,7 +71,7 @@ async def get_projects(
         - You need a project _id to use with other endpoints
         - You want to list projects for auditing or summary purposes
     Do Not Use When:
-        - You need project samples - use toktagger_get_samples instead
+        - You need project samples - use get_samples instead
     Example User Requests:
         - "What projects are available?"
         - "Show me all projects named Disruption"
@@ -121,7 +121,7 @@ async def create_project(request: Request, project: ProjectIn):
         - You are setting up a new annotation workflow for a dataset
         - You are preparing to add samples and annotations
     Do Not Use When:
-        - The project already exists and you wish to update it - use toktagger_update_project instead
+        - The project already exists and you wish to update it - use update_project instead
     Example User Requests:
         - "Create a new time-series annotation project"
         - "Set up a video project with UFO bounding box labels"
@@ -216,7 +216,7 @@ async def update_project(
         - You want to add or remove model types from a project
         - You are updating project metadata (time windows, query strategy, etc.)
     Do Not Use When:
-        - You are creating a new project - use toktagger_create_project instead
+        - You are creating a new project - use create_project instead
     Example User Requests:
         - "Update the label set for this project"
         - "Change the query strategy for this project to sequential"
