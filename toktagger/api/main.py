@@ -158,28 +158,33 @@ class Server:
         self._api_app.include_router(meta_router)
         self._api_app.include_router(base_router)
 
-        self._mcp_app = FastMCP.from_fastapi(
-            self._api_app,
-            name="toktagger",
-            instructions=INSTRUCTIONS,
-            route_maps=[
-                # Tagged routers turned into tools
-                RouteMap(
-                    pattern=r"/.*",
-                    tags={"MCP"},
-                    mcp_type=MCPType.TOOL,
-                ),
-                # Routers without MCP tag are excluded
-                RouteMap(
-                    pattern=r".*",
-                    mcp_type=MCPType.EXCLUDE,
-                ),
-            ],
-        )
+        if config.settings.server.mcp_enabled:
+            self._mcp_app = FastMCP.from_fastapi(
+                self._api_app,
+                name="toktagger",
+                instructions=INSTRUCTIONS,
+                route_maps=[
+                    # Tagged routers turned into tools
+                    RouteMap(
+                        pattern=r"/.*",
+                        tags={"MCP"},
+                        mcp_type=MCPType.TOOL,
+                    ),
+                    # Routers without MCP tag are excluded
+                    RouteMap(
+                        pattern=r".*",
+                        mcp_type=MCPType.EXCLUDE,
+                    ),
+                ],
+            )
 
-        mcp_http_app = self._mcp_app.http_app("/")
-
-        self.app = FastAPI(lifespan=combine_lifespans(lifespan, mcp_http_app.lifespan))
+            mcp_http_app = self._mcp_app.http_app("/")
+            self.app = FastAPI(
+                lifespan=combine_lifespans(lifespan, mcp_http_app.lifespan)
+            )
+        else:
+            self._mcp_app = None
+            self.app = FastAPI(lifespan=lifespan)
 
         # Allow requests from the frontend dev server
         origins = [
@@ -202,8 +207,11 @@ class Server:
             StaticFiles(directory=self.frontend_path / "assets"),
             name="assets",
         )
+
+        if config.settings.server.mcp_enabled:
+            self.app.mount("/mcp", mcp_http_app)
+
         self.app.include_router(self._api_app.router)
-        self.app.mount("/mcp", mcp_http_app)
 
     def run(self, host: str | None = None, port: int | None = None):
         """

@@ -1,5 +1,6 @@
 import pytest
 from fastmcp.exceptions import ToolError
+from toktagger.api.routers.mcp import INSTRUCTIONS
 
 
 @pytest.mark.asyncio
@@ -68,6 +69,16 @@ async def test_tool_descriptions(mcp_client):
         assert "Use When" in tool.description
         assert "Do Not Use When" in tool.description
         assert "Example User Requests" in tool.description
+
+
+@pytest.mark.asyncio
+async def test_server_instructions(mcp_client):
+    """Top level server instructions should be available to the client."""
+    assert mcp_client.server_info.name == "toktagger"
+
+    instructions = mcp_client.instructions
+    assert instructions is not None
+    assert instructions == INSTRUCTIONS
 
 
 @pytest.mark.asyncio
