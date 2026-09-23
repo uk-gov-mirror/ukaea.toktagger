@@ -659,12 +659,12 @@ def test_timeseries_model_predict(
         model_predict.get_by_role("switch", name="Enable Tool").click()
     expect(page.get_by_role("switch", name="Allocate GPU")).to_be_visible()
 
-    # Choose the trained model by the name it was given
+    # Choose the trained model by the name and version it was given
     model_predict.get_by_role(
         "combobox", name="Select Model"
     ).scroll_into_view_if_needed()
     model_predict.get_by_role("button", name="Show suggestions Select Model").click()
-    page.get_by_role("option", name=model_name, exact=True).click()
+    page.get_by_role("option", name=f"{model_name} (v1)", exact=True).click()
 
     # If params model chosen, new form should open
     if model_name == "mock_params_timeseries_cnn":
