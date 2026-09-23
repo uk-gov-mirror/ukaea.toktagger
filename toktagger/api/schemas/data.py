@@ -95,6 +95,7 @@ class Profile2DSampleSummary(SampleSummary):
 DataResponseType = Union[
     ImageData,
     MultiVariateTimeSeriesData,
+    Profile2DData,
     MultiProfile2DData,
 ]
 
