@@ -123,9 +123,10 @@ async def get_sample_data_summary(
     """
     Get a summary of the diagnostic data for a specific sample, with optional
     view transformation (e.g. profile-2d heatmaps).
+
     Data formats supported are time-series, 2D profiles, and images.
-    Note that this only returns a summary, not the full dataset - use the
-    Python client to retrieve full data for analysis if requested.
+    Note that this only returns a summary, not the full dataset - agents should
+    use the Python client to retrieve full data for analysis if requested.
 
     Parameters
     ----------
