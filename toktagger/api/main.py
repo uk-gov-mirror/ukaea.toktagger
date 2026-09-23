@@ -146,20 +146,20 @@ class Server:
                     "In testing mode, cache directories must be in temp directory!"
                 )
 
-        api_app = FastAPI()
+        self._api_app = FastAPI()
 
-        api_app.include_router(annotations_router)
-        api_app.include_router(data_router)
-        api_app.include_router(models_router)
-        api_app.include_router(projects_router)
-        api_app.include_router(samples_router)
-        api_app.include_router(annotators_router)
-        api_app.include_router(paths_router)
-        api_app.include_router(meta_router)
-        api_app.include_router(base_router)
+        self._api_app.include_router(annotations_router)
+        self._api_app.include_router(data_router)
+        self._api_app.include_router(models_router)
+        self._api_app.include_router(projects_router)
+        self._api_app.include_router(samples_router)
+        self._api_app.include_router(annotators_router)
+        self._api_app.include_router(paths_router)
+        self._api_app.include_router(meta_router)
+        self._api_app.include_router(base_router)
 
-        mcp = FastMCP.from_fastapi(
-            api_app,
+        self._mcp_app = FastMCP.from_fastapi(
+            self._api_app,
             name="toktagger",
             instructions=INSTRUCTIONS,
             route_maps=[
@@ -177,9 +177,9 @@ class Server:
             ],
         )
 
-        self.mcp_app = mcp.http_app("/")
+        mcp_http_app = self._mcp_app.http_app("/")
 
-        self.app = FastAPI(lifespan=combine_lifespans(lifespan, self.mcp_app.lifespan))
+        self.app = FastAPI(lifespan=combine_lifespans(lifespan, mcp_http_app.lifespan))
 
         # Allow requests from the frontend dev server
         origins = [
@@ -202,8 +202,8 @@ class Server:
             StaticFiles(directory=self.frontend_path / "assets"),
             name="assets",
         )
-        self.app.include_router(api_app.router)
-        self.app.mount("/mcp", self.mcp_app)
+        self.app.include_router(self._api_app.router)
+        self.app.mount("/mcp", mcp_http_app)
 
     def run(self, host: str | None = None, port: int | None = None):
         """
