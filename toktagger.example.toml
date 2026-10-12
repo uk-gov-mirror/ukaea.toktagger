@@ -39,14 +39,20 @@
 # URL at which users reach TokTagger, used for the OpenID Connect redirect URI. If unset, it is http://<server.host>:<server.port>.
 # public_url = '<your value here>'
 
-# Maximum age of a browser session in seconds. After this time the user must sign in again. Sign-in reads the global role from the provider again.
-# session_max_age_seconds = 43200
+# Time in seconds after which a browser session with no requests ends. The provider can end the session earlier, when its refresh token expires.
+# session_idle_timeout_seconds = 86400
+
+# Time in seconds after which a browser session reads the account from the provider again. A change to the global role or a disabled account at the provider takes effect within this time.
+# session_refresh_seconds = 300
 
 # Whether to require the client_id in the audience of provider access tokens sent as Bearer tokens.
 # verify_bearer_audience = true
 
 # Port for the managed Canaille server. Only used when provider is canaille.
 # canaille_port = 8003
+
+# Address the managed Canaille server listens on. The default accepts local connections only. To let other computers reach Canaille, put a reverse proxy in front of it or set this to 0.0.0.0, and set canaille_public_url. Only used when provider is canaille.
+# canaille_bind_host = '127.0.0.1'
 
 # URL at which the browser reaches the managed Canaille server, and the issuer URL. If unset, it is http://<server.host>:<canaille_port>. Only used when provider is canaille.
 # canaille_public_url = '<your value here>'
