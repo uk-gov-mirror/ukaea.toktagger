@@ -3,8 +3,6 @@
 import React, { createContext, useCallback, useContext, useState } from "react";
 import type { ActiveDrawingTool } from "@/app/video/components/types";
 
-export type VideoTableScope = "all" | "frame";
-
 type VideoUiStateContextType = {
   videoPropagate: boolean;
   setVideoPropagate: (value: boolean) => void;
@@ -14,8 +12,6 @@ type VideoUiStateContextType = {
   setVideoEditMode: (value: boolean) => void;
   videoDrawingTool: ActiveDrawingTool;
   setVideoDrawingTool: (value: ActiveDrawingTool) => void;
-  videoTableScope: VideoTableScope;
-  setVideoTableScope: (value: VideoTableScope) => void;
 };
 
 const VideoUiStateContext = createContext<VideoUiStateContextType | undefined>(
@@ -27,7 +23,6 @@ const videoUiStateSnapshot = {
   videoLastClassName: null as string | null,
   videoEditMode: false,
   videoDrawingTool: null as ActiveDrawingTool,
-  videoTableScope: "all" as VideoTableScope,
 };
 
 export function VideoUiStateProvider({
@@ -46,9 +41,6 @@ export function VideoUiStateProvider({
   );
   const [videoDrawingTool, setVideoDrawingToolState] =
     useState<ActiveDrawingTool>(() => videoUiStateSnapshot.videoDrawingTool);
-  const [videoTableScope, setVideoTableScopeState] = useState(
-    () => videoUiStateSnapshot.videoTableScope,
-  );
 
   const setVideoPropagate = useCallback((value: boolean) => {
     videoUiStateSnapshot.videoPropagate = value;
@@ -70,11 +62,6 @@ export function VideoUiStateProvider({
     setVideoDrawingToolState(value);
   }, []);
 
-  const setVideoTableScope = useCallback((value: VideoTableScope) => {
-    videoUiStateSnapshot.videoTableScope = value;
-    setVideoTableScopeState(value);
-  }, []);
-
   return (
     <VideoUiStateContext.Provider
       value={{
@@ -86,8 +73,6 @@ export function VideoUiStateProvider({
         setVideoEditMode,
         videoDrawingTool,
         setVideoDrawingTool,
-        videoTableScope,
-        setVideoTableScope,
       }}
     >
       {children}

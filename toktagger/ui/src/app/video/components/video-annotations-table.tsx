@@ -30,7 +30,7 @@ import {
   PolygonMarker,
 } from "@/app/components/ui/annotationMarkers";
 import { useSample } from "@/app/contexts/SampleContext";
-import { useVideoUiState, VideoTableScope } from "@/app/contexts/VideoContext";
+import { useVideoUiState } from "@/app/contexts/VideoContext";
 import {
   InstanceProfile,
   makeTrackKey,
@@ -48,6 +48,8 @@ const VIDEO_MARKER_ICONS: Record<
   [VideoAnnotationType.POINT]: PointMarker,
   [VideoAnnotationType.FRAME_LABEL]: FrameLabelMarker,
 };
+
+type VideoTableScope = "all" | "frame";
 
 type TableRow = { id: string; instance: InstanceProfile };
 
@@ -101,22 +103,23 @@ function useSelectInstance() {
   };
 }
 
-// Separate component because Spectrum caches rows by item, so editMode and scope must be read here to stay fresh
+// Separate component because Spectrum caches rows by item, so editMode must be read here to stay fresh
 const VideoRowActions = ({
   instance,
+  scope,
   onRequestDelete,
 }: {
   instance: InstanceProfile;
+  scope: VideoTableScope;
   onRequestDelete: (instance: InstanceProfile) => void;
 }) => {
   const { editMode, deleteInstanceOnCurrentFrame } = useVideoSession();
-  const { videoTableScope } = useVideoUiState();
   const { setDataParams } = useSample();
   const selectInstance = useSelectInstance();
 
   const jumpToAnnotation = () => {
     // In This Frame scope jumping to the first frame would navigate away and drop the row
-    if (videoTableScope === "frame") {
+    if (scope === "frame") {
       selectInstance(instance, { onlyIfOnCurrentFrame: true });
       return;
     }
@@ -127,7 +130,7 @@ const VideoRowActions = ({
   };
 
   const deleteAnnotation = () =>
-    videoTableScope === "frame"
+    scope === "frame"
       ? deleteInstanceOnCurrentFrame(instance.className, instance.trackId)
       : onRequestDelete(instance);
 
@@ -160,8 +163,8 @@ const VideoRowActions = ({
 
 export const VideoAnnotationsTable = () => {
   const session = useVideoSession();
-  const { videoTableScope, setVideoTableScope } = useVideoUiState();
   const selectInstance = useSelectInstance();
+  const [scope, setScope] = useState<VideoTableScope>("all");
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
@@ -171,8 +174,7 @@ export const VideoAnnotationsTable = () => {
       session.instances
         .filter(
           (instance) =>
-            videoTableScope === "all" ||
-            instance.frames.includes(session.frame),
+            scope === "all" || instance.frames.includes(session.frame),
         )
         .map((instance) => ({
           id: makeTrackKey(
@@ -181,7 +183,7 @@ export const VideoAnnotationsTable = () => {
           ),
           instance,
         })),
-    [session.instances, session.frame, videoTableScope],
+    [session.instances, session.frame, scope],
   );
 
   const { className, trackId } = session.selection;
@@ -201,8 +203,7 @@ export const VideoAnnotationsTable = () => {
     selectInstance(row.instance, { onlyIfOnCurrentFrame: true });
   };
 
-  const dialogText =
-    pendingDelete && deleteDialogText(pendingDelete, videoTableScope);
+  const dialogText = pendingDelete && deleteDialogText(pendingDelete, scope);
 
   const confirmDelete = () => {
     if (pendingDelete?.kind === "instance") {
@@ -210,7 +211,7 @@ export const VideoAnnotationsTable = () => {
         pendingDelete.instance.className,
         pendingDelete.instance.trackId,
       );
-    } else if (videoTableScope === "all") {
+    } else if (scope === "all") {
       session.clearAllFrames();
     } else {
       session.clearCurrentFrame();
@@ -231,10 +232,10 @@ export const VideoAnnotationsTable = () => {
           aria-label="Annotations scope"
           selectionMode="single"
           disallowEmptySelection
-          selectedKeys={[videoTableScope]}
+          selectedKeys={[scope]}
           onSelectionChange={(keys) => {
             const key = keys === "all" ? undefined : Array.from(keys)[0];
-            if (isTableScope(key)) setVideoTableScope(key);
+            if (isTableScope(key)) setScope(key);
           }}
         >
           <Item key="all">All Frames</Item>
@@ -291,6 +292,7 @@ export const VideoAnnotationsTable = () => {
                 <Cell>
                   <VideoRowActions
                     instance={instance}
+                    scope={scope}
                     onRequestDelete={(target) =>
                       setPendingDelete({ kind: "instance", instance: target })
                     }
