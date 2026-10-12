@@ -37,6 +37,13 @@ def get_internal_token() -> str:
     return _internal_token
 
 
+def write_private_file(path: Path, content: str) -> None:
+    """Write content to a file that only the owner can read or write."""
+    descriptor = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w") as handle:
+        handle.write(content)
+
+
 def _read_or_create_secret(cache_dir: Path) -> str:
     """Return the persisted signing key, generating it on first use."""
     key_file = cache_dir / "secret.key"
@@ -51,9 +58,7 @@ def _read_or_create_secret(cache_dir: Path) -> str:
             return key_file.read_text().strip()
         secret = secrets.token_hex(32)
         # 0600 because this key signs every session cookie.
-        fd = os.open(key_file, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w") as handle:
-            handle.write(secret)
+        write_private_file(key_file, secret)
         return secret
 
 

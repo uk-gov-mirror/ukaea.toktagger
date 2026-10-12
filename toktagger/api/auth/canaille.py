@@ -19,6 +19,7 @@ from filelock import FileLock
 from joserfc.jwk import RSAKey
 
 from toktagger.api import config
+from toktagger.api.auth.core import write_private_file
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +58,6 @@ PREFERRED_USERNAME = "{{{{ user.user_name }}}}"
 
 def _toml_inline_table(values: dict[str, str]) -> str:
     return "{" + ", ".join(f'{key} = "{value}"' for key, value in values.items()) + "}"
-
-
-def _write_private_file(path: Path, content: str) -> None:
-    descriptor = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w") as handle:
-        handle.write(content)
 
 
 def _canaille_executable() -> Path:
@@ -107,7 +102,7 @@ class ManagedCanaille:
             "secret_key": secrets.token_hex(32),
             "jwk": RSAKey.generate_key(2048, auto_kid=True).as_dict(private=True),
         }
-        _write_private_file(self.keys_path, json.dumps(keys))
+        write_private_file(self.keys_path, json.dumps(keys))
         return keys
 
     def _render_config(self) -> None:
@@ -123,7 +118,7 @@ class ManagedCanaille:
             jwk=_toml_inline_table(keys["jwk"]),  # type: ignore[arg-type]
             trusted_domain=public.hostname,
         )
-        _write_private_file(self.config_path, content)
+        write_private_file(self.config_path, content)
 
     def _client_arguments(self) -> list[str]:
         public_url = config.settings.public_url
@@ -165,7 +160,7 @@ class ManagedCanaille:
             *self._client_arguments(),
         )
         self._cli("set", "client", auth.client_id, "--audience", auth.client_id)
-        _write_private_file(
+        write_private_file(
             self.client_path,
             json.dumps(
                 {
@@ -207,7 +202,7 @@ class ManagedCanaille:
             return
         self._cli("set", "client", record["client_id"], *self._client_arguments())
         record["public_url"] = public_url
-        _write_private_file(self.client_path, json.dumps(record))
+        write_private_file(self.client_path, json.dumps(record))
 
     def create_user(
         self,
