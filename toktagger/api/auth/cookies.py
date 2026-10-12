@@ -27,7 +27,8 @@ def _cookie_secure(request: Request) -> bool:
 def session_seconds_left(auth_time: int) -> int:
     """Seconds until a session that started at `auth_time` reaches its maximum age."""
     max_age = config.settings.auth.session_max_age_seconds
-    return auth_time + max_age - int(time.time())
+    elapsed = int(time.time()) - auth_time
+    return max_age - elapsed
 
 
 def set_session_cookies(
