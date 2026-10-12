@@ -84,13 +84,14 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 def decode_token_with_age(token: str) -> tuple[dict, float]:
     """Decode a token, returning its payload and how long ago it was issued."""
     try:
-        payload, issued_at = _get_serializer().loads(
+        decoded: tuple[dict, datetime] = _get_serializer().loads(
             token, max_age=ACCESS_TOKEN_EXPIRE_SECONDS, return_timestamp=True
         )
     except SignatureExpired:
         raise ValueError("Token has expired")
     except BadSignature:
         raise ValueError("Invalid token")
+    payload, issued_at = decoded
     age = (datetime.now(timezone.utc) - issued_at).total_seconds()
     return payload, age
 
