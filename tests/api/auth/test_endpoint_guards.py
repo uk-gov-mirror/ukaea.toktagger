@@ -21,7 +21,8 @@ import typing
 import pytest
 from httpx import AsyncClient
 
-from tests.api.auth.conftest import add_member, get_auth_token
+from tests.api.auth.conftest import add_member
+from tests.identity import get_auth_token, session_headers
 
 Role = typing.Literal[
     "unauthenticated",
@@ -48,7 +49,7 @@ async def _get_role_token(
     project_id: str,
     role: Role,
 ) -> str | None:
-    """Return a bearer token for `role` on `project_id` (None for unauthenticated)."""
+    """Return a session token for `role` on `project_id` (None for unauthenticated)."""
     if role == "unauthenticated":
         return None
     if role == "global_admin":
@@ -343,7 +344,7 @@ async def test_permission_matrix(
         # Valid ObjectId shape, guaranteed not to exist.
         missing_id="0" * 24,
     )
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    headers = session_headers(token) if token else {}
     kwargs = {"headers": headers}
     if action.body is not None:
         kwargs["json"] = action.body(project_id, sample_id)

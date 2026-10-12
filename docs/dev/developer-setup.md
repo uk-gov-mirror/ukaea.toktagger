@@ -88,5 +88,5 @@ the token it holds.
 The browser sends its session in an httpOnly cookie, and requests that change data must
 also carry a matching `X-CSRF-Token` header. The Swagger UI at `/docs` does not send that
 header, so a `POST`, `PUT` or `DELETE` tried from there while you are signed in to the SPA
-is rejected with a 403. Click **Authorize** in Swagger first and it sends a bearer token
-instead, which needs no CSRF header.
+is rejected with a 403. Click **Authorize** in Swagger first and paste an access token from
+the identity provider. Swagger then sends it as a bearer token, which needs no CSRF header.

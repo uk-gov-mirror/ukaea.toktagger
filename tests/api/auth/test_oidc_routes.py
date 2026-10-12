@@ -16,7 +16,8 @@ from tests.api.auth.conftest import (
 )
 from toktagger.api import config
 from toktagger.api.auth import oidc
-from toktagger.api.auth.core import create_access_token, get_internal_token
+from tests.identity import get_auth_token
+from toktagger.api.auth.core import get_internal_token
 from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
 
 
@@ -486,13 +487,14 @@ async def test_idp_token_in_the_cookie_is_not_accepted(
 
 
 @pytest.mark.asyncio
-async def test_toktagger_session_token_still_works_as_a_bearer(
-    api_client, oidc_settings
+async def test_toktagger_session_token_is_401_as_a_bearer_with_an_idp(
+    unauthenticated_api_client, setup_db_auth, oidc_settings, jwks_route
 ):
-    resp = await api_client.get("/auth/me")
+    resp = await unauthenticated_api_client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {get_auth_token('admin')}"}
+    )
 
-    assert resp.status_code == 200
-    assert resp.json()["username"] == "admin"
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -511,19 +513,6 @@ async def test_internal_token_still_works_with_an_idp_registered(
 async def test_garbage_bearer_is_401_without_an_idp(unauthenticated_api_client):
     resp = await unauthenticated_api_client.get(
         "/auth/me", headers={"Authorization": "Bearer not-a-token"}
-    )
-
-    assert resp.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_forged_toktagger_token_is_401_with_an_idp(
-    unauthenticated_api_client, oidc_settings, jwks_route
-):
-    forged = create_access_token({"sub": "ghost"})
-
-    resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {forged}"}
     )
 
     assert resp.status_code == 401

@@ -10,7 +10,8 @@ import pytest
 from fastapi import Response
 from starlette.requests import Request
 
-from tests.api.auth.conftest import END_SESSION_URL, get_auth_token, sign_in
+from tests.api.auth.conftest import END_SESSION_URL, sign_in
+from tests.identity import get_auth_token, session_headers
 from toktagger.api.auth import dependencies, oidc
 from toktagger.api.auth.core import (
     create_access_token,
@@ -187,27 +188,12 @@ async def test_header_auth_skips_csrf(setup_db_auth, unauthenticated_api_client)
     scripts and most of this suite. A header cannot be attached by a cross-site caller,
     so it needs no CSRF cover — do not "tighten" this into requiring one for everybody.
     """
-    token = get_auth_token("admin")
-
     resp = await unauthenticated_api_client.delete(
         f"/projects/{setup_db_auth['project_id']}",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
     assert resp.status_code == 200, resp.text
-
-
-@pytest.mark.asyncio
-async def test_header_beats_ambient_cookie(setup_db_auth, unauthenticated_api_client):
-    """An explicit bearer header wins over whatever session the client happens to hold."""
-    alice_token = get_auth_token("alice")
-    await login(unauthenticated_api_client, "admin")
-
-    resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {alice_token}"}
-    )
-
-    assert resp.json()["username"] == "alice"
 
 
 @pytest.mark.asyncio
@@ -289,10 +275,8 @@ async def test_bearer_caller_is_never_renewed(
     setup_db_auth, unauthenticated_api_client, renewal_due
 ):
     """Scripts and Ray callbacks hold their own token; handing them a cookie is wrong."""
-    token = get_auth_token("admin")
-
     resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {token}"}
+        "/auth/me", headers={"Authorization": f"Bearer {get_internal_token()}"}
     )
 
     assert resp.status_code == 200, resp.text
@@ -328,12 +312,12 @@ async def test_session_of_a_deleted_user_is_401(
 
     resp = await unauthenticated_api_client.delete(
         f"/users/{setup_db_auth['alice_id']}",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     assert resp.status_code == 200, resp.text
 
     resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {alice_token}"}
+        "/auth/me", headers=session_headers(alice_token)
     )
     assert resp.status_code == 401, resp.text
 
@@ -349,12 +333,12 @@ async def test_session_of_a_deactivated_user_is_401(
     resp = await unauthenticated_api_client.put(
         f"/users/{setup_db_auth['alice_id']}",
         json={"is_active": False},
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     assert resp.status_code == 200, resp.text
 
     resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {alice_token}"}
+        "/auth/me", headers=session_headers(alice_token)
     )
     assert resp.status_code == 401, resp.text
 
@@ -405,15 +389,15 @@ async def test_fresh_cookie_past_the_maximum_session_age_is_401(
 
 
 @pytest.mark.asyncio
-async def test_bearer_session_token_has_no_maximum_session_age(
+async def test_session_token_is_not_accepted_as_a_bearer(
     setup_db_auth, unauthenticated_api_client
 ):
-    """Scripts hold a non-sliding token that expires on its own, so the cap is not applied."""
+    """As a bearer, a session token would skip the CSRF check and the maximum session age."""
     resp = await unauthenticated_api_client.get(
         "/auth/me", headers={"Authorization": f"Bearer {get_auth_token('admin')}"}
     )
 
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio

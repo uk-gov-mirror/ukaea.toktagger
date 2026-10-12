@@ -11,7 +11,8 @@ Tests for model × auth interactions:
 
 import pytest
 
-from tests.api.auth.conftest import ISSUER, get_auth_token
+from tests.api.auth.conftest import ISSUER
+from tests.identity import get_auth_token, session_headers
 from toktagger.api.auth import oidc
 from toktagger.api.auth.core import get_internal_token
 from toktagger.api.schemas.users import UserIn
@@ -82,21 +83,21 @@ async def test_import_non_admin_created_by_overwritten(
     await client.post(
         f"/projects/{project_id}/members",
         json={"username": "alice", "role": "annotator"},
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     alice_token = get_auth_token("alice")
 
     resp = await client.put(
         f"/projects/{project_id}/annotations",
         json=annotation_payload(created_by="bob"),
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200
 
     # Verify: annotation stored as alice, not bob
     get_resp = await client.get(
         f"/projects/{project_id}/annotations",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     assert get_resp.status_code == 200
     annotations = get_resp.json()
@@ -117,13 +118,13 @@ async def test_import_admin_is_attributed_as_self(
     resp = await client.put(
         f"/projects/{project_id}/annotations",
         json=annotation_payload(created_by="alice"),
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     assert resp.status_code == 200
 
     get_resp = await client.get(
         f"/projects/{project_id}/annotations",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     annotations = get_resp.json()
     assert len(annotations) == 1
@@ -149,7 +150,7 @@ async def test_internal_token_preserves_arbitrary_created_by(
 
     get_resp = await client.get(
         f"/projects/{project_id}/annotations",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     annotations = get_resp.json()
     assert len(annotations) == 1
@@ -234,7 +235,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
     await client.post(
         f"/projects/{project_id}/members",
         json={"username": matching_name, "role": "annotator"},
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     human_token = get_auth_token(matching_name)
     save_resp = await client.put(
@@ -249,7 +250,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
                 "created_by": "placeholder",
             }
         ],
-        headers={"Authorization": f"Bearer {human_token}"},
+        headers=session_headers(human_token),
     )
     assert save_resp.status_code == 200
 
@@ -257,7 +258,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
     # prefix provides complete namespace separation.
     get_resp = await client.get(
         f"/projects/{project_id}/annotations",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     annotations = get_resp.json()
     labels_by_author = {a["created_by"]: a["label"] for a in annotations}
@@ -280,7 +281,7 @@ async def test_import_preserves_machine_created_by(
     await client.post(
         f"/projects/{project_id}/members",
         json={"username": "alice", "role": "annotator"},
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     alice_token = get_auth_token("alice")
 
@@ -289,13 +290,13 @@ async def test_import_preserves_machine_created_by(
         json=annotation_payload(created_by="model::disruption_cnn")
         + annotation_payload(label="suggested", created_by="annotators::peak_detection")
         + annotation_payload(label="hand_drawn", created_by="bob"),
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
     get_resp = await client.get(
         f"/projects/{project_id}/annotations",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     authors = sorted(a["created_by"] for a in get_resp.json())
     assert authors == [

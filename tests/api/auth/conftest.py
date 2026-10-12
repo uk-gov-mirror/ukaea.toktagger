@@ -7,9 +7,9 @@ from httpx import AsyncClient
 from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
 
+from tests.identity import session_headers
 from toktagger.api import config
 from toktagger.api.auth import oidc
-from toktagger.api.auth.core import create_access_token
 
 ISSUER = "https://idp.example.com/realms/toktagger"
 JWKS_URL = f"{ISSUER}/protocol/openid-connect/certs"
@@ -112,15 +112,6 @@ def mint_token(key: RSAKey, **overrides) -> str:
     return jwt.encode({"alg": "RS256", "kid": key.kid}, claims, key)
 
 
-def get_auth_token(username: str) -> str:
-    """A TokTagger session token for an existing user, sent as a bearer header.
-
-    Callers share one client across identities and pass the token per request, so the
-    client's cookie jar stays empty. Cookie auth is covered in test_cookie_auth.py.
-    """
-    return create_access_token({"sub": username})
-
-
 async def add_member(
     client: AsyncClient, token: str, project_id: str, username: str, role: str
 ) -> None:
@@ -128,6 +119,6 @@ async def add_member(
     resp = await client.post(
         f"/projects/{project_id}/members",
         json={"username": username, "role": role},
-        headers={"Authorization": f"Bearer {token}"},
+        headers=session_headers(token),
     )
     assert resp.status_code == 200, resp.text

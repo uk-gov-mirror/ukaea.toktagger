@@ -13,10 +13,8 @@ import asyncio
 
 import pytest
 
-from tests.api.auth.conftest import (
-    add_member,
-    get_auth_token,
-)
+from tests.api.auth.conftest import add_member
+from tests.identity import get_auth_token, session_headers
 
 
 def annotation_payload(label: str):
@@ -36,7 +34,7 @@ async def put_annotations(client, project_id, sample_id, token, label):
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=annotation_payload(label),
-        headers={"Authorization": f"Bearer {token}"},
+        headers=session_headers(token),
     )
     return resp
 
@@ -44,7 +42,7 @@ async def put_annotations(client, project_id, sample_id, token, label):
 async def get_annotations(client, project_id, sample_id, token):
     resp = await client.get(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=session_headers(token),
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -135,7 +133,7 @@ async def test_server_overwrites_created_by_from_jwt(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=spoofed,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200
 
@@ -169,7 +167,7 @@ async def test_show_others_annotations_filter(
     await client.put(
         f"/projects/{project_id}/members/{setup_db_auth['alice_id']}",
         json={"show_others_annotations": show_others},
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
 
     alice_view = await get_annotations(client, project_id, sample_id, alice_token)
@@ -205,7 +203,7 @@ async def test_non_member_cannot_get_annotations(
     bob_token = get_auth_token("bob")
     resp = await client.get(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
-        headers={"Authorization": f"Bearer {bob_token}"},
+        headers=session_headers(bob_token),
     )
     assert resp.status_code == 403
 
@@ -219,7 +217,7 @@ async def test_non_member_cannot_see_project_in_list(
     bob_token = get_auth_token("bob")
     resp = await client.get(
         "/projects",
-        headers={"Authorization": f"Bearer {bob_token}"},
+        headers=session_headers(bob_token),
     )
     assert resp.status_code == 200
     assert resp.json() == []
@@ -238,7 +236,7 @@ async def test_member_can_see_project_in_list(
     alice_token = get_auth_token("alice")
     resp = await client.get(
         "/projects",
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200
     project_ids = [p["_id"] for p in resp.json()]
@@ -271,7 +269,7 @@ async def test_save_preserves_model_created_by(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=prediction,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200
 
@@ -304,7 +302,7 @@ async def test_save_returns_every_updated_annotation_id(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -341,7 +339,7 @@ async def test_edit_to_model_prediction_is_persisted(
                 "created_by": "model::changepoint_detection",
             }
         ],
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -355,7 +353,7 @@ async def test_edit_to_model_prediction_is_persisted(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -395,7 +393,7 @@ async def test_save_does_not_duplicate_or_reattribute_others_annotation(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200
 
@@ -447,7 +445,7 @@ async def test_annotator_can_edit_another_users_annotation(
                 "created_by": "model::changepoint_detection",
             },
         ],
-        headers={"Authorization": f"Bearer {bob_token}"},
+        headers=session_headers(bob_token),
     )
 
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
@@ -463,7 +461,7 @@ async def test_annotator_can_edit_another_users_annotation(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -505,7 +503,7 @@ async def test_edit_survives_owner_resave_between_load_and_save(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=bobs_view,
-        headers={"Authorization": f"Bearer {bob_token}"},
+        headers=session_headers(bob_token),
     )
     assert resp.status_code == 200, resp.text
     assert resp.json() == [loaded[0]["_id"]], "a re-save must keep the stored _id"
@@ -515,7 +513,7 @@ async def test_edit_survives_owner_resave_between_load_and_save(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -549,7 +547,7 @@ async def test_edit_to_deleted_annotation_is_rejected(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=[],
-        headers={"Authorization": f"Bearer {bob_token}"},
+        headers=session_headers(bob_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -557,7 +555,7 @@ async def test_edit_to_deleted_annotation_is_rejected(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=[*loaded, *annotation_payload("alice_ann")],
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 409, resp.text
     assert resp.json()["detail"]["stale_ids"] == [loaded[0]["_id"]]
@@ -594,7 +592,7 @@ async def test_editing_others_annotation_does_not_delete_their_other_annotations
             }
             for i in range(3)
         ],
-        headers={"Authorization": f"Bearer {bob_token}"},
+        headers=session_headers(bob_token),
     )
 
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
@@ -606,7 +604,7 @@ async def test_editing_others_annotation_does_not_delete_their_other_annotations
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=[target],
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -640,7 +638,7 @@ async def test_annotator_can_delete_another_users_annotation(
 
     resp = await client.delete(
         f"/projects/{project_id}/samples/{sample_id}/annotations/{bobs_annotation['_id']}",
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -650,7 +648,7 @@ async def test_annotator_can_delete_another_users_annotation(
     # Deleting it again is a 404, not a silent success.
     repeat = await client.delete(
         f"/projects/{project_id}/samples/{sample_id}/annotations/{bobs_annotation['_id']}",
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert repeat.status_code == 404
 
@@ -687,14 +685,14 @@ async def test_cross_project_annotation_edit_is_scoped_out(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=[{**foreign, "label": "hijacked"}],
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 409
 
     # ...and to delete it.
     del_resp = await client.delete(
         f"/projects/{project_id}/samples/{sample_id}/annotations/{foreign['_id']}",
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert del_resp.status_code == 404
 
@@ -737,7 +735,7 @@ async def test_claiming_another_users_annotation_does_not_copy_it(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -769,7 +767,7 @@ async def test_resaving_own_annotation_cannot_change_its_author(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 
@@ -820,7 +818,7 @@ async def test_repeated_saves_do_not_duplicate_machine_annotations(
         resp = await client.put(
             f"/projects/{project_id}/samples/{sample_id}/annotations",
             json=machine_payload("suggested", created_by),
-            headers={"Authorization": f"Bearer {alice_token}"},
+            headers=session_headers(alice_token),
         )
         assert resp.status_code == 200, resp.text
 
@@ -852,7 +850,7 @@ async def test_replacing_machine_annotations_leaves_human_work_alone(
         resp = await client.put(
             f"/projects/{project_id}/samples/{sample_id}/annotations",
             json=payload,
-            headers={"Authorization": f"Bearer {alice_token}"},
+            headers=session_headers(alice_token),
         )
         assert resp.status_code == 200, resp.text
 
@@ -883,7 +881,7 @@ async def test_a_save_without_machine_rows_leaves_them_untouched(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=machine_payload("suggested", "annotators::peak_detection"),
-        headers={"Authorization": f"Bearer {alice_token}"},
+        headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
 

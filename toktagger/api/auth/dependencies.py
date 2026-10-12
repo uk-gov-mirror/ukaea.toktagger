@@ -85,7 +85,24 @@ def _renew_session(request: Request, response: Response, payload: dict, auth_tim
     )
 
 
-async def _user_from_idp_token(request: Request, token: str) -> UserOut:
+def _require_active(user: UserOut) -> UserOut:
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Account is inactive")
+    return user
+
+
+async def _get_user_from_bearer(request: Request, token: str) -> UserOut:
+    """Authenticate a bearer header, which holds the internal token or an IdP token.
+
+    A bearer header cannot be attached by a cross-site caller, so it needs no CSRF
+    cover, and the caller manages its own token, so the session does not slide.
+    """
+    # Internal server-to-server token used by Ray-worker callbacks (sender.py).
+    if secrets.compare_digest(token, get_internal_token()):
+        return _INTERNAL_USER
+
+    if not oidc.idp_registered():
+        raise HTTPException(status_code=401, detail="Invalid bearer token")
     try:
         claims = await oidc.verify_access_token(token)
         user = await oidc.provision_user(
@@ -93,8 +110,35 @@ async def _user_from_idp_token(request: Request, token: str) -> UserOut:
         )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
-    if not user.is_active:
-        raise HTTPException(status_code=401, detail="Account is inactive")
+    return _require_active(user)
+
+
+async def _get_user_from_cookie(request: Request, response: Response) -> UserOut:
+    """Authenticate the browser session cookie, and slide it when it is old enough."""
+    token = request.cookies.get(config.settings.auth.cookie_name)
+    if token is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload, token_age = decode_token_with_age(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    username = payload.get("sub")
+    if not username or not isinstance(username, str):
+        raise HTTPException(status_code=401, detail="Token is missing a subject claim")
+
+    _require_csrf(request, payload)
+    auth_time = _require_session_age(payload)
+
+    user = await utils.get_user_by_username(request.app.state.db_client, username)
+    # 401 rather than 404/403: the signature is good but the credential no longer
+    # identifies a usable account, and 401 is what the frontend signs out on.
+    if not user:
+        raise HTTPException(status_code=401, detail="User no longer exists")
+    _require_active(user)
+
+    if token_age >= ACCESS_TOKEN_RENEW_AFTER_SECONDS:
+        _renew_session(request, response, payload, auth_time)
     return user
 
 
@@ -103,47 +147,11 @@ async def get_current_user(
     response: Response,
     bearer: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> UserOut:
-    header_token = bearer.credentials if bearer else None
-    # Header first: Ray-worker callbacks, scripts and tests never send a cookie, and an
+    # Header first: Ray-worker callbacks and scripts never send a cookie, and an
     # explicit header should beat whatever session the same browser happens to hold.
-    token = header_token or request.cookies.get(config.settings.auth.cookie_name)
-    if token is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    # Internal server-to-server token used by Ray-worker callbacks (sender.py).
-    if secrets.compare_digest(token, get_internal_token()):
-        return _INTERNAL_USER
-
-    try:
-        payload, token_age = decode_token_with_age(token)
-        username = payload.get("sub")
-        if not username or not isinstance(username, str):
-            raise ValueError("Token is missing a subject claim")
-    except ValueError as exc:
-        if header_token is None or not oidc.idp_registered():
-            raise HTTPException(status_code=401, detail=str(exc)) from exc
-        return await _user_from_idp_token(request, token)
-
-    # A bearer header cannot be attached by a cross-site caller, so only the ambient
-    # cookie credential needs CSRF cover.
-    auth_time: int | None = None
-    if header_token is None:
-        _require_csrf(request, payload)
-        auth_time = _require_session_age(payload)
-
-    db_client = request.app.state.db_client
-    user = await utils.get_user_by_username(db_client, username)
-    # 401 rather than 404/403: the signature is good but the credential no longer
-    # identifies a usable account, and 401 is what the frontend signs out on.
-    if not user:
-        raise HTTPException(status_code=401, detail="User no longer exists")
-    if not user.is_active:
-        raise HTTPException(status_code=401, detail="Account is inactive")
-
-    # Only the ambient cookie slides; a bearer caller manages its own token.
-    if auth_time is not None and token_age >= ACCESS_TOKEN_RENEW_AFTER_SECONDS:
-        _renew_session(request, response, payload, auth_time)
-    return user
+    if bearer is not None:
+        return await _get_user_from_bearer(request, bearer.credentials)
+    return await _get_user_from_cookie(request, response)
 
 
 async def require_global_admin(

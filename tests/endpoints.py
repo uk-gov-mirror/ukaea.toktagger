@@ -6,18 +6,20 @@ from tests import db_definitions
 from tests.identity import session_cookies
 from toktagger.api import config
 from toktagger.api.auth.canaille import ManagedCanaille
+from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
 from toktagger.api.schemas.annotations import TimeRegion
 
 # Shared session for all e2e helper requests below, so auth only needs to be
-# configured once (see set_auth_token) rather than threaded through every
+# configured once (see set_session) rather than threaded through every
 # helper function's signature and every call site across the e2e test files.
 session = requests.Session()
 identity_provider: ManagedCanaille
 
 
-def set_auth_token(token: str) -> None:
-    """Authenticate all subsequent tests.endpoints.* requests as this user."""
-    session.headers.update({"Authorization": f"Bearer {token}"})
+def set_session(cookies: dict[str, str]) -> None:
+    """Authenticate all subsequent tests.endpoints.* requests with these session cookies."""
+    session.cookies.update(cookies)
+    session.headers["X-CSRF-Token"] = cookies[CSRF_COOKIE_NAME]
 
 
 def set_identity_provider(provider: ManagedCanaille) -> None:

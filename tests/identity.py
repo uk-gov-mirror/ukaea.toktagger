@@ -1,11 +1,13 @@
-"""Sign in through the managed Canaille server over plain HTTP, for test setup."""
+"""Session credentials for tests: minted directly, or by signing in through Canaille."""
 
 import functools
 import re
+import time
 
 import requests
 
 from toktagger.api import config
+from toktagger.api.auth.core import create_access_token
 from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
 
 TOKTAGGER_URL = "http://localhost:8002"
@@ -13,6 +15,24 @@ CSRF_PATTERN = re.compile(
     r'<input[^>]*name="csrf_token"[^>]*value="([^"]+)"|'
     r'<input[^>]*value="([^"]+)"[^>]*name="csrf_token"'
 )
+
+
+TEST_CSRF = "test-csrf"
+
+
+def get_auth_token(username: str) -> str:
+    """A session token for an existing user, with the claims the OIDC callback sets."""
+    return create_access_token(
+        {"sub": username, "csrf": TEST_CSRF, "auth_time": int(time.time())}
+    )
+
+
+def session_headers(token: str) -> dict[str, str]:
+    """Send `token` as a per-request session cookie, so one client can act as several users."""
+    return {
+        "Cookie": f"{config.settings.auth.cookie_name}={token}",
+        "X-CSRF-Token": TEST_CSRF,
+    }
 
 
 def _csrf_token(html: str) -> str:

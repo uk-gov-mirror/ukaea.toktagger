@@ -13,10 +13,10 @@ from bson.objectid import ObjectId
 from httpx import ASGITransport, AsyncClient
 
 from tests import db_definitions, endpoints
-from tests.identity import session_cookies
+from tests.identity import get_auth_token, session_cookies, session_headers
 from toktagger.api import config
 from toktagger.api.auth.canaille import ManagedCanaille, managed_idp
-from toktagger.api.auth.core import create_access_token
+from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
 from toktagger.api.crud.db import MongoDBClient
 from toktagger.api.main import Server
 import toktagger.api.auth.core as auth_core
@@ -156,8 +156,7 @@ async def unauthenticated_api_client(tmp_path, monkeypatch, db_client):
 async def api_client(unauthenticated_api_client, db_client):
     # Auth is always required now — seed the admin user and authenticate as them
     await db_client.insert("users", db_definitions.USER_ADMIN)
-    admin_token = create_access_token({"sub": "admin"})
-    unauthenticated_api_client.headers["Authorization"] = f"Bearer {admin_token}"
+    unauthenticated_api_client.headers.update(session_headers(get_auth_token("admin")))
     yield unauthenticated_api_client
 
 
@@ -372,17 +371,13 @@ def admin_cookies(start_server) -> dict[str, str]:
 
 @pytest.fixture(scope="package")
 def admin_token(admin_cookies) -> str:
-    """The admin's session token, used as a bearer token for tests.endpoints.* requests.
-
-    The session cookie holds the same signed token a bearer header accepts.
-    """
-    token = admin_cookies[config.settings.auth.cookie_name]
-    endpoints.set_auth_token(token)
-    return token
+    """The admin's session token; also signs tests.endpoints.* requests in as the admin."""
+    endpoints.set_session(admin_cookies)
+    return admin_cookies[config.settings.auth.cookie_name]
 
 
 @pytest.fixture(scope="function")
-def server_setup(start_server, admin_token):
+def server_setup(start_server, admin_cookies, admin_token):
     yield
     response = requests.get(
         "http://localhost:8002/health",
@@ -392,6 +387,7 @@ def server_setup(start_server, admin_token):
     else:
         response = requests.delete(
             "http://localhost:8002/projects",
-            headers={"Authorization": f"Bearer {admin_token}"},
+            cookies=admin_cookies,
+            headers={"X-CSRF-Token": admin_cookies[CSRF_COOKIE_NAME]},
         )
         assert response.status_code == 200

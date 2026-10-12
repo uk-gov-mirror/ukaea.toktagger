@@ -11,7 +11,7 @@ from unittest.mock import patch
 import ray
 from bson import ObjectId
 
-from tests.api.auth.conftest import get_auth_token
+from tests.identity import get_auth_token, session_headers
 from tests.db_definitions import TEST_ISSUER
 from toktagger.api import config
 from toktagger.api.core.sender import (
@@ -279,13 +279,13 @@ async def test_predict_endpoint_survives_same_named_human_save(
     await client.post(
         f"/projects/{project_id}/members",
         json={"username": "mock_disruption_cnn", "role": "annotator"},
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
 
     # Run a REAL prediction through the actual /predict endpoint.
     predict_resp = await client.post(
         f"/projects/{project_id}/samples/{sample_id}/models/mock_disruption_cnn/predict",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(admin_token),
     )
     assert predict_resp.status_code == 200, predict_resp.text
     await collect_predict_results(client, predict_resp.json()["task_id"])
@@ -314,7 +314,7 @@ async def test_predict_endpoint_survives_same_named_human_save(
                 "created_by": "placeholder",  # server overwrites from JWT
             }
         ],
-        headers={"Authorization": f"Bearer {human_token}"},
+        headers=session_headers(human_token),
     )
     assert save_resp.status_code == 200, save_resp.text
 
