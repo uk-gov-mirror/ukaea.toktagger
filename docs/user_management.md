@@ -31,9 +31,9 @@ TokTagger has two layers of roles.
 | `admin` | Full access: create, edit and delete any project, manage user accounts, view all annotations |
 | `user` | Access only to projects the user is a member of |
 
-The identity provider sets the global role. A user is an `admin` when the user belongs to the group `toktagger-admins`. TokTagger reads the groups again at every sign-in. To change a global role, change the group membership in the identity provider.
+The identity provider sets the global role. A user is an `admin` when the user belongs to the group `toktagger-admins`. TokTagger reads the groups at sign-in, and again during the session. To change a global role, change the group membership in the identity provider.
 
-A change in the identity provider takes effect at the next sign-in of the user. A browser session lasts for a maximum of `auth.session_max_age_seconds` (default 12 hours). After this time, the user must sign in again. A deactivation in TokTagger takes effect immediately.
+A browser session reads the account from the identity provider again after `auth.session_refresh_seconds` (default 5 minutes). Thus a change to the groups, or a disabled account, takes effect in the browser within this time. If the identity provider ends its session, the user must sign in again. A session with no requests ends after `auth.session_idle_timeout_seconds` (default 24 hours). A deactivation in TokTagger takes effect immediately.
 
 TokTagger does not read the role from an access token that a script sends. Only a sign-in in the browser changes the role.
 
@@ -101,10 +101,10 @@ admin_group = "toktagger-admins"
 
 In the identity provider, create a **confidential** client for TokTagger. Use this checklist:
 
-1. **Flow:** Enable the authorization code flow with PKCE (method `S256`). Disable the other flows.
+1. **Flow:** Enable the authorization code flow with PKCE (method `S256`) and refresh tokens. Disable the other flows. TokTagger uses the refresh token to read the groups of the user again during the session.
 2. **Redirect URI:** Set `<public_url>/auth/callback`.
 3. **Sign-out redirect URI:** Set `<public_url>/ui/login`.
-4. **Groups claim:** Add a mapper that puts the groups of the user in the userinfo. Set `roles_claim` to the name of the claim. For a nested claim, use a dotted path, for example `realm_access.roles`. You can also put the groups in the ID token. Do not do this if users have many groups: TokTagger keeps the ID token in a cookie, and a browser cannot keep a cookie larger than approximately 4 KB.
+4. **Groups claim:** Add a mapper that puts the groups of the user in the userinfo. Set `roles_claim` to the name of the claim. For a nested claim, use a dotted path, for example `realm_access.roles`. During a session, TokTagger reads the groups from the userinfo only.
 5. **Admin group:** Create the group named in `admin_group`. Add the TokTagger admins to it. TokTagger removes a leading `/` from group names.
 6. **Audience:** Add the client ID to the audience of access tokens. TokTagger needs this to accept access tokens from scripts.
 

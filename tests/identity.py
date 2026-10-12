@@ -2,7 +2,6 @@
 
 import functools
 import re
-import time
 
 import requests
 
@@ -23,7 +22,7 @@ TEST_CSRF = "test-csrf"
 def get_auth_token(username: str) -> str:
     """A session token for an existing user, with the claims the OIDC callback sets."""
     return create_access_token(
-        {"sub": username, "csrf": TEST_CSRF, "auth_time": int(time.time())}
+        {"sub": username, "csrf": TEST_CSRF, "sid": "test-session"}
     )
 
 

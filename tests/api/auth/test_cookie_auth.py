@@ -4,30 +4,21 @@ The browser authenticates with a cookie it cannot read; scripted and server-to-s
 callers keep using a bearer header. Both paths run through get_current_user.
 """
 
-import time
+import asyncio
+from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
-from fastapi import Response
-from starlette.requests import Request
 
-from tests.api.auth.conftest import END_SESSION_URL, sign_in
+from tests.api.auth.conftest import END_SESSION_URL, ISSUER, sign_in
 from tests.identity import get_auth_token, session_headers
-from toktagger.api.auth import dependencies, oidc
-from toktagger.api.auth.core import (
-    create_access_token,
-    decode_token,
-    decode_token_with_age,
-    get_internal_token,
-)
-from toktagger.api.auth.cookies import (
-    CSRF_COOKIE_NAME,
-    ID_TOKEN_COOKIE_NAME,
-    MAX_ID_TOKEN_COOKIE_BYTES,
-    set_session_cookies,
-)
-from toktagger.api.config import settings
+from toktagger.api import config
+from toktagger.api.auth import oidc, sessions
+from toktagger.api.auth.core import decode_token_with_age, get_internal_token
+from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
+from toktagger.api.crud import utils
 
-SESSION_MAX_AGE = 12 * 60 * 60
+SESSION_IDLE_TIMEOUT = 24 * 60 * 60
 
 
 @pytest.fixture(autouse=True)
@@ -35,11 +26,20 @@ def _identity_provider(idp):
     """Every test here signs in through the OIDC callback, so a provider must be registered."""
 
 
-async def login(client, username: str = "admin"):
+async def login(client, username: str = "admin", groups: list[str] | None = None):
     """Sign in through the OIDC callback and keep the cookies, unlike get_auth_token."""
-    oidc.get_idp().fake_token = {
-        "userinfo": {"sub": f"{username}-sub", "preferred_username": username}
+    claims = {
+        "sub": f"{username}-sub",
+        "preferred_username": username,
+        "groups": groups or [],
     }
+    idp = oidc.get_idp()
+    idp.fake_token = {
+        "refresh_token": "refresh-1",
+        "id_token": "id-1",
+        "userinfo": claims,
+    }
+    idp.fake_userinfo = dict(claims)
     resp = await sign_in(client)
     assert resp.status_code == 303, resp.text
     return resp
@@ -60,11 +60,11 @@ async def test_login_sets_httponly_session_cookie(
 ):
     resp = await login(unauthenticated_api_client)
 
-    header = set_cookie_header(resp, settings.auth.cookie_name)
+    header = set_cookie_header(resp, config.settings.auth.cookie_name)
     assert "HttpOnly" in header
     assert "Path=/" in header
     assert "SameSite=lax" in header
-    assert f"Max-Age={SESSION_MAX_AGE}" in header
+    assert f"Max-Age={SESSION_IDLE_TIMEOUT}" in header
 
 
 @pytest.mark.asyncio
@@ -98,7 +98,7 @@ async def test_login_over_http_does_not_mark_cookie_secure(
     """Secure is derived from the request scheme, so plain-HTTP dev logins still work."""
     resp = await login(unauthenticated_api_client)
 
-    assert "Secure" not in set_cookie_header(resp, settings.auth.cookie_name)
+    assert "Secure" not in set_cookie_header(resp, config.settings.auth.cookie_name)
 
 
 @pytest.mark.asyncio
@@ -112,7 +112,7 @@ async def test_logout_clears_both_cookies(setup_db_auth, unauthenticated_api_cli
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["logout_url"].startswith(END_SESSION_URL)
-    for name in (settings.auth.cookie_name, CSRF_COOKIE_NAME):
+    for name in (config.settings.auth.cookie_name, CSRF_COOKIE_NAME):
         assert "Max-Age=0" in set_cookie_header(resp, name)
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
 
@@ -216,63 +216,181 @@ def has_set_cookie(resp, name: str) -> bool:
 
 
 @pytest.fixture
-def renewal_due(monkeypatch):
-    """Make every authenticated request look old enough to renew."""
-    monkeypatch.setattr(dependencies, "ACCESS_TOKEN_RENEW_AFTER_SECONDS", 0)
+def refresh_due(monkeypatch):
+    """Make every authenticated request old enough to refresh at the provider."""
+    monkeypatch.setattr(config.settings.auth, "session_refresh_seconds", 0)
+
+
+async def delete_project(client, project_id: str, csrf: str):
+    return await client.delete(
+        f"/projects/{project_id}", headers={"X-CSRF-Token": csrf}
+    )
 
 
 @pytest.mark.asyncio
-async def test_fresh_session_is_not_renewed(setup_db_auth, unauthenticated_api_client):
-    """A session under half its life is left alone, so most responses set no cookie."""
+async def test_sign_in_stores_the_provider_tokens_in_a_session(
+    setup_db_auth, unauthenticated_api_client, db_client
+):
+    await login(unauthenticated_api_client)
+
+    payload, _ = decode_token_with_age(
+        unauthenticated_api_client.cookies[config.settings.auth.cookie_name]
+    )
+    session = await db_client.db[sessions.SESSIONS_COLLECTION].find_one(
+        {"_id": payload["sid"]}
+    )
+    assert session["username"] == "admin"
+    assert session["refresh_token"] == "refresh-1"
+    assert session["id_token"] == "id-1"
+
+
+@pytest.mark.asyncio
+async def test_sign_in_without_a_refresh_token_fails(
+    setup_db_auth, unauthenticated_api_client
+):
+    """Without a refresh token, the session could never read the account again."""
+    oidc.get_idp().fake_token = {"userinfo": {"sub": "admin-sub"}}
+
+    resp = await sign_in(unauthenticated_api_client)
+
+    assert resp.headers["location"] == "/ui/login?error=login_failed"
+
+
+@pytest.mark.asyncio
+async def test_fresh_session_is_not_refreshed(
+    setup_db_auth, unauthenticated_api_client
+):
     await login(unauthenticated_api_client)
 
     resp = await unauthenticated_api_client.get("/auth/me")
 
-    assert not has_set_cookie(resp, settings.auth.cookie_name)
+    assert not has_set_cookie(resp, config.settings.auth.cookie_name)
+    assert oidc.get_idp().refresh_calls == []
 
 
 @pytest.mark.asyncio
-async def test_stale_session_is_renewed_on_use(
-    setup_db_auth, unauthenticated_api_client, renewal_due
+async def test_stale_session_is_refreshed_at_the_provider(
+    setup_db_auth, unauthenticated_api_client, refresh_due
 ):
     await login(unauthenticated_api_client)
 
     resp = await unauthenticated_api_client.get("/auth/me")
 
     assert resp.status_code == 200, resp.text
-    assert f"Max-Age={SESSION_MAX_AGE}" in set_cookie_header(
-        resp, settings.auth.cookie_name
+    assert oidc.get_idp().refresh_calls == ["refresh-1"]
+    assert f"Max-Age={SESSION_IDLE_TIMEOUT}" in set_cookie_header(
+        resp, config.settings.auth.cookie_name
     )
-    # The token string is unchanged within the same second - itsdangerous timestamps
-    # are whole seconds - so check the window itself slid rather than the bytes.
     _, age = decode_token_with_age(
-        unauthenticated_api_client.cookies[settings.auth.cookie_name]
+        unauthenticated_api_client.cookies[config.settings.auth.cookie_name]
     )
     assert age < 5
+
+
+@pytest.mark.asyncio
+async def test_refresh_uses_the_rotated_refresh_token(
+    setup_db_auth, unauthenticated_api_client, refresh_due
+):
+    await login(unauthenticated_api_client)
+
+    await unauthenticated_api_client.get("/auth/me")
+    await unauthenticated_api_client.get("/auth/me")
+
+    assert oidc.get_idp().refresh_calls == ["refresh-1", "refresh-2"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_applies_a_demotion_at_the_provider(
+    setup_db_auth, unauthenticated_api_client, db_client, refresh_due
+):
+    await login(unauthenticated_api_client, groups=["toktagger-admins"])
+    assert (await utils.get_user_by_username(db_client, "admin")).global_role == "admin"
+    oidc.get_idp().fake_userinfo["groups"] = []
+
+    resp = await unauthenticated_api_client.get("/auth/me")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["global_role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_refusal_at_the_provider_ends_the_session(
+    setup_db_auth, unauthenticated_api_client, refresh_due
+):
+    await login(unauthenticated_api_client)
+    idp = oidc.get_idp()
+    idp.fake_refresh = oidc.OAuthError(error="invalid_grant")
+
+    assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
+    idp.fake_refresh = {"refresh_token": "refresh-2"}
+    assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_for_a_different_account_ends_the_session(
+    setup_db_auth, unauthenticated_api_client, refresh_due
+):
+    await login(unauthenticated_api_client)
+    oidc.get_idp().fake_userinfo = {"sub": "someone-else", "preferred_username": "x"}
+
+    assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_unreachable_provider_is_503_and_keeps_the_session(
+    setup_db_auth, unauthenticated_api_client, refresh_due
+):
+    """Fail closed, but do not sign the user out for a provider outage."""
+    await login(unauthenticated_api_client)
+    idp = oidc.get_idp()
+    idp.fake_refresh = httpx.ConnectError("provider down")
+
+    assert (await unauthenticated_api_client.get("/auth/me")).status_code == 503
+    idp.fake_refresh = {"refresh_token": "refresh-2"}
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_renewal_keeps_the_csrf_token_usable(
-    setup_db_auth, unauthenticated_api_client, renewal_due
+async def test_concurrent_refreshes_use_the_refresh_token_once(
+    setup_db_auth, db_client, idp
 ):
-    """A renewal must not invalidate the CSRF value the page is already holding."""
+    """The provider revokes a used refresh token, so a second use would end the session."""
+    session_id = await sessions.start_session(
+        db_client, "admin", ISSUER, "admin-sub", {"refresh_token": "refresh-1"}
+    )
+    await db_client.db[sessions.SESSIONS_COLLECTION].update_one(
+        {"_id": session_id}, {"$set": {"refreshed_at": 0}}
+    )
+    idp.fake_userinfo = {"sub": "admin-sub", "preferred_username": "admin"}
+
+    await asyncio.gather(
+        sessions.refresh_session(db_client, session_id),
+        sessions.refresh_session(db_client, session_id),
+    )
+
+    assert idp.refresh_calls == ["refresh-1"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_keeps_the_csrf_token_usable(
+    setup_db_auth, unauthenticated_api_client, refresh_due
+):
+    """A refresh must not invalidate the CSRF value the page is already holding."""
     await login(unauthenticated_api_client)
     csrf = unauthenticated_api_client.cookies[CSRF_COOKIE_NAME]
 
     await unauthenticated_api_client.get("/auth/me")
 
     assert unauthenticated_api_client.cookies[CSRF_COOKIE_NAME] == csrf
-    resp = await unauthenticated_api_client.delete(
-        f"/projects/{setup_db_auth['project_id']}",
-        headers={"X-CSRF-Token": csrf},
+    resp = await delete_project(
+        unauthenticated_api_client, setup_db_auth["project_id"], csrf
     )
     assert resp.status_code == 200, resp.text
 
 
 @pytest.mark.asyncio
-async def test_bearer_caller_is_never_renewed(
-    setup_db_auth, unauthenticated_api_client, renewal_due
+async def test_bearer_caller_is_never_refreshed(
+    setup_db_auth, unauthenticated_api_client, refresh_due
 ):
     """Scripts and Ray callbacks hold their own token; handing them a cookie is wrong."""
     resp = await unauthenticated_api_client.get(
@@ -280,14 +398,15 @@ async def test_bearer_caller_is_never_renewed(
     )
 
     assert resp.status_code == 200, resp.text
-    assert not has_set_cookie(resp, settings.auth.cookie_name)
+    assert not has_set_cookie(resp, config.settings.auth.cookie_name)
+    assert oidc.get_idp().refresh_calls == []
 
 
 @pytest.mark.asyncio
-async def test_logout_clears_cookies_when_a_renewal_is_due(
-    setup_db_auth, unauthenticated_api_client, renewal_due
+async def test_logout_clears_cookies_when_a_refresh_is_due(
+    setup_db_auth, unauthenticated_api_client, refresh_due
 ):
-    """The dependency renews before the handler clears — the clear has to win."""
+    """The dependency refreshes before the handler clears — the clear has to win."""
     await login(unauthenticated_api_client)
 
     resp = await unauthenticated_api_client.post(
@@ -296,6 +415,24 @@ async def test_logout_clears_cookies_when_a_renewal_is_due(
     )
 
     assert resp.status_code == 200, resp.text
+    assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_ends_the_session_and_sends_the_id_token_hint(
+    setup_db_auth, unauthenticated_api_client, refresh_due
+):
+    await login(unauthenticated_api_client)
+    cookie = unauthenticated_api_client.cookies[config.settings.auth.cookie_name]
+
+    resp = await unauthenticated_api_client.post(
+        "/auth/logout",
+        headers={"X-CSRF-Token": unauthenticated_api_client.cookies[CSRF_COOKIE_NAME]},
+    )
+
+    query = parse_qs(urlparse(resp.json()["logout_url"]).query)
+    assert query["id_token_hint"] == ["id-1"]
+    unauthenticated_api_client.cookies.set(config.settings.auth.cookie_name, cookie)
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
 
 
@@ -343,97 +480,13 @@ async def test_session_of_a_deactivated_user_is_401(
     assert resp.status_code == 401, resp.text
 
 
-def session_cookie(client, auth_time: int | None) -> None:
-    """Put a session cookie with the given sign-in time in the client jar."""
-    payload: dict = {"sub": "admin", "csrf": "csrf-value"}
-    if auth_time is not None:
-        payload["auth_time"] = auth_time
-    client.cookies.set(settings.auth.cookie_name, create_access_token(payload))
-
-
-@pytest.mark.asyncio
-async def test_sign_in_records_the_sign_in_time(
-    setup_db_auth, unauthenticated_api_client
-):
-    before = int(time.time())
-
-    await login(unauthenticated_api_client)
-
-    payload = decode_token(
-        unauthenticated_api_client.cookies[settings.auth.cookie_name]
-    )
-    assert before <= payload["auth_time"] <= int(time.time())
-
-
-@pytest.mark.asyncio
-async def test_session_cookie_without_a_sign_in_time_is_401(
-    setup_db_auth, unauthenticated_api_client
-):
-    session_cookie(unauthenticated_api_client, None)
-
-    resp = await unauthenticated_api_client.get("/auth/me")
-
-    assert resp.status_code == 401
-    assert "no valid sign-in time" in resp.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_fresh_cookie_past_the_maximum_session_age_is_401(
-    setup_db_auth, unauthenticated_api_client
-):
-    session_cookie(unauthenticated_api_client, int(time.time()) - SESSION_MAX_AGE - 1)
-
-    resp = await unauthenticated_api_client.get("/auth/me")
-
-    assert resp.status_code == 401
-
-
 @pytest.mark.asyncio
 async def test_session_token_is_not_accepted_as_a_bearer(
     setup_db_auth, unauthenticated_api_client
 ):
-    """As a bearer, a session token would skip the CSRF check and the maximum session age."""
+    """As a bearer, a session token would skip the CSRF check and the provider refresh."""
     resp = await unauthenticated_api_client.get(
         "/auth/me", headers={"Authorization": f"Bearer {get_auth_token('admin')}"}
     )
 
     assert resp.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_renewal_keeps_the_sign_in_time_and_the_remaining_age(
-    setup_db_auth, unauthenticated_api_client, renewal_due
-):
-    auth_time = int(time.time()) - SESSION_MAX_AGE + 600
-    session_cookie(unauthenticated_api_client, auth_time)
-    unauthenticated_api_client.cookies.set(ID_TOKEN_COOKIE_NAME, "id-token")
-
-    resp = await unauthenticated_api_client.get("/auth/me")
-
-    assert resp.status_code == 200, resp.text
-    header = set_cookie_header(resp, settings.auth.cookie_name)
-    max_age = int(header.split("Max-Age=")[1].split(";")[0])
-    assert 590 <= max_age <= 600
-    payload = decode_token(header.split(";")[0].split("=", 1)[1])
-    assert payload["auth_time"] == auth_time
-    assert "Max-Age=" in set_cookie_header(resp, ID_TOKEN_COOKIE_NAME)
-
-
-def test_oversized_id_token_is_not_stored_in_a_cookie(caplog):
-    request = Request({"type": "http", "scheme": "http", "path": "/", "headers": []})
-    response = Response()
-
-    set_session_cookies(
-        request,
-        response,
-        "session",
-        "csrf",
-        int(time.time()),
-        "x" * (MAX_ID_TOKEN_COOKIE_BYTES + 1),
-    )
-
-    cookie_names = {
-        header.split("=")[0] for header in response.headers.getlist("set-cookie")
-    }
-    assert cookie_names == {settings.auth.cookie_name, CSRF_COOKIE_NAME}
-    assert "too large for a cookie" in caplog.text

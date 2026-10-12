@@ -37,6 +37,8 @@ These settings should be defined under the `[auth]` heading in the TOML file:
 | roles_claim     | AUTH_ROLES_CLAIM        | str          | groups                                  | Claim that holds the groups of the user. Use a dotted path for a nested claim. |
 | admin_group     | AUTH_ADMIN_GROUP        | str          | toktagger-admins                        | Members of this group get the global role `admin`. |
 | public_url      | AUTH_PUBLIC_URL         | str          | None                                    | Address that browsers use to reach TokTagger. If unset, it is built from `server.host` and `server.port`. |
+| session_idle_timeout_seconds | AUTH_SESSION_IDLE_TIMEOUT_SECONDS | int | 86400                      | Time in seconds after which a browser session with no requests ends. The provider can end the session earlier. |
+| session_refresh_seconds | AUTH_SESSION_REFRESH_SECONDS | int    | 300                                     | Time in seconds after which a browser session reads the account from the provider again. A change to the groups, or a disabled account, takes effect within this time. |
 | verify_bearer_audience | AUTH_VERIFY_BEARER_AUDIENCE | bool | True                                  | Check the audience of identity provider access tokens that scripts send as Bearer tokens. |
 | canaille_port   | AUTH_CANAILLE_PORT      | int          | 8003                                    | Port of the local Canaille server. |
 | canaille_public_url | AUTH_CANAILLE_PUBLIC_URL | str      | None                                    | Address that browsers use to reach Canaille. If unset, it is built from `server.host` and `canaille_port`. |

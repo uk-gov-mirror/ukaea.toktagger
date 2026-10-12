@@ -1,16 +1,8 @@
-import logging
-import time
-
 from fastapi import Request, Response
 
 from toktagger.api import config
-from toktagger.api.auth.core import ACCESS_TOKEN_EXPIRE_SECONDS
-
-logger = logging.getLogger(__name__)
 
 CSRF_COOKIE_NAME = "tt_csrf"
-ID_TOKEN_COOKIE_NAME = "tt_id_token"
-MAX_ID_TOKEN_COOKIE_BYTES = 3800
 
 
 def _cookie_secure(request: Request) -> bool:
@@ -24,31 +16,15 @@ def _cookie_secure(request: Request) -> bool:
     )
 
 
-def session_seconds_left(auth_time: int) -> int:
-    """Seconds until a session that started at `auth_time` reaches its maximum age."""
-    max_age = config.settings.auth.session_max_age_seconds
-    elapsed = int(time.time()) - auth_time
-    return max_age - elapsed
-
-
-def set_session_cookies(
-    request: Request,
-    response: Response,
-    token: str,
-    csrf: str,
-    auth_time: int,
-    id_token: str | None = None,
-):
+def set_session_cookies(request: Request, response: Response, token: str, csrf: str):
     """Store the session token and its CSRF partner on the response.
-
-    The provider ID token is kept httpOnly so logout can send it as `id_token_hint`.
 
     The session cookie is httpOnly so no script can read it; the CSRF cookie is
     deliberately readable, because the frontend must echo it back in a header.
     """
     secure = _cookie_secure(request)
     samesite = config.settings.auth.cookie_samesite
-    max_age = max(0, min(ACCESS_TOKEN_EXPIRE_SECONDS, session_seconds_left(auth_time)))
+    max_age = config.settings.auth.session_idle_timeout_seconds
     response.set_cookie(
         config.settings.auth.cookie_name,
         token,
@@ -67,25 +43,6 @@ def set_session_cookies(
         samesite=samesite,
         path="/",
     )
-    id_token_bytes = len(id_token.encode()) if id_token else 0
-    if id_token_bytes > MAX_ID_TOKEN_COOKIE_BYTES:
-        # Browsers drop cookies over about 4 KB, so logout goes without id_token_hint.
-        logger.warning(
-            "The provider ID token is %d bytes, too large for a cookie. Sign-out will "
-            "not include id_token_hint. Remove large claims, such as groups, from the "
-            "ID token at the provider.",
-            id_token_bytes,
-        )
-    elif id_token:
-        response.set_cookie(
-            ID_TOKEN_COOKIE_NAME,
-            id_token,
-            max_age=max_age,
-            httponly=True,
-            secure=secure,
-            samesite=samesite,
-            path="/",
-        )
 
 
 def _drop_queued_cookies(response: Response, names: tuple[str, ...]):
@@ -102,7 +59,7 @@ def clear_session_cookies(request: Request, response: Response):
     """Expire the session cookies, matching the attributes they were set with."""
     secure = _cookie_secure(request)
     samesite = config.settings.auth.cookie_samesite
-    names = (config.settings.auth.cookie_name, CSRF_COOKIE_NAME, ID_TOKEN_COOKIE_NAME)
+    names = (config.settings.auth.cookie_name, CSRF_COOKIE_NAME)
     # A renewal queued by get_current_user would otherwise sit alongside the expiry
     # below and keep the session alive through logout.
     _drop_queued_cookies(response, names)

@@ -89,9 +89,14 @@ class Auth(pydantic.BaseModel):
         None,
         description="URL at which users reach TokTagger, used for the OpenID Connect redirect URI. If unset, it is http://<server.host>:<server.port>.",
     )
-    session_max_age_seconds: int = pydantic.Field(
-        12 * 60 * 60,
-        description="Maximum age of a browser session in seconds. After this time the user must sign in again. Sign-in reads the global role from the provider again.",
+    session_idle_timeout_seconds: int = pydantic.Field(
+        24 * 60 * 60,
+        description="Time in seconds after which a browser session with no requests ends. The provider can end the session earlier, when its refresh token expires.",
+        gt=0,
+    )
+    session_refresh_seconds: int = pydantic.Field(
+        5 * 60,
+        description="Time in seconds after which a browser session reads the account from the provider again. A change to the global role or a disabled account at the provider takes effect within this time.",
         gt=0,
     )
     verify_bearer_audience: bool = pydantic.Field(

@@ -67,25 +67,36 @@ def idp(oidc_settings, monkeypatch):
 
     monkeypatch.setattr(oidc, "get_metadata", get_metadata)
     client.fake_token = {
+        "refresh_token": "refresh-1",
+        "id_token": "id-token-1",
         "userinfo": {
             "sub": "sub-1",
             "preferred_username": "alice",
             "email": "alice@example.com",
             "name": "Alice Example",
             "groups": [],
-        }
+        },
     }
     client.fake_userinfo = {}
+    client.fake_refresh: dict | Exception = {"refresh_token": "refresh-2"}
+    client.refresh_calls = []
 
     async def authorize_access_token(request):
         if isinstance(client.fake_token, Exception):
             raise client.fake_token
         return client.fake_token
 
+    async def fetch_access_token(grant_type, refresh_token):
+        client.refresh_calls.append(refresh_token)
+        if isinstance(client.fake_refresh, Exception):
+            raise client.fake_refresh
+        return client.fake_refresh
+
     async def userinfo(token=None):
         return client.fake_userinfo
 
     monkeypatch.setattr(client, "authorize_access_token", authorize_access_token)
+    monkeypatch.setattr(client, "fetch_access_token", fetch_access_token)
     monkeypatch.setattr(client, "userinfo", userinfo)
     return client
 

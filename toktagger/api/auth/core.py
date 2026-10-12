@@ -8,10 +8,6 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from toktagger.api import config
 
-ACCESS_TOKEN_EXPIRE_SECONDS = 60 * 60 * 24  # 24 hours
-# A session past this age is re-issued on use, so an active user is never signed
-# out mid-task while an idle one still expires on schedule.
-ACCESS_TOKEN_RENEW_AFTER_SECONDS = ACCESS_TOKEN_EXPIRE_SECONDS // 2
 _SALT = "toktagger-auth-v1"
 
 _serializer: URLSafeTimedSerializer | None = None
@@ -85,7 +81,9 @@ def decode_token_with_age(token: str) -> tuple[dict, float]:
     """Decode a token, returning its payload and how long ago it was issued."""
     try:
         decoded: tuple[dict, datetime] = _get_serializer().loads(
-            token, max_age=ACCESS_TOKEN_EXPIRE_SECONDS, return_timestamp=True
+            token,
+            max_age=config.settings.auth.session_idle_timeout_seconds,
+            return_timestamp=True,
         )
     except SignatureExpired:
         raise ValueError("Token has expired")

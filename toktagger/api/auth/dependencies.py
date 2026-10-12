@@ -4,19 +4,15 @@ from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from toktagger.api import config
-from toktagger.api.auth import oidc
+from toktagger.api.auth import oidc, sessions
 from toktagger.api.auth.core import (
-    ACCESS_TOKEN_RENEW_AFTER_SECONDS,
     create_access_token,
     decode_token_with_age,
     get_internal_token,
 )
-from toktagger.api.auth.cookies import (
-    ID_TOKEN_COOKIE_NAME,
-    session_seconds_left,
-    set_session_cookies,
-)
+from toktagger.api.auth.cookies import set_session_cookies
 from toktagger.api.crud import utils
+from toktagger.api.crud.db import LockTimeoutError
 from toktagger.api.schemas.projects import ProjectMember
 from toktagger.api.schemas.users import UserOut
 
@@ -50,39 +46,26 @@ def _require_csrf(request: Request, payload: dict):
         )
 
 
-def _require_session_age(payload: dict) -> int:
-    """Return the sign-in time, or reject a session past its maximum age.
+async def _refresh_session(request: Request, response: Response, payload: dict):
+    """Read the account from the provider again, then slide the session window.
 
-    The cap makes the browser sign in again, which reads the role from the provider.
+    The csrf claim is carried over unchanged, so a request already in flight with the
+    old header still validates.
     """
-    auth_time = payload.get("auth_time")
-    if not isinstance(auth_time, int):
-        raise HTTPException(
-            status_code=401,
-            detail="Session token has no valid sign-in time. Sign in again.",
-        )
-    if session_seconds_left(auth_time) <= 0:
-        raise HTTPException(status_code=401, detail="Session expired. Sign in again.")
-    return auth_time
-
-
-def _renew_session(request: Request, response: Response, payload: dict, auth_time: int):
-    """Slide the session window by re-issuing the cookies on the current response.
-
-    The csrf and auth_time claims are carried over unchanged, so a request already in
-    flight with the old header still validates and the maximum age still applies.
-    """
+    session_id = payload.get("sid")
     csrf = payload.get("csrf")
-    if not isinstance(csrf, str):
-        return
-    set_session_cookies(
-        request,
-        response,
-        create_access_token(dict(payload)),
-        csrf,
-        auth_time,
-        request.cookies.get(ID_TOKEN_COOKIE_NAME),
-    )
+    if not isinstance(session_id, str) or not isinstance(csrf, str):
+        raise HTTPException(status_code=401, detail="Invalid session. Sign in again.")
+    try:
+        await sessions.refresh_session(request.app.state.db_client, session_id)
+    except (sessions.SessionEndedError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    # Fail closed but keep the session, so it works again once the provider is back.
+    except (*oidc.IDP_ERRORS, LockTimeoutError) as exc:
+        raise HTTPException(
+            status_code=503, detail="The identity provider is not available."
+        ) from exc
+    set_session_cookies(request, response, create_access_token(dict(payload)), csrf)
 
 
 def _require_active(user: UserOut) -> UserOut:
@@ -114,7 +97,7 @@ async def _get_user_from_bearer(request: Request, token: str) -> UserOut:
 
 
 async def _get_user_from_cookie(request: Request, response: Response) -> UserOut:
-    """Authenticate the browser session cookie, and slide it when it is old enough."""
+    """Authenticate the browser session cookie, and refresh it when it is old enough."""
     token = request.cookies.get(config.settings.auth.cookie_name)
     if token is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -128,18 +111,16 @@ async def _get_user_from_cookie(request: Request, response: Response) -> UserOut
         raise HTTPException(status_code=401, detail="Token is missing a subject claim")
 
     _require_csrf(request, payload)
-    auth_time = _require_session_age(payload)
+    request.state.session_id = payload.get("sid")
+    if token_age >= config.settings.auth.session_refresh_seconds:
+        await _refresh_session(request, response, payload)
 
     user = await utils.get_user_by_username(request.app.state.db_client, username)
     # 401 rather than 404/403: the signature is good but the credential no longer
     # identifies a usable account, and 401 is what the frontend signs out on.
     if not user:
         raise HTTPException(status_code=401, detail="User no longer exists")
-    _require_active(user)
-
-    if token_age >= ACCESS_TOKEN_RENEW_AFTER_SECONDS:
-        _renew_session(request, response, payload, auth_time)
-    return user
+    return _require_active(user)
 
 
 async def get_current_user(

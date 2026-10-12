@@ -1,19 +1,14 @@
 import logging
 import re
 import secrets
-import time
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
 from toktagger.api import config
-from toktagger.api.auth import oidc
-from toktagger.api.auth.cookies import (
-    ID_TOKEN_COOKIE_NAME,
-    clear_session_cookies,
-    set_session_cookies,
-)
+from toktagger.api.auth import oidc, sessions
+from toktagger.api.auth.cookies import clear_session_cookies, set_session_cookies
 from toktagger.api.auth.core import create_access_token
 from toktagger.api.auth.dependencies import get_current_user
 from toktagger.api.crud.db import MongoDBClient
@@ -89,6 +84,11 @@ async def callback(request: Request):
         issuer = (await oidc.get_metadata())["issuer"]
         db_client: MongoDBClient = request.app.state.db_client
         user = await oidc.provision_user(db_client, issuer, claims)
+        if not user.is_active:
+            return _login_error("inactive")
+        session_id = await sessions.start_session(
+            db_client, user.username, issuer, claims["sub"], token
+        )
     except oidc.OAuthError as error:
         code = error.error or ""
         return _login_error(
@@ -101,19 +101,13 @@ async def callback(request: Request):
         logger.exception("The identity provider returned unusable claims")
         return _login_error("login_failed")
 
-    if not user.is_active:
-        return _login_error("inactive")
-
     request.session.clear()
     csrf = secrets.token_urlsafe(32)
-    auth_time = int(time.time())
     session_token = create_access_token(
-        {"sub": user.username, "csrf": csrf, "auth_time": auth_time}
+        {"sub": user.username, "csrf": csrf, "sid": session_id}
     )
     response = RedirectResponse(return_to, status_code=303)
-    set_session_cookies(
-        request, response, session_token, csrf, auth_time, token.get("id_token")
-    )
+    set_session_cookies(request, response, session_token, csrf)
     return response
 
 
@@ -151,9 +145,12 @@ async def logout(
 
     The URL carries the ID token as `id_token_hint`, so the provider signs out without asking.
 
-    The TokTagger token itself stays valid until it expires.
+    The session record is removed, so a copy of the cookie stops working at its next refresh.
     """
-    id_token = request.cookies.get(ID_TOKEN_COOKIE_NAME)
+    id_token = None
+    session_id = getattr(request.state, "session_id", None)
+    if isinstance(session_id, str):
+        id_token = await sessions.end_session(request.app.state.db_client, session_id)
     clear_session_cookies(request, response)
     logout_url = await _end_session_url(id_token) if oidc.idp_registered() else None
     return LogoutResponse(logout_url=logout_url)
