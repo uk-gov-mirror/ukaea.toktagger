@@ -84,55 +84,6 @@ The user can now sign in to TokTagger.
 
 ---
 
-## Signing In
-
-Open `http://<host>:<port>/ui/login` (or the root URL). Click **Sign in**. The identity provider shows its sign-in page. After you sign in, you return to TokTagger.
-
-TokTagger creates its own record for a user at the first sign-in. The record contains the user name, the email address and the display name. TokTagger takes the user name from the identity provider claim `preferred_username`. If that name is already in use, TokTagger adds a number. TokTagger never changes a user name after the first sign-in, because annotations store it.
-
-TokTagger does not connect an identity provider account to a user from the old password login, also when the user names are the same. The identity provider account gets a new record, for example `admin2`. An admin must add the project memberships of the new record again.
-
-!!! note
-    A user does not appear in the TokTagger user list or in the project member list until the first sign-in.
-
-To sign out, use **Sign out** in TokTagger. TokTagger then opens the sign-out page of the identity provider.
-
----
-
-## Admin Panel
-
-The admin panel is on the **Admin Panel** button on the Projects page. Only admin users see it.
-
-### Viewing Users
-
-The panel lists all users that signed in at least one time. It shows the user name, the email address, the global role and the active status.
-
-TokTagger shows the global role as read-only. Change it in the identity provider.
-
-### Deactivating and Reactivating a User
-
-Click **Deactivate** (or **Activate**) next to the user. A deactivated user cannot use TokTagger. The identity provider cannot override this setting. TokTagger keeps the annotations of the user. You cannot deactivate your own account. You cannot deactivate the last active admin.
-
-### Deleting a User
-
-Click **Delete** next to the user and confirm. This deletes the TokTagger record and the project memberships of the user. It does not delete the account in the identity provider. The user can sign in again and TokTagger creates a new record. You cannot delete the last active admin.
-
----
-
-## Profile Page
-
-Each signed-in user can open **Profile** from the Projects page. The page shows the user name, the email address and the display name. Click **Manage account** to change the password or other account data in the identity provider.
-
----
-
-## Project Membership
-
-Access to a project is set for each project. On the project Samples page, an admin clicks **Members** to add or remove users.
-
-Only members and admins can view samples and submit annotations. If you open the URL of a project you are not a member of, the page shows **403 - Forbidden**. Ask a project admin to add you.
-
----
-
 ## Use Keycloak or Another Identity Provider
 
 Set `auth.provider` to `oidc` and give TokTagger the details of your provider:
@@ -180,6 +131,55 @@ Set `KEYCLOAK_CLIENT_SECRET` in your environment to replace the default developm
 
 !!! warning
     The development stack uses fixed passwords and plain HTTP. Do not use it for a shared server.
+
+---
+
+## Signing In
+
+Open `http://<host>:<port>/ui/login` (or the root URL). Click **Sign in**. The identity provider shows its sign-in page. After you sign in, you return to TokTagger.
+
+TokTagger creates its own record for a user at the first sign-in. The record contains the user name, the email address and the display name. TokTagger takes the user name from the identity provider claim `preferred_username`. If that name is already in use, TokTagger adds a number. TokTagger never changes a user name after the first sign-in, because annotations store it.
+
+TokTagger does not connect an identity provider account to a user from the old password login, also when the user names are the same. The identity provider account gets a new record, for example `admin2`. An admin must add the project memberships of the new record again.
+
+!!! note
+    A user does not appear in the TokTagger user list or in the project member list until the first sign-in.
+
+To sign out, use **Sign out** in TokTagger. TokTagger then opens the sign-out page of the identity provider.
+
+---
+
+## Admin Panel
+
+The admin panel is on the **Admin Panel** button on the Projects page. Only admin users see it.
+
+### Viewing Users
+
+The panel lists all users that signed in at least one time. It shows the user name, the email address, the global role and the active status.
+
+TokTagger shows the global role as read-only. Change it in the identity provider.
+
+### Deactivating and Reactivating a User
+
+Click **Deactivate** (or **Activate**) next to the user. A deactivated user cannot use TokTagger. The identity provider cannot override this setting. TokTagger keeps the annotations of the user. You cannot deactivate your own account. You cannot deactivate the last active admin.
+
+### Deleting a User
+
+Click **Delete** next to the user and confirm. This deletes the TokTagger record and the project memberships of the user. It does not delete the account in the identity provider. The user can sign in again and TokTagger creates a new record. You cannot delete the last active admin.
+
+---
+
+## Profile Page
+
+Each signed-in user can open **Profile** from the Projects page. The page shows the user name, the email address and the display name. Click **Manage account** to change the password or other account data in the identity provider.
+
+---
+
+## Project Membership
+
+Access to a project is set for each project. On the project Samples page, an admin clicks **Members** to add or remove users.
+
+Only members and admins can view samples and submit annotations. If you open the URL of a project you are not a member of, the page shows **403 - Forbidden**. Ask a project admin to add you.
 
 ---
 
