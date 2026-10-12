@@ -189,9 +189,11 @@ def _strip_reserved_prefixes(name: str) -> str:
 
 def derive_username(claims: dict[str, Any]) -> str:
     email = claims.get("email")
+    full_name = claims.get("name")
     candidates = (
         claims.get("preferred_username"),
         email.split("@")[0] if isinstance(email, str) else None,
+        full_name.replace(" ", "") if isinstance(full_name, str) else None,
         claims.get("sub"),
     )
     for candidate in candidates:
