@@ -144,6 +144,7 @@ async def unauthenticated_api_client(tmp_path, monkeypatch, db_client):
     app = server.app
     app.state.db_client = db_client
     app.state.project = None
+    app.state.idp = None
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

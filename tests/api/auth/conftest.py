@@ -33,15 +33,25 @@ def oidc_settings(monkeypatch, settings):
         client_secret="secret",
     )
     monkeypatch.setattr(config.settings, "auth", auth)
+    return auth
 
-    async def get_metadata():
+
+@pytest.fixture
+def identity_provider(oidc_settings, monkeypatch) -> oidc.IdentityProvider:
+    provider = oidc.IdentityProvider(oidc_settings)
+
+    async def metadata():
         return {"issuer": ISSUER, "jwks_uri": JWKS_URL}
 
-    monkeypatch.setattr(oidc, "get_metadata", get_metadata)
-    for name, value in (("_oauth", None), ("_jwks", None), ("_jwks_fetched_at", 0.0)):
-        monkeypatch.setattr(oidc, name, value)
-    oidc.register_idp()
-    return auth
+    monkeypatch.setattr(provider, "metadata", metadata)
+    return provider
+
+
+@pytest.fixture
+def registered_idp(unauthenticated_api_client, identity_provider):
+    """The identity provider, registered on the test app as the lifespan does."""
+    unauthenticated_api_client.app.state.idp = identity_provider
+    return identity_provider
 
 
 @pytest.fixture
@@ -50,9 +60,9 @@ def jwks_route(respx_mock, idp_key):
 
 
 @pytest.fixture
-def idp(oidc_settings, monkeypatch):
+def idp(registered_idp, monkeypatch):
     """The registered Authlib client with discovery preloaded and its token calls faked."""
-    client = oidc.get_idp()
+    client = registered_idp.client
     client.server_metadata = {
         "issuer": ISSUER,
         "authorization_endpoint": AUTHORIZE_URL,
@@ -65,7 +75,7 @@ def idp(oidc_settings, monkeypatch):
     async def get_metadata():
         return client.server_metadata
 
-    monkeypatch.setattr(oidc, "get_metadata", get_metadata)
+    monkeypatch.setattr(registered_idp, "metadata", get_metadata)
     client.fake_token = {
         "refresh_token": "refresh-1",
         "id_token": "id-token-1",

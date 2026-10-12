@@ -37,14 +37,14 @@ def _validate_return_to(return_to: str) -> str:
     return return_to
 
 
-async def _account_url() -> str | None:
+async def _account_url(idp: oidc.IdentityProvider | None) -> str | None:
     auth = config.settings.auth
     if auth.provider == "canaille":
         return f"{config.settings.canaille_public_url}/"
     issuer = str(auth.issuer_url)
-    if oidc.idp_registered():
+    if idp is not None:
         try:
-            issuer = (await oidc.get_metadata())["issuer"]
+            issuer = (await idp.metadata())["issuer"]
         except oidc.IDP_ERRORS:
             pass
     issuer = issuer.rstrip("/")
@@ -52,17 +52,22 @@ async def _account_url() -> str | None:
 
 
 @router.get("/config", response_model=AuthConfig)
-async def get_auth_config() -> AuthConfig:
+async def get_auth_config(request: Request) -> AuthConfig:
     return AuthConfig(
-        provider=config.settings.auth.provider, account_url=await _account_url()
+        provider=config.settings.auth.provider,
+        account_url=await _account_url(request.app.state.idp),
     )
 
 
 @router.get("/login")
-async def login_redirect(request: Request, return_to: str = DEFAULT_RETURN_TO):
+async def login_redirect(
+    request: Request,
+    return_to: str = DEFAULT_RETURN_TO,
+    idp: oidc.IdentityProvider = Depends(oidc.get_idp),
+):
     request.session[RETURN_TO_SESSION_KEY] = _validate_return_to(return_to)
     try:
-        return await oidc.get_idp().authorize_redirect(
+        return await idp.client.authorize_redirect(
             request, f"{config.settings.public_url}/auth/callback"
         )
     except oidc.IDP_ERRORS:
@@ -71,17 +76,18 @@ async def login_redirect(request: Request, return_to: str = DEFAULT_RETURN_TO):
 
 
 @router.get("/callback")
-async def callback(request: Request):
+async def callback(
+    request: Request, idp: oidc.IdentityProvider = Depends(oidc.get_idp)
+):
     return_to = request.session.pop(RETURN_TO_SESSION_KEY, DEFAULT_RETURN_TO)
     try:
-        idp = oidc.get_idp()
-        token = await idp.authorize_access_token(request)
+        token = await idp.client.authorize_access_token(request)
         claims = dict(token.get("userinfo") or {})
         if not oidc.extract_roles(claims, config.settings.auth.roles_claim):
-            userinfo = await idp.userinfo(token=token)
+            userinfo = await idp.client.userinfo(token=token)
             if userinfo.get("sub") == claims.get("sub"):
                 claims = {**userinfo, **claims}
-        issuer = (await oidc.get_metadata())["issuer"]
+        issuer = (await idp.metadata())["issuer"]
         db_client: MongoDBClient = request.app.state.db_client
         user = await oidc.provision_user(db_client, issuer, claims)
         if not user.is_active:
@@ -116,9 +122,11 @@ async def get_me(current_user: UserOut = Depends(get_current_user)):
     return current_user
 
 
-async def _end_session_url(id_token: str | None) -> str | None:
+async def _end_session_url(
+    idp: oidc.IdentityProvider, id_token: str | None
+) -> str | None:
     try:
-        metadata = await oidc.get_metadata()
+        metadata = await idp.metadata()
     except oidc.IDP_ERRORS:
         logger.exception("Could not read the identity provider metadata")
         return None
@@ -152,5 +160,6 @@ async def logout(
     if isinstance(session_id, str):
         id_token = await sessions.end_session(request.app.state.db_client, session_id)
     clear_session_cookies(request, response)
-    logout_url = await _end_session_url(id_token) if oidc.idp_registered() else None
+    idp: oidc.IdentityProvider | None = request.app.state.idp
+    logout_url = await _end_session_url(idp, id_token) if idp is not None else None
     return LogoutResponse(logout_url=logout_url)

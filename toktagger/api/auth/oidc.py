@@ -8,7 +8,7 @@ from typing import Any, Literal
 import httpx
 from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.starlette_client import OAuth, StarletteOAuth2App
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
@@ -45,79 +45,97 @@ except ImportError:
 # Authlib uses httpx2 when it is installed, so its network errors are not httpx errors
 IDP_ERRORS = (OAuthError, httpx.HTTPError, httpx2.HTTPError)
 
-_oauth: OAuth | None = None
-_jwks: KeySet | None = None
-_jwks_fetched_at = 0.0
 
+class IdentityProvider:
+    """The OpenID Connect provider client and its cached signing keys."""
 
-def register_idp() -> None:
-    """Register the configured identity provider, replacing any earlier one."""
-    global _oauth, _jwks, _jwks_fetched_at
-    auth = config.settings.auth
-    issuer = str(auth.issuer_url).rstrip("/")
-    _oauth = OAuth()
-    _oauth.register(
-        name=IDP_NAME,
-        server_metadata_url=f"{issuer}/.well-known/openid-configuration",
-        client_id=auth.client_id,
-        client_secret=auth.client_secret,
-        client_kwargs={"scope": auth.scopes, "code_challenge_method": "S256"},
-    )
-    _jwks = None
-    _jwks_fetched_at = 0.0
+    def __init__(self, auth: config.Auth) -> None:
+        self._auth = auth
+        issuer = str(auth.issuer_url).rstrip("/")
+        oauth = OAuth()
+        oauth.register(
+            name=IDP_NAME,
+            server_metadata_url=f"{issuer}/.well-known/openid-configuration",
+            client_id=auth.client_id,
+            client_secret=auth.client_secret,
+            client_kwargs={"scope": auth.scopes, "code_challenge_method": "S256"},
+        )
+        self.client: StarletteOAuth2App = getattr(oauth, IDP_NAME)
+        self._jwks: KeySet | None = None
+        self._jwks_fetched_at = 0.0
 
+    async def metadata(self) -> dict[str, Any]:
+        return await self.client.load_server_metadata()
 
-def idp_registered() -> bool:
-    return _oauth is not None
+    async def connect(self, timeout_seconds: float = 20) -> None:
+        """Wait for the provider discovery document, which a managed server may be slow to serve."""
+        deadline = time.monotonic() + timeout_seconds
+        delay = 0.5
+        while True:
+            try:
+                await self.metadata()
+                return
+            except IDP_ERRORS as error:
+                if time.monotonic() + delay > deadline:
+                    raise RuntimeError(
+                        f"Could not reach the identity provider at {self._auth.issuer_url}: {error}"
+                    ) from error
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 4)
 
+    async def fetch_jwks(self, force: bool = False) -> KeySet:
+        """Return the provider signing keys, cached for JWKS_TTL_SECONDS.
 
-def get_idp() -> StarletteOAuth2App:
-    if _oauth is None:
-        raise RuntimeError("The identity provider is not registered")
-    return getattr(_oauth, IDP_NAME)
+        A forced refresh is skipped when the keys were fetched less than
+        JWKS_MIN_REFRESH_SECONDS ago, so tokens with random key ids cannot make
+        the server hit the provider on every request.
+        """
+        age = time.monotonic() - self._jwks_fetched_at
+        if self._jwks is not None and age <= JWKS_TTL_SECONDS:
+            if not force or age <= JWKS_MIN_REFRESH_SECONDS:
+                return self._jwks
+        metadata = await self.metadata()
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(metadata["jwks_uri"])
+            response.raise_for_status()
+        self._jwks = KeySet.import_key_set(response.json())
+        self._jwks_fetched_at = time.monotonic()
+        return self._jwks
 
+    async def verify_access_token(self, token: str) -> dict[str, Any]:
+        """Verify a provider-issued JWT and return its claims.
 
-async def get_metadata() -> dict[str, Any]:
-    return await get_idp().load_server_metadata()
-
-
-async def connect_idp(timeout_seconds: float = 20) -> None:
-    """Wait for the provider discovery document, which a managed server may be slow to serve."""
-    deadline = time.monotonic() + timeout_seconds
-    delay = 0.5
-    while True:
+        Raises ValueError when the token is malformed, has an unknown signing key,
+        a bad signature, a wrong issuer or audience, or has expired.
+        """
         try:
-            await get_metadata()
-            return
-        except IDP_ERRORS as error:
-            if time.monotonic() + delay > deadline:
-                issuer = config.settings.auth.issuer_url
-                raise RuntimeError(
-                    f"Could not reach the identity provider at {issuer}: {error}"
-                ) from error
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, 4)
+            key_id = _token_key_id(token)
+            keys = await self.fetch_jwks()
+            if key_id is not None and not _has_key(keys, key_id):
+                keys = await self.fetch_jwks(force=True)
+                if not _has_key(keys, key_id):
+                    raise ValueError("Unknown signing key")
+            decoded = jwt.decode(token, keys, algorithms=SIGNING_ALGORITHMS)
+            issuer = (await self.metadata())["issuer"]
+            jwt.JWTClaimsRegistry(
+                iss={"essential": True, "value": issuer},
+                exp={"essential": True},
+            ).validate(decoded.claims)
+        except (JoseError, KeyError, TypeError, httpx.HTTPError) as error:
+            raise ValueError("Invalid token") from error
+        if self._auth.verify_bearer_audience and not _audience_matches(
+            decoded.claims, self._auth.client_id
+        ):
+            raise ValueError("Invalid token audience")
+        return decoded.claims
 
 
-async def fetch_jwks(force: bool = False) -> KeySet:
-    """Return the provider signing keys, cached for JWKS_TTL_SECONDS.
-
-    A forced refresh is skipped when the keys were fetched less than
-    JWKS_MIN_REFRESH_SECONDS ago, so tokens with random key ids cannot make
-    the server hit the provider on every request.
-    """
-    global _jwks, _jwks_fetched_at
-    age = time.monotonic() - _jwks_fetched_at
-    if _jwks is not None and age <= JWKS_TTL_SECONDS:
-        if not force or age <= JWKS_MIN_REFRESH_SECONDS:
-            return _jwks
-    metadata = await get_metadata()
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.get(metadata["jwks_uri"])
-        response.raise_for_status()
-    _jwks = KeySet.import_key_set(response.json())
-    _jwks_fetched_at = time.monotonic()
-    return _jwks
+def get_idp(request: Request) -> IdentityProvider:
+    """Return the identity provider that the app registered at startup."""
+    idp: IdentityProvider | None = request.app.state.idp
+    if idp is None:
+        raise RuntimeError("The identity provider is not registered")
+    return idp
 
 
 def _token_key_id(token: str) -> str | None:
@@ -135,35 +153,6 @@ def _audience_matches(claims: dict[str, Any], client_id: str) -> bool:
     if isinstance(audience, str):
         audience = [audience]
     return client_id in audience or claims.get("azp") == client_id
-
-
-async def verify_access_token(token: str) -> dict[str, Any]:
-    """Verify a provider-issued JWT and return its claims.
-
-    Raises ValueError when the token is malformed, has an unknown signing key,
-    a bad signature, a wrong issuer or audience, or has expired.
-    """
-    auth = config.settings.auth
-    try:
-        key_id = _token_key_id(token)
-        keys = await fetch_jwks()
-        if key_id is not None and not _has_key(keys, key_id):
-            keys = await fetch_jwks(force=True)
-            if not _has_key(keys, key_id):
-                raise ValueError("Unknown signing key")
-        decoded = jwt.decode(token, keys, algorithms=SIGNING_ALGORITHMS)
-        issuer = (await get_metadata())["issuer"]
-        jwt.JWTClaimsRegistry(
-            iss={"essential": True, "value": issuer},
-            exp={"essential": True},
-        ).validate(decoded.claims)
-    except (JoseError, KeyError, TypeError, httpx.HTTPError) as error:
-        raise ValueError("Invalid token") from error
-    if auth.verify_bearer_audience and not _audience_matches(
-        decoded.claims, auth.client_id
-    ):
-        raise ValueError("Invalid token audience")
-    return decoded.claims
 
 
 def _has_key(keys: KeySet, key_id: str) -> bool:

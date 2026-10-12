@@ -76,8 +76,8 @@ async def lifespan(app: FastAPI):
             "auth.provider=canaille requires launching via `toktagger` or run.py; "
             "for a standalone ASGI deployment set auth.provider=oidc"
         )
-    oidc.register_idp()
-    await oidc.connect_idp()
+    app.state.idp = oidc.IdentityProvider(config.settings.auth)
+    await app.state.idp.connect()
 
     yield
 

@@ -57,7 +57,9 @@ async def _refresh_session(request: Request, response: Response, payload: dict):
     if not isinstance(session_id, str) or not isinstance(csrf, str):
         raise HTTPException(status_code=401, detail="Invalid session. Sign in again.")
     try:
-        await sessions.refresh_session(request.app.state.db_client, session_id)
+        await sessions.refresh_session(
+            request.app.state.db_client, oidc.get_idp(request), session_id
+        )
     except (sessions.SessionEndedError, ValueError) as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     # Fail closed but keep the session, so it works again once the provider is back.
@@ -84,10 +86,11 @@ async def _get_user_from_bearer(request: Request, token: str) -> UserOut:
     if secrets.compare_digest(token, get_internal_token()):
         return _INTERNAL_USER
 
-    if not oidc.idp_registered():
+    idp: oidc.IdentityProvider | None = request.app.state.idp
+    if idp is None:
         raise HTTPException(status_code=401, detail="Invalid bearer token")
     try:
-        claims = await oidc.verify_access_token(token)
+        claims = await idp.verify_access_token(token)
         user = await oidc.provision_user(
             request.app.state.db_client, claims["iss"], claims, sync_profile=False
         )

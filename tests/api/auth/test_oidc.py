@@ -378,88 +378,96 @@ async def test_provision_concurrent_logins_with_one_username_get_distinct_names(
 
 
 @pytest.mark.asyncio
-async def test_verify_accepts_a_valid_token(oidc_settings, jwks_route, idp_key):
-    claims = await oidc.verify_access_token(mint_token(idp_key))
+async def test_verify_accepts_a_valid_token(identity_provider, jwks_route, idp_key):
+    claims = await identity_provider.verify_access_token(mint_token(idp_key))
 
     assert claims["sub"] == "user-1"
 
 
 @pytest.mark.asyncio
 async def test_verify_accepts_the_client_as_authorised_party(
-    oidc_settings, jwks_route, idp_key
+    identity_provider, jwks_route, idp_key
 ):
     token = mint_token(idp_key, aud=["account"], azp=CLIENT_ID)
 
-    assert (await oidc.verify_access_token(token))["azp"] == CLIENT_ID
+    assert (await identity_provider.verify_access_token(token))["azp"] == CLIENT_ID
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_a_wrong_audience(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_a_wrong_audience(identity_provider, jwks_route, idp_key):
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(idp_key, aud=["someone-else"]))
+        await identity_provider.verify_access_token(
+            mint_token(idp_key, aud=["someone-else"])
+        )
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_a_missing_audience(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_a_missing_audience(
+    identity_provider, jwks_route, idp_key
+):
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(idp_key, aud=None))
+        await identity_provider.verify_access_token(mint_token(idp_key, aud=None))
 
 
 @pytest.mark.asyncio
 async def test_verify_can_skip_the_audience_check(
-    oidc_settings, jwks_route, idp_key, monkeypatch
+    oidc_settings, identity_provider, jwks_route, idp_key, monkeypatch
 ):
     monkeypatch.setattr(oidc_settings, "verify_bearer_audience", False)
 
-    claims = await oidc.verify_access_token(mint_token(idp_key, aud=None))
+    claims = await identity_provider.verify_access_token(mint_token(idp_key, aud=None))
 
     assert claims["sub"] == "user-1"
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_a_wrong_issuer(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_a_wrong_issuer(identity_provider, jwks_route, idp_key):
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(idp_key, iss="https://evil.example"))
+        await identity_provider.verify_access_token(
+            mint_token(idp_key, iss="https://evil.example")
+        )
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_an_expired_token(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_an_expired_token(identity_provider, jwks_route, idp_key):
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(idp_key, exp=int(time.time()) - 10))
+        await identity_provider.verify_access_token(
+            mint_token(idp_key, exp=int(time.time()) - 10)
+        )
 
 
 @pytest.mark.asyncio
 async def test_verify_rejects_a_token_without_expiry(
-    oidc_settings, jwks_route, idp_key
+    identity_provider, jwks_route, idp_key
 ):
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(idp_key, exp=None))
+        await identity_provider.verify_access_token(mint_token(idp_key, exp=None))
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_a_bad_signature(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_a_bad_signature(identity_provider, jwks_route, idp_key):
     impostor = RSAKey.generate_key(2048, parameters={"kid": idp_key.kid})
 
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(impostor))
+        await identity_provider.verify_access_token(mint_token(impostor))
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_an_unknown_key_id(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_an_unknown_key_id(identity_provider, jwks_route, idp_key):
     stranger = RSAKey.generate_key(2048, auto_kid=True)
 
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(stranger))
+        await identity_provider.verify_access_token(mint_token(stranger))
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_an_unsigned_token(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_an_unsigned_token(identity_provider, jwks_route, idp_key):
     with pytest.raises(ValueError):
-        await oidc.verify_access_token("eyJhbGciOiJub25lIn0.e30.")
+        await identity_provider.verify_access_token("eyJhbGciOiJub25lIn0.e30.")
 
 
 @pytest.mark.asyncio
-async def test_verify_rejects_a_symmetric_token(oidc_settings, jwks_route, idp_key):
+async def test_verify_rejects_a_symmetric_token(identity_provider, jwks_route, idp_key):
     now = int(time.time())
     claims = {"iss": ISSUER, "sub": "x", "aud": [CLIENT_ID], "exp": now + 300}
     token = jwt.encode(
@@ -467,39 +475,41 @@ async def test_verify_rejects_a_symmetric_token(oidc_settings, jwks_route, idp_k
     )
 
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(token)
+        await identity_provider.verify_access_token(token)
 
 
 @pytest.mark.parametrize(
     "token", ["", "not-a-jwt", "a.b.c", ".....", "W10.e30.x", "bnVsbA.e30.x"]
 )
 @pytest.mark.asyncio
-async def test_verify_rejects_malformed_tokens(oidc_settings, jwks_route, token):
+async def test_verify_rejects_malformed_tokens(identity_provider, jwks_route, token):
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(token)
+        await identity_provider.verify_access_token(token)
 
 
 @pytest.mark.asyncio
 async def test_verify_reports_provider_outage_as_invalid_token(
-    oidc_settings, respx_mock, idp_key
+    identity_provider, respx_mock, idp_key
 ):
     respx_mock.get(JWKS_URL).mock(side_effect=httpx.ConnectError("down"))
 
     with pytest.raises(ValueError):
-        await oidc.verify_access_token(mint_token(idp_key))
+        await identity_provider.verify_access_token(mint_token(idp_key))
 
 
 @pytest.mark.asyncio
-async def test_jwks_is_cached_between_verifications(oidc_settings, jwks_route, idp_key):
-    await oidc.verify_access_token(mint_token(idp_key))
-    await oidc.verify_access_token(mint_token(idp_key))
+async def test_jwks_is_cached_between_verifications(
+    identity_provider, jwks_route, idp_key
+):
+    await identity_provider.verify_access_token(mint_token(idp_key))
+    await identity_provider.verify_access_token(mint_token(idp_key))
 
     assert jwks_route.call_count == 1
 
 
 @pytest.mark.asyncio
 async def test_jwks_refreshes_once_for_a_rotated_key(
-    oidc_settings, respx_mock, idp_key, monkeypatch
+    identity_provider, respx_mock, idp_key, monkeypatch
 ):
     rotated = RSAKey.generate_key(2048, auto_kid=True)
     route = respx_mock.get(JWKS_URL)
@@ -507,10 +517,10 @@ async def test_jwks_refreshes_once_for_a_rotated_key(
         httpx.Response(200, json=KeySet([idp_key]).as_dict()),
         httpx.Response(200, json=KeySet([idp_key, rotated]).as_dict()),
     ]
-    await oidc.verify_access_token(mint_token(idp_key))
+    await identity_provider.verify_access_token(mint_token(idp_key))
     monkeypatch.setattr(oidc, "JWKS_MIN_REFRESH_SECONDS", 0)
 
-    claims = await oidc.verify_access_token(mint_token(rotated))
+    claims = await identity_provider.verify_access_token(mint_token(rotated))
 
     assert claims["sub"] == "user-1"
     assert route.call_count == 2
@@ -518,13 +528,13 @@ async def test_jwks_refreshes_once_for_a_rotated_key(
 
 @pytest.mark.asyncio
 async def test_unknown_key_ids_cannot_force_repeated_jwks_fetches(
-    oidc_settings, jwks_route, idp_key
+    identity_provider, jwks_route, idp_key
 ):
-    await oidc.verify_access_token(mint_token(idp_key))
+    await identity_provider.verify_access_token(mint_token(idp_key))
 
     for _ in range(5):
         with pytest.raises(ValueError):
-            await oidc.verify_access_token(
+            await identity_provider.verify_access_token(
                 mint_token(RSAKey.generate_key(2048, auto_kid=True))
             )
 

@@ -48,7 +48,9 @@ async def start_session(
     return session_id
 
 
-async def refresh_session(db_client: MongoDBClient, session_id: str) -> None:
+async def refresh_session(
+    db_client: MongoDBClient, idp: oidc.IdentityProvider, session_id: str
+) -> None:
     """Read the account from the provider again and update the local user from it.
 
     A lock shared by all workers serialises the refresh, because the provider can
@@ -68,9 +70,8 @@ async def refresh_session(db_client: MongoDBClient, session_id: str) -> None:
         ):
             return
 
-        idp = oidc.get_idp()
         try:
-            token = await idp.fetch_access_token(
+            token = await idp.client.fetch_access_token(
                 grant_type="refresh_token", refresh_token=session["refresh_token"]
             )
         except oidc.OAuthError as exc:
@@ -91,7 +92,7 @@ async def refresh_session(db_client: MongoDBClient, session_id: str) -> None:
             },
         )
 
-        claims = dict(await idp.userinfo(token=token))
+        claims = dict(await idp.client.userinfo(token=token))
         if claims.get("sub") != session["sub"]:
             await sessions.delete_one({"_id": session_id})
             raise SessionEndedError(

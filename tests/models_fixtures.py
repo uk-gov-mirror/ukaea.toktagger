@@ -61,6 +61,7 @@ async def models_api_client(monkeypatch, settings, db_client, ray_session):
     app = server.app
     app.state.db_client = db_client
     app.state.project = None
+    app.state.idp = None
     # This task ID is associated with a model in the db, so that cancelling training test works.
     # Registered as a real (long-running) task ref, since ray.cancel() runs for
     # real inside the TaskRegistry actor - it can't be mocked from this process.

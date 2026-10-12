@@ -278,7 +278,7 @@ async def test_config_for_the_managed_provider_links_to_canaille(
 
 @pytest.mark.asyncio
 async def test_config_for_keycloak_links_to_the_account_console(
-    unauthenticated_api_client, oidc_settings
+    unauthenticated_api_client, registered_idp
 ):
     resp = await unauthenticated_api_client.get("/auth/config")
 
@@ -287,7 +287,7 @@ async def test_config_for_keycloak_links_to_the_account_console(
 
 @pytest.mark.asyncio
 async def test_config_account_link_uses_the_public_issuer_from_discovery(
-    unauthenticated_api_client, oidc_settings, monkeypatch
+    unauthenticated_api_client, oidc_settings, registered_idp, monkeypatch
 ):
     """The configured issuer URL may be a container-internal name the browser cannot reach."""
     monkeypatch.setattr(oidc_settings, "issuer_url", "http://keycloak:8080/realms/tt")
@@ -295,7 +295,7 @@ async def test_config_account_link_uses_the_public_issuer_from_discovery(
     async def get_metadata():
         return {"issuer": "http://localhost:8080/realms/tt"}
 
-    monkeypatch.setattr(oidc, "get_metadata", get_metadata)
+    monkeypatch.setattr(registered_idp, "metadata", get_metadata)
 
     resp = await unauthenticated_api_client.get("/auth/config")
 
@@ -304,12 +304,12 @@ async def test_config_account_link_uses_the_public_issuer_from_discovery(
 
 @pytest.mark.asyncio
 async def test_config_account_link_falls_back_to_the_configured_issuer(
-    unauthenticated_api_client, oidc_settings, monkeypatch
+    unauthenticated_api_client, registered_idp, monkeypatch
 ):
     async def unreachable():
         raise httpx.ConnectError("down")
 
-    monkeypatch.setattr(oidc, "get_metadata", unreachable)
+    monkeypatch.setattr(registered_idp, "metadata", unreachable)
 
     resp = await unauthenticated_api_client.get("/auth/config")
 
@@ -355,12 +355,12 @@ async def test_logout_has_no_url_when_the_provider_cannot_end_sessions(api_clien
 
 @pytest.mark.asyncio
 async def test_logout_succeeds_when_the_provider_is_unreachable(
-    api_client, idp, monkeypatch
+    api_client, idp, registered_idp, monkeypatch
 ):
     async def unreachable():
         raise httpx.ConnectError("down")
 
-    monkeypatch.setattr(oidc, "get_metadata", unreachable)
+    monkeypatch.setattr(registered_idp, "metadata", unreachable)
 
     resp = await api_client.post("/auth/logout")
 
@@ -370,7 +370,7 @@ async def test_logout_succeeds_when_the_provider_is_unreachable(
 
 @pytest.mark.asyncio
 async def test_bearer_idp_token_is_accepted_and_provisions_the_user(
-    unauthenticated_api_client, oidc_settings, jwks_route, idp_key
+    unauthenticated_api_client, registered_idp, jwks_route, idp_key
 ):
     token = mint_token(
         idp_key, sub="script-1", preferred_username="robot", groups=["toktagger-admins"]
@@ -387,7 +387,7 @@ async def test_bearer_idp_token_is_accepted_and_provisions_the_user(
 
 @pytest.mark.asyncio
 async def test_bearer_idp_token_does_not_change_the_role_or_profile(
-    unauthenticated_api_client, oidc_settings, jwks_route, idp_key, db_client
+    unauthenticated_api_client, registered_idp, jwks_route, idp_key, db_client
 ):
     await oidc.provision_user(
         db_client,
@@ -414,7 +414,7 @@ async def test_bearer_idp_token_does_not_change_the_role_or_profile(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("token", ["W10.e30.x", "bnVsbA.e30.x"])
 async def test_bearer_with_a_non_object_jwt_header_is_401(
-    unauthenticated_api_client, oidc_settings, jwks_route, token
+    unauthenticated_api_client, registered_idp, jwks_route, token
 ):
     resp = await unauthenticated_api_client.get(
         "/auth/me", headers={"Authorization": f"Bearer {token}"}
@@ -433,7 +433,7 @@ async def test_bearer_with_a_non_object_jwt_header_is_401(
     ],
 )
 async def test_bearer_idp_token_with_bad_claims_is_401(
-    unauthenticated_api_client, oidc_settings, jwks_route, idp_key, overrides
+    unauthenticated_api_client, registered_idp, jwks_route, idp_key, overrides
 ):
     token = mint_token(idp_key, **overrides)
 
@@ -446,7 +446,7 @@ async def test_bearer_idp_token_with_bad_claims_is_401(
 
 @pytest.mark.asyncio
 async def test_bearer_idp_token_with_an_unknown_key_is_401(
-    unauthenticated_api_client, oidc_settings, jwks_route
+    unauthenticated_api_client, registered_idp, jwks_route
 ):
     token = mint_token(RSAKey.generate_key(2048, auto_kid=True))
 
@@ -459,7 +459,7 @@ async def test_bearer_idp_token_with_an_unknown_key_is_401(
 
 @pytest.mark.asyncio
 async def test_bearer_idp_token_for_an_inactive_user_is_401(
-    unauthenticated_api_client, oidc_settings, jwks_route, idp_key, db_client
+    unauthenticated_api_client, registered_idp, jwks_route, idp_key, db_client
 ):
     token = mint_token(idp_key, sub="script-1", preferred_username="robot")
     headers = {"Authorization": f"Bearer {token}"}
@@ -475,7 +475,7 @@ async def test_bearer_idp_token_for_an_inactive_user_is_401(
 
 @pytest.mark.asyncio
 async def test_idp_token_in_the_cookie_is_not_accepted(
-    unauthenticated_api_client, oidc_settings, jwks_route, idp_key
+    unauthenticated_api_client, registered_idp, jwks_route, idp_key
 ):
     unauthenticated_api_client.cookies.set(
         config.settings.auth.cookie_name, mint_token(idp_key)
@@ -499,7 +499,7 @@ async def test_toktagger_session_token_is_401_as_a_bearer_with_an_idp(
 
 @pytest.mark.asyncio
 async def test_internal_token_still_works_with_an_idp_registered(
-    unauthenticated_api_client, oidc_settings
+    unauthenticated_api_client, registered_idp
 ):
     resp = await unauthenticated_api_client.get(
         "/auth/me", headers={"Authorization": f"Bearer {get_internal_token()}"}

@@ -33,7 +33,7 @@ async def login(client, username: str = "admin", groups: list[str] | None = None
         "preferred_username": username,
         "groups": groups or [],
     }
-    idp = oidc.get_idp()
+    idp = client.app.state.idp.client
     idp.fake_token = {
         "refresh_token": "refresh-1",
         "id_token": "id-1",
@@ -246,10 +246,10 @@ async def test_sign_in_stores_the_provider_tokens_in_a_session(
 
 @pytest.mark.asyncio
 async def test_sign_in_without_a_refresh_token_fails(
-    setup_db_auth, unauthenticated_api_client
+    setup_db_auth, unauthenticated_api_client, idp
 ):
     """Without a refresh token, the session could never read the account again."""
-    oidc.get_idp().fake_token = {"userinfo": {"sub": "admin-sub"}}
+    idp.fake_token = {"userinfo": {"sub": "admin-sub"}}
 
     resp = await sign_in(unauthenticated_api_client)
 
@@ -258,26 +258,26 @@ async def test_sign_in_without_a_refresh_token_fails(
 
 @pytest.mark.asyncio
 async def test_fresh_session_is_not_refreshed(
-    setup_db_auth, unauthenticated_api_client
+    setup_db_auth, unauthenticated_api_client, idp
 ):
     await login(unauthenticated_api_client)
 
     resp = await unauthenticated_api_client.get("/auth/me")
 
     assert not has_set_cookie(resp, config.settings.auth.cookie_name)
-    assert oidc.get_idp().refresh_calls == []
+    assert idp.refresh_calls == []
 
 
 @pytest.mark.asyncio
 async def test_stale_session_is_refreshed_at_the_provider(
-    setup_db_auth, unauthenticated_api_client, refresh_due
+    setup_db_auth, unauthenticated_api_client, refresh_due, idp
 ):
     await login(unauthenticated_api_client)
 
     resp = await unauthenticated_api_client.get("/auth/me")
 
     assert resp.status_code == 200, resp.text
-    assert oidc.get_idp().refresh_calls == ["refresh-1"]
+    assert idp.refresh_calls == ["refresh-1"]
     assert f"Max-Age={SESSION_IDLE_TIMEOUT}" in set_cookie_header(
         resp, config.settings.auth.cookie_name
     )
@@ -289,23 +289,23 @@ async def test_stale_session_is_refreshed_at_the_provider(
 
 @pytest.mark.asyncio
 async def test_refresh_uses_the_rotated_refresh_token(
-    setup_db_auth, unauthenticated_api_client, refresh_due
+    setup_db_auth, unauthenticated_api_client, refresh_due, idp
 ):
     await login(unauthenticated_api_client)
 
     await unauthenticated_api_client.get("/auth/me")
     await unauthenticated_api_client.get("/auth/me")
 
-    assert oidc.get_idp().refresh_calls == ["refresh-1", "refresh-2"]
+    assert idp.refresh_calls == ["refresh-1", "refresh-2"]
 
 
 @pytest.mark.asyncio
 async def test_refresh_applies_a_demotion_at_the_provider(
-    setup_db_auth, unauthenticated_api_client, db_client, refresh_due
+    setup_db_auth, unauthenticated_api_client, db_client, refresh_due, idp
 ):
     await login(unauthenticated_api_client, groups=["toktagger-admins"])
     assert (await utils.get_user_by_username(db_client, "admin")).global_role == "admin"
-    oidc.get_idp().fake_userinfo["groups"] = []
+    idp.fake_userinfo["groups"] = []
 
     resp = await unauthenticated_api_client.get("/auth/me")
 
@@ -315,10 +315,9 @@ async def test_refresh_applies_a_demotion_at_the_provider(
 
 @pytest.mark.asyncio
 async def test_refusal_at_the_provider_ends_the_session(
-    setup_db_auth, unauthenticated_api_client, refresh_due
+    setup_db_auth, unauthenticated_api_client, refresh_due, idp
 ):
     await login(unauthenticated_api_client)
-    idp = oidc.get_idp()
     idp.fake_refresh = oidc.OAuthError(error="invalid_grant")
 
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
@@ -328,21 +327,20 @@ async def test_refusal_at_the_provider_ends_the_session(
 
 @pytest.mark.asyncio
 async def test_refresh_for_a_different_account_ends_the_session(
-    setup_db_auth, unauthenticated_api_client, refresh_due
+    setup_db_auth, unauthenticated_api_client, refresh_due, idp
 ):
     await login(unauthenticated_api_client)
-    oidc.get_idp().fake_userinfo = {"sub": "someone-else", "preferred_username": "x"}
+    idp.fake_userinfo = {"sub": "someone-else", "preferred_username": "x"}
 
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_unreachable_provider_is_503_and_keeps_the_session(
-    setup_db_auth, unauthenticated_api_client, refresh_due
+    setup_db_auth, unauthenticated_api_client, refresh_due, idp
 ):
     """Fail closed, but do not sign the user out for a provider outage."""
     await login(unauthenticated_api_client)
-    idp = oidc.get_idp()
     idp.fake_refresh = httpx.ConnectError("provider down")
 
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 503
@@ -352,7 +350,7 @@ async def test_unreachable_provider_is_503_and_keeps_the_session(
 
 @pytest.mark.asyncio
 async def test_concurrent_refreshes_use_the_refresh_token_once(
-    setup_db_auth, db_client, idp
+    setup_db_auth, db_client, idp, registered_idp
 ):
     """The provider revokes a used refresh token, so a second use would end the session."""
     session_id = await sessions.start_session(
@@ -364,8 +362,8 @@ async def test_concurrent_refreshes_use_the_refresh_token_once(
     idp.fake_userinfo = {"sub": "admin-sub", "preferred_username": "admin"}
 
     await asyncio.gather(
-        sessions.refresh_session(db_client, session_id),
-        sessions.refresh_session(db_client, session_id),
+        sessions.refresh_session(db_client, registered_idp, session_id),
+        sessions.refresh_session(db_client, registered_idp, session_id),
     )
 
     assert idp.refresh_calls == ["refresh-1"]
@@ -390,7 +388,7 @@ async def test_refresh_keeps_the_csrf_token_usable(
 
 @pytest.mark.asyncio
 async def test_bearer_caller_is_never_refreshed(
-    setup_db_auth, unauthenticated_api_client, refresh_due
+    setup_db_auth, unauthenticated_api_client, refresh_due, idp
 ):
     """Scripts and Ray callbacks hold their own token; handing them a cookie is wrong."""
     resp = await unauthenticated_api_client.get(
@@ -399,7 +397,7 @@ async def test_bearer_caller_is_never_refreshed(
 
     assert resp.status_code == 200, resp.text
     assert not has_set_cookie(resp, config.settings.auth.cookie_name)
-    assert oidc.get_idp().refresh_calls == []
+    assert idp.refresh_calls == []
 
 
 @pytest.mark.asyncio
