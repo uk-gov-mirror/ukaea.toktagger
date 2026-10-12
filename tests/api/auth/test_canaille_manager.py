@@ -59,6 +59,7 @@ def test_first_provisioning_creates_admin_group_and_client(canaille_settings, ca
     assert client["redirect_uris"] == [f"{public_url}/auth/callback"]
     assert client["post_logout_redirect_uris"] == [f"{public_url}/ui/login"]
     assert client["grant_types"] == ["authorization_code", "refresh_token"]
+    assert client["scope"] == ["openid", "profile", "email", "groups"]
     assert client["audience"]
     banner = capsys.readouterr().out
     assert "Bootstrap-pw-1" in banner

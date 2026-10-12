@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 ADMIN_USERNAME = "admin"
 READY_TIMEOUT_SECONDS = 20
 STOP_TIMEOUT_SECONDS = 5
-CANAILLE_SCOPE = "openid profile email groups"
+CANAILLE_SCOPES = ("openid", "profile", "email", "groups")
 
 CONFIG_TEMPLATE = """\
 SECRET_KEY = "{secret_key}"
@@ -153,8 +153,8 @@ class ManagedCanaille:
             "refresh_token",
             "--response-types",
             "code",
-            "--scope",
-            CANAILLE_SCOPE,
+            # One flag per scope: a single space-separated value is stored as one scope.
+            *(arg for scope in CANAILLE_SCOPES for arg in ("--scope", scope)),
             "--token-endpoint-auth-method",
             "client_secret_basic",
             *self._client_arguments(),
