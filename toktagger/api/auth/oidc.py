@@ -229,11 +229,10 @@ async def _warn_if_last_admin_demoted(
     ]
     if not other_admins:
         logger.warning(
-            "The identity provider removed %s from %s, so TokTagger has no active "
-            "admin. Add a user to %s at the provider to give admin access again.",
-            user.username,
-            config.settings.auth.admin_group,
-            config.settings.auth.admin_group,
+            f"The identity provider removed {user.username} from "
+            f"{config.settings.auth.admin_group}, so TokTagger has no active "
+            f"admin. Add a user to {config.settings.auth.admin_group} at the "
+            "provider to give admin access again."
         )
 
 
