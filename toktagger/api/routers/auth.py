@@ -87,7 +87,7 @@ async def callback(
             claims = {}
         if not oidc.extract_roles(claims, config.settings.auth.roles_claim):
             userinfo = await idp.client.userinfo(token=token)
-            if userinfo.get("sub") == claims.get("sub"):
+            if not claims.get("sub") or userinfo.get("sub") == claims.get("sub"):
                 claims = {**userinfo, **claims}
         issuer = (await idp.metadata())["issuer"]
         db_client: MongoDBClient = request.app.state.db_client
