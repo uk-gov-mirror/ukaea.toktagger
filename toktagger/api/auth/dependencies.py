@@ -56,7 +56,12 @@ def _require_session_age(payload: dict) -> int:
     The cap makes the browser sign in again, which reads the role from the provider.
     """
     auth_time = payload.get("auth_time")
-    if not isinstance(auth_time, int) or session_seconds_left(auth_time) <= 0:
+    if not isinstance(auth_time, int):
+        raise HTTPException(
+            status_code=401,
+            detail="Session token has no valid sign-in time. Sign in again.",
+        )
+    if session_seconds_left(auth_time) <= 0:
         raise HTTPException(status_code=401, detail="Session expired. Sign in again.")
     return auth_time
 

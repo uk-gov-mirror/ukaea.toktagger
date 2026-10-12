@@ -390,7 +390,7 @@ async def test_session_cookie_without_a_sign_in_time_is_401(
     resp = await unauthenticated_api_client.get("/auth/me")
 
     assert resp.status_code == 401
-    assert "Session expired" in resp.json()["detail"]
+    assert "no valid sign-in time" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
