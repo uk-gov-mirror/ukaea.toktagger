@@ -107,6 +107,10 @@ class Auth(pydantic.BaseModel):
         8003,
         description="Port for the managed Canaille server. Only used when provider is canaille.",
     )
+    canaille_bind_host: str = pydantic.Field(
+        "127.0.0.1",
+        description="Address the managed Canaille server listens on. The default accepts local connections only. To let other computers reach Canaille, put a reverse proxy in front of it or set this to 0.0.0.0, and set canaille_public_url. Only used when provider is canaille.",
+    )
     canaille_public_url: str | None = pydantic.Field(
         None,
         description="URL at which the browser reaches the managed Canaille server, and the issuer URL. If unset, it is http://<server.host>:<canaille_port>. Only used when provider is canaille.",

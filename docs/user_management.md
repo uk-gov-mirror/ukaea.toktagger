@@ -10,7 +10,7 @@ TokTagger signs users in with OpenID Connect. Set `auth.provider` to choose the 
 
 | `auth.provider` | Who runs the identity provider | Use it for |
 |---|---|---|
-| `canaille` (default) | TokTagger starts a local [Canaille](https://canaille.readthedocs.io) server for you | A laptop or a small team. `pip install toktagger` is all you need. |
+| `canaille` (default) | TokTagger starts a local [Canaille](https://canaille.readthedocs.io) server for you | A laptop or a small team. `pip install toktagger` is all you need. For remote users, see [Multi-User Deployment](#multi-user-deployment). |
 | `oidc` | You. Use Keycloak, Microsoft Entra ID, or your organisation single sign-on | A shared server, or a Docker deployment |
 
 Both modes use the same sign-in flow. In `canaille` mode, TokTagger also creates and starts the identity provider.
@@ -207,5 +207,25 @@ toktagger --workers 4 --host 0.0.0.0 --port 8002
 Use the `toktagger` command or `python -m toktagger.api.run` for Gunicorn. These commands start the identity provider and the shared services one time, before the workers start. Do not start `toktagger.api.asgi:app` directly with `auth.provider = "canaille"`.
 
 Set `AUTH_SECRET_KEY` so that all workers sign sessions with the same key.
+
+!!! warning
+    By default, the Canaille server listens on `127.0.0.1:8003`, so only the computer that runs TokTagger can reach it. Remote users cannot sign in until you make Canaille reachable.
+
+    Canaille also serves the admin pages. A person who knows the Canaille admin password can reset the password of any user. That person can also add themselves to the `toktagger-admins` group and become a global administrator of TokTagger.
+
+    To let remote users sign in:
+
+    1. Use a long, random Canaille admin password. Set `auth.canaille_bootstrap_password` before the first start.
+    2. Put a reverse proxy in front of Canaille. Allow only the sign-in paths from the network (see the paths below). Set `auth.canaille_public_url` to the proxy address.
+    3. Only if you cannot use a proxy, set `auth.canaille_bind_host = "0.0.0.0"` and `auth.canaille_public_url` to the address of your server. The admin pages are then open to the network.
+
+    For step 2, the proxy must allow these paths for sign-in:
+
+    - `/login`, `/logout`, `/auth/`, `/firstlogin/` and `/reset`
+    - `/oauth/`, but not `/oauth/register`
+    - `/.well-known/`
+    - `/consent/` and `/static/`
+
+    Block all other paths, for example `/users`, `/groups/`, `/profile`, `/admin/`, `/impersonate/` and `/scim/`. Then user management and password changes are possible only on the local computer, at `http://localhost:8003`. Test the sign-in flow after you set up the proxy.
 
 A single Uvicorn worker (the default) is enough for personal use. It handles one request at a time, so many annotators will see delays.

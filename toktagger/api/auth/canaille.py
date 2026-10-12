@@ -234,7 +234,9 @@ class ManagedCanaille:
         port = config.settings.auth.canaille_port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             probe.settimeout(0.5)
-            return probe.connect_ex((config.settings.server.host, port)) == 0
+            return (
+                probe.connect_ex((config.settings.auth.canaille_bind_host, port)) == 0
+            )
 
     def start(self) -> None:
         if self._port_in_use():
@@ -242,7 +244,7 @@ class ManagedCanaille:
                 f"Port {config.settings.auth.canaille_port} is already in use. "
                 "Change auth.canaille_port or stop the other process."
             )
-        bind = f"{config.settings.server.host}:{config.settings.auth.canaille_port}"
+        bind = f"{config.settings.auth.canaille_bind_host}:{config.settings.auth.canaille_port}"
         log = self.log_path.open("ab")
         self._process = subprocess.Popen(
             [str(_canaille_executable()), "run", "--bind", bind],
