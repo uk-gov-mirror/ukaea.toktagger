@@ -193,7 +193,9 @@ def test_timeseries_drag_time_zone(
 
     # Check added to list
     expect(page.get_by_role("gridcell", name=zone_type)).to_be_visible()
-    [initial] = save_annotations(page, project_id, sample_id)
+    annotations = save_annotations(page, project_id, sample_id)
+    assert len(annotations) == 1
+    initial = annotations[0]
     initial_left_position, initial_right_position = (
         initial["time_min"],
         initial["time_max"],
@@ -204,7 +206,9 @@ def test_timeseries_drag_time_zone(
     # Click handle, drag to new position
     page.get_by_label(f"zone.{handle}").drag_to(page.locator(drag_to))
     # Check saved values correctly updated
-    [updated] = save_annotations(page, project_id, sample_id)
+    annotations = save_annotations(page, project_id, sample_id)
+    assert len(annotations) == 1
+    updated = annotations[0]
     updated_left_position, updated_right_position = (
         updated["time_min"],
         updated["time_max"],
@@ -292,7 +296,9 @@ def test_timeseries_drag_vspan(
 
     # Check added to list
     expect(page.get_by_role("gridcell", name=time_point_type)).to_be_visible()
-    [initial] = save_annotations(page, project_id, sample_id)
+    annotations = save_annotations(page, project_id, sample_id)
+    assert len(annotations) == 1
+    initial = annotations[0]
     initial_position = initial["time"]
 
     page.get_by_role("button", name="View Mode").click()
@@ -300,7 +306,9 @@ def test_timeseries_drag_vspan(
     # Click handle, drag to new position
     page.get_by_label("time-point").drag_to(page.locator(drag_to))
     # Check saved value correctly updated
-    [updated] = save_annotations(page, project_id, sample_id)
+    annotations = save_annotations(page, project_id, sample_id)
+    assert len(annotations) == 1
+    updated = annotations[0]
     updated_position = updated["time"]
 
     if drag_to == ".wdrag":

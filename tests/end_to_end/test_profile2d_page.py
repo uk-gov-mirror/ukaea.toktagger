@@ -267,7 +267,9 @@ def test_profile2d_annotations_locked_in_view_mode(server_setup, page: Page):
     add_time_annotation(page, "TIME REGION", "NTM")
     # add_time_annotation leaves us back in View Mode.
 
-    [before] = save_annotations(page, project_id, sample_id)
+    annotations = save_annotations(page, project_id, sample_id)
+    assert len(annotations) == 1
+    before = annotations[0]
 
     # Annotations have pointer events disabled in View Mode, so dragging one does not move it...
     zone_box = page.get_by_label("time-zone").first.bounding_box()
@@ -279,7 +281,9 @@ def test_profile2d_annotations_locked_in_view_mode(server_setup, page: Page):
     page.mouse.move(center_x + 100, center_y, steps=10)
     page.mouse.up()
 
-    [after] = save_annotations(page, project_id, sample_id)
+    annotations = save_annotations(page, project_id, sample_id)
+    assert len(annotations) == 1
+    after = annotations[0]
     assert after["time_min"] == before["time_min"]
     assert after["time_max"] == before["time_max"]
 
