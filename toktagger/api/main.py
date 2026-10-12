@@ -373,4 +373,5 @@ class Server:
             self.app,
             host=config.settings.server.host,
             port=config.settings.server.port,
+            forwarded_allow_ips=config.settings.server.forwarded_allow_ips,
         )
