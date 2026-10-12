@@ -60,7 +60,7 @@ class IdentityProvider:
             client_secret=auth.client_secret,
             client_kwargs={"scope": auth.scopes, "code_challenge_method": "S256"},
         )
-        self.client: StarletteOAuth2App = getattr(oauth, IDP_NAME)
+        self.client: StarletteOAuth2App = oauth.create_client(IDP_NAME)
         self._jwks: KeySet | None = None
         self._jwks_fetched_at = 0.0
 
