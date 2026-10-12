@@ -258,8 +258,8 @@ async def provision_user(
         if auth.admin_group in extract_roles(claims, auth.roles_claim)
         else "user"
     )
-    email = claims.get("email") if isinstance(claims.get("email"), str) else None
-    display_name = claims.get("name") if isinstance(claims.get("name"), str) else None
+    email = claims.get("email")
+    display_name = claims.get("name")
 
     if not sync_profile:
         existing = await utils.get_user_by_oidc_identity(db_client, issuer, sub)
