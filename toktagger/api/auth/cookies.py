@@ -66,13 +66,14 @@ def set_session_cookies(
         samesite=samesite,
         path="/",
     )
-    if id_token and len(id_token) > MAX_ID_TOKEN_COOKIE_BYTES:
+    id_token_bytes = len(id_token.encode()) if id_token else 0
+    if id_token_bytes > MAX_ID_TOKEN_COOKIE_BYTES:
         # Browsers drop cookies over about 4 KB, so logout goes without id_token_hint.
         logger.warning(
             "The provider ID token is %d bytes, too large for a cookie. Sign-out will "
             "not include id_token_hint. Remove large claims, such as groups, from the "
             "ID token at the provider.",
-            len(id_token),
+            id_token_bytes,
         )
     elif id_token:
         response.set_cookie(
