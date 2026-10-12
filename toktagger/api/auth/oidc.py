@@ -117,10 +117,7 @@ class IdentityProvider:
                     raise ValueError("Unknown signing key")
             decoded = jwt.decode(token, keys, algorithms=SIGNING_ALGORITHMS)
             issuer = (await self.metadata())["issuer"]
-            jwt.JWTClaimsRegistry(
-                iss={"essential": True, "value": issuer},
-                exp={"essential": True},
-            ).validate(decoded.claims)
+            _validate_claims(decoded.claims, issuer)
         except (JoseError, KeyError, TypeError, httpx.HTTPError) as error:
             raise ValueError("Invalid token") from error
         if self._auth.verify_bearer_audience and not _audience_matches(
@@ -146,6 +143,19 @@ def _token_key_id(token: str) -> str | None:
         raise ValueError("Invalid token")
     key_id = header.get("kid")
     return key_id if isinstance(key_id, str) else None
+
+
+def _validate_claims(claims: dict[str, Any], issuer: str) -> None:
+    """Check the issuer, expiry, not-before and issued-at claims of a token."""
+    registry = jwt.JWTClaimsRegistry(
+        iss={"essential": True, "value": issuer},
+        exp={"essential": True},
+    )
+    registry.validate(claims)
+    if "nbf" in claims:
+        registry.validate_nbf(claims["nbf"])
+    if "iat" in claims:
+        registry.validate_iat(claims["iat"])
 
 
 def _audience_matches(claims: dict[str, Any], client_id: str) -> bool:
