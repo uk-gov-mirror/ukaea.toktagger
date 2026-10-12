@@ -35,7 +35,7 @@ SIGNING_ALGORITHMS = [
     "ES512",
     "EdDSA",
 ]
-RESERVED_USERNAME_PREFIXES = ("model::", "annotators::", "__")
+RESERVED_USERNAME_PREFIXES = ("__", "model::", "annotators::")
 
 try:
     import httpx2
@@ -182,13 +182,8 @@ def extract_roles(claims: dict[str, Any], path: str) -> list[str]:
 
 def _strip_reserved_prefixes(name: str) -> str:
     stripped = name.strip()
-    changed = True
-    while changed:
-        changed = False
-        for prefix in RESERVED_USERNAME_PREFIXES:
-            if stripped.startswith(prefix):
-                stripped = stripped.removeprefix(prefix).lstrip("_")
-                changed = True
+    for prefix in RESERVED_USERNAME_PREFIXES:
+        stripped = stripped.removeprefix(prefix)
     return stripped
 
 
