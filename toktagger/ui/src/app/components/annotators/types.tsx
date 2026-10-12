@@ -11,6 +11,17 @@ export const annotatorCreatedBy = (type: AnnotatorTypes) =>
 
 export const modelCreatedBy = (modelType: string) => `model::${modelType}`;
 
-// Display only; the raw created_by value is kept for filtering, exports, etc.
-export const displayCreatedBy = (createdBy: string) =>
-  createdBy.replace(/^(model|annotators)::/, "");
+const USER_ID_PATTERN = /^[0-9a-f]{24}$/;
+
+// Display only; the raw created_by value is kept for ownership checks, filtering, etc.
+export const displayCreatedBy = ({
+  created_by,
+  created_by_name,
+}: {
+  created_by: string;
+  created_by_name?: string | null;
+}) => {
+  if (created_by_name) return created_by_name;
+  if (USER_ID_PATTERN.test(created_by)) return "Deleted user";
+  return created_by.replace(/^(model|annotators)::/, "");
+};

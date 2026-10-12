@@ -10,6 +10,8 @@ export const BaseAnnotationSchema = z.object({
   validated: z.boolean().nullable().default(null),
   uncertainty: z.number().nullable().default(1),
   created_by: z.string().default("manual"),
+  // Read-only author name the backend resolves from created_by.
+  created_by_name: z.string().nullish(),
   signal_name: z.string().nullable().default(null),
   label: z.string(),
   type: z.string(),
@@ -416,6 +418,7 @@ export type TimeSeriesAnnotation = {
   // "new" and avoid re-stamping someone else's annotation under the saving user.
   db_id: string | null;
   created_by: string;
+  created_by_name?: string | null;
   label: string;
   type: TimeSeriesAnnotationType;
   points: TimeSeriesAnnotationPoint[];

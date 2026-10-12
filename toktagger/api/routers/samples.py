@@ -126,7 +126,7 @@ async def add_samples(
             if not is_internal and not (annotation.created_by or "").startswith(
                 RESERVED_CREATED_BY_PREFIXES
             ):
-                annotation.created_by = current_user.username
+                annotation.created_by = current_user.id
 
     # Insert new samples
     ids = await request.app.state.db_client.insert_many(

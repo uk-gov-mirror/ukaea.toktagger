@@ -89,7 +89,7 @@ async def test_import_non_admin_created_by_overwritten(
 
     resp = await client.put(
         f"/projects/{project_id}/annotations",
-        json=annotation_payload(created_by="bob"),
+        json=annotation_payload(created_by=setup_db_auth["bob_id"]),
         headers=session_headers(alice_token),
     )
     assert resp.status_code == 200
@@ -102,7 +102,7 @@ async def test_import_non_admin_created_by_overwritten(
     assert get_resp.status_code == 200
     annotations = get_resp.json()
     assert len(annotations) == 1
-    assert annotations[0]["created_by"] == "alice"
+    assert annotations[0]["created_by"] == setup_db_auth["alice_id"]
 
 
 @pytest.mark.asyncio
@@ -117,7 +117,7 @@ async def test_import_admin_is_attributed_as_self(
 
     resp = await client.put(
         f"/projects/{project_id}/annotations",
-        json=annotation_payload(created_by="alice"),
+        json=annotation_payload(created_by=setup_db_auth["alice_id"]),
         headers=session_headers(admin_token),
     )
     assert resp.status_code == 200
@@ -128,7 +128,7 @@ async def test_import_admin_is_attributed_as_self(
     )
     annotations = get_resp.json()
     assert len(annotations) == 1
-    assert annotations[0]["created_by"] == "admin"
+    assert annotations[0]["created_by"] == setup_db_auth["admin_id"]
 
 
 @pytest.mark.asyncio
@@ -214,7 +214,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
     sample_id = setup_db_auth["sample_id"]
 
     # A human user whose name matches a reserved-prefix type (the collision scenario).
-    await db_client.insert(
+    human_id = await db_client.insert(
         "users",
         UserIn(
             username=matching_name,
@@ -263,7 +263,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
     annotations = get_resp.json()
     labels_by_author = {a["created_by"]: a["label"] for a in annotations}
     assert labels_by_author.get(prefixed_created_by) == "machine_pred"
-    assert labels_by_author.get(matching_name) == "human_ann"
+    assert labels_by_author.get(human_id) == "human_ann"
 
 
 @pytest.mark.asyncio
@@ -289,7 +289,7 @@ async def test_import_preserves_machine_created_by(
         f"/projects/{project_id}/annotations",
         json=annotation_payload(created_by="model::disruption_cnn")
         + annotation_payload(label="suggested", created_by="annotators::peak_detection")
-        + annotation_payload(label="hand_drawn", created_by="bob"),
+        + annotation_payload(label="hand_drawn", created_by=setup_db_auth["bob_id"]),
         headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
@@ -299,8 +299,10 @@ async def test_import_preserves_machine_created_by(
         headers=session_headers(admin_token),
     )
     authors = sorted(a["created_by"] for a in get_resp.json())
-    assert authors == [
-        "alice",  # the spoofed human author is still replaced
-        "annotators::peak_detection",
-        "model::disruption_cnn",
-    ], authors
+    assert authors == sorted(
+        [
+            setup_db_auth["alice_id"],  # the spoofed human author is still replaced
+            "annotators::peak_detection",
+            "model::disruption_cnn",
+        ]
+    ), authors

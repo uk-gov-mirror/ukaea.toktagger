@@ -10,6 +10,7 @@ from pydantic import TypeAdapter
 from toktagger.api.crud.db import MongoDBClient
 from toktagger.api.schemas import convert_to_objectid
 from toktagger.api.schemas.annotations import (
+    RESERVED_CREATED_BY_PREFIXES,
     AnnotationBatchTypes,
     AnnotationOutTypeAdapter,
     AnnotationOutTypes,
@@ -376,6 +377,32 @@ async def get_annotations(
     return [AnnotationOutTypeAdapter.validate_python(a) for a in annotations]
 
 
+async def add_author_names(
+    db_client: MongoDBClient, annotations: list[AnnotationOutTypes]
+) -> list[AnnotationOutTypes]:
+    """Set created_by_name on each annotation from its created_by value.
+
+    A user ID resolves to that user's username and a model:: or annotators:: value to
+    the name after the prefix. A user ID with no user (a deleted account) stays None,
+    and any other legacy value, such as "manual", is shown as it is.
+    """
+    user_ids = {
+        annotation.created_by
+        for annotation in annotations
+        if annotation.created_by and ObjectId.is_valid(annotation.created_by)
+    }
+    usernames = await get_usernames_by_ids(db_client, user_ids)
+    for annotation in annotations:
+        author = annotation.created_by or ""
+        if author.startswith(RESERVED_CREATED_BY_PREFIXES):
+            annotation.created_by_name = author.split("::", 1)[1]
+        elif ObjectId.is_valid(author):
+            annotation.created_by_name = usernames.get(author)
+        else:
+            annotation.created_by_name = author or None
+    return annotations
+
+
 async def get_annotation_authors(
     db_client: MongoDBClient, project_id: str, sample_id: str
 ) -> dict[str, str]:
@@ -652,6 +679,19 @@ async def get_user_by_username(
         "users", filters={"username": username}
     )
     return UserOut.model_validate(docs[0]) if docs else None
+
+
+async def get_usernames_by_ids(
+    db_client: MongoDBClient, user_ids: Iterable[str]
+) -> dict[str, str]:
+    """Map each user ID that still exists to its username, in one query."""
+    object_ids = [ObjectId(user_id) for user_id in user_ids]
+    if not object_ids:
+        return {}
+    docs = await db_client.get_filtered_documents(
+        "users", filters={"_id": {"$in": object_ids}}
+    )
+    return {str(doc["_id"]): doc["username"] for doc in docs}
 
 
 async def get_user_by_oidc_identity(

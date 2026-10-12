@@ -13,6 +13,7 @@ import asyncio
 
 import pytest
 
+from tests import db_definitions
 from tests.api.auth.conftest import add_member
 from tests.identity import get_auth_token, session_headers
 
@@ -139,7 +140,7 @@ async def test_server_overwrites_created_by_from_jwt(
 
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     assert len(annotations) == 1
-    assert annotations[0]["created_by"] == "alice"
+    assert annotations[0]["created_by"] == setup_db_auth["alice_id"]
 
 
 @pytest.mark.asyncio
@@ -399,7 +400,7 @@ async def test_save_does_not_duplicate_or_reattribute_others_annotation(
 
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     assert len(annotations) == 1
-    assert annotations[0]["created_by"] == "bob"
+    assert annotations[0]["created_by"] == setup_db_auth["bob_id"]
 
 
 @pytest.mark.asyncio
@@ -424,7 +425,7 @@ async def test_annotator_can_edit_another_users_annotation(
     bob_token = get_auth_token("bob")
 
     # Bob saves his own annotation plus a model prediction in one go — a second save
-    # would replace his own, since his save is scoped to created_by="bob".
+    # would replace his own, since his save is scoped to his user ID.
     await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=[
@@ -453,7 +454,7 @@ async def test_annotator_can_edit_another_users_annotation(
 
     # Alice drags bob's region and relabels it, then saves the whole loaded set.
     for annotation in loaded:
-        if annotation["created_by"] == "bob":
+        if annotation["created_by"] == setup_db_auth["bob_id"]:
             annotation["time_min"] = 2.5
             annotation["time_max"] = 3.5
             annotation["label"] = "edited_by_alice"
@@ -468,7 +469,7 @@ async def test_annotator_can_edit_another_users_annotation(
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     assert len(annotations) == 2, "the edit must not duplicate or drop annotations"
 
-    edited = next(a for a in annotations if a["created_by"] == "bob")
+    edited = next(a for a in annotations if a["created_by"] == setup_db_auth["bob_id"])
     assert edited["label"] == "edited_by_alice"
     assert edited["time_min"] == 2.5
     assert edited["time_max"] == 3.5
@@ -522,7 +523,7 @@ async def test_edit_survives_owner_resave_between_load_and_save(
     assert annotations[0]["_id"] == loaded[0]["_id"]
     assert annotations[0]["label"] == "edited_by_alice"
     assert annotations[0]["time_min"] == 0.3
-    assert annotations[0]["created_by"] == "bob"
+    assert annotations[0]["created_by"] == setup_db_auth["bob_id"]
 
 
 @pytest.mark.asyncio
@@ -611,7 +612,7 @@ async def test_editing_others_annotation_does_not_delete_their_other_annotations
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     labels = {a["label"] for a in annotations}
     assert labels == {"bob_0", "bob_1_edited", "bob_2"}
-    assert all(a["created_by"] == "bob" for a in annotations)
+    assert all(a["created_by"] == setup_db_auth["bob_id"] for a in annotations)
 
 
 @pytest.mark.asyncio
@@ -634,7 +635,9 @@ async def test_annotator_can_delete_another_users_annotation(
     await put_annotations(client, project_id, sample_id, alice_token, "alice_ann")
 
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
-    bobs_annotation = next(a for a in loaded if a["created_by"] == "bob")
+    bobs_annotation = next(
+        a for a in loaded if a["created_by"] == setup_db_auth["bob_id"]
+    )
 
     resp = await client.delete(
         f"/projects/{project_id}/samples/{sample_id}/annotations/{bobs_annotation['_id']}",
@@ -701,7 +704,7 @@ async def test_cross_project_annotation_edit_is_scoped_out(
     )
     assert len(untouched) == 1
     assert untouched[0]["label"] == "other_project_ann"
-    assert untouched[0]["created_by"] == "bob"
+    assert untouched[0]["created_by"] == setup_db_auth["bob_id"]
 
 
 @pytest.mark.asyncio
@@ -731,7 +734,7 @@ async def test_claiming_another_users_annotation_does_not_copy_it(
 
     # Alice relabels bob's annotation but claims it as her own work.
     loaded[0]["label"] = "claimed_by_alice"
-    loaded[0]["created_by"] = "alice"
+    loaded[0]["created_by"] = setup_db_auth["alice_id"]
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
@@ -741,12 +744,14 @@ async def test_claiming_another_users_annotation_does_not_copy_it(
 
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     assert len(annotations) == 1, "the spoofed author must not produce a second copy"
-    assert annotations[0]["created_by"] == "bob", "authorship must be unchanged"
+    assert annotations[0]["created_by"] == setup_db_auth["bob_id"], (
+        "authorship must be unchanged"
+    )
     assert annotations[0]["label"] == "claimed_by_alice", "the edit still applies"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("spoofed_author", ["bob", "model::disruption_cnn"])
+@pytest.mark.parametrize("spoofed_author", ["bob_id", "model::disruption_cnn"])
 async def test_resaving_own_annotation_cannot_change_its_author(
     setup_db_auth, unauthenticated_api_client, spoofed_author
 ):
@@ -763,7 +768,7 @@ async def test_resaving_own_annotation_cannot_change_its_author(
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
     assert len(loaded) == 1
 
-    loaded[0]["created_by"] = spoofed_author
+    loaded[0]["created_by"] = setup_db_auth.get(spoofed_author, spoofed_author)
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=loaded,
@@ -773,7 +778,7 @@ async def test_resaving_own_annotation_cannot_change_its_author(
 
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     assert len(annotations) == 1
-    assert annotations[0]["created_by"] == "alice"
+    assert annotations[0]["created_by"] == setup_db_auth["alice_id"]
 
 
 def machine_payload(label: str, created_by: str):
@@ -856,7 +861,8 @@ async def test_replacing_machine_annotations_leaves_human_work_alone(
 
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     authors = sorted(a["created_by"] for a in annotations)
-    assert authors == ["annotators::peak_detection", "bob"], authors
+    expected = sorted(["annotators::peak_detection", setup_db_auth["bob_id"]])
+    assert authors == expected, authors
 
 
 @pytest.mark.asyncio
@@ -889,7 +895,8 @@ async def test_a_save_without_machine_rows_leaves_them_untouched(
 
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     authors = sorted(a["created_by"] for a in annotations)
-    assert authors == ["annotators::peak_detection", "bob"], authors
+    expected = sorted(["annotators::peak_detection", setup_db_auth["bob_id"]])
+    assert authors == expected, authors
 
 
 @pytest.mark.asyncio
@@ -912,4 +919,71 @@ async def test_concurrent_saves_by_same_user_do_not_duplicate(
     assert all(resp.status_code == 200 for resp in responses)
 
     annotations = await get_annotations(client, project_id, sample_id, alice_token)
-    assert len([a for a in annotations if a["created_by"] == "alice"]) == 1
+    assert (
+        len([a for a in annotations if a["created_by"] == setup_db_auth["alice_id"]])
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_annotation_authors_are_named_on_read(
+    setup_db_auth, unauthenticated_api_client
+):
+    client = unauthenticated_api_client
+    admin_token = get_auth_token("admin")
+    project_id = setup_db_auth["project_id"]
+    sample_id = setup_db_auth["sample_id"]
+    await add_member(client, admin_token, project_id, "alice", "annotator")
+    alice_token = get_auth_token("alice")
+
+    resp = await client.put(
+        f"/projects/{project_id}/samples/{sample_id}/annotations",
+        json=annotation_payload("alice_ann")
+        + machine_payload("predicted", "model::disruption_cnn"),
+        headers=session_headers(alice_token),
+    )
+    assert resp.status_code == 200, resp.text
+
+    annotations = await get_annotations(client, project_id, sample_id, admin_token)
+    authors = {(a["created_by"], a["created_by_name"]) for a in annotations}
+    assert authors == {
+        (setup_db_auth["alice_id"], "alice"),
+        ("model::disruption_cnn", "disruption_cnn"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_new_user_with_a_deleted_users_name_does_not_own_their_annotations(
+    setup_db_auth, unauthenticated_api_client, db_client
+):
+    """A freed username must not hand the old account's annotations to its next holder."""
+    client = unauthenticated_api_client
+    admin_token = get_auth_token("admin")
+    project_id = setup_db_auth["project_id"]
+    sample_id = setup_db_auth["sample_id"]
+    old_alice_id = setup_db_auth["alice_id"]
+    await add_member(client, admin_token, project_id, "alice", "annotator")
+    await put_annotations(
+        client, project_id, sample_id, get_auth_token("alice"), "old_alice_ann"
+    )
+
+    resp = await client.delete(
+        f"/users/{old_alice_id}", headers=session_headers(admin_token)
+    )
+    assert resp.status_code == 200, resp.text
+    new_alice_id = await db_client.insert(
+        "users",
+        db_definitions.USER_ALICE.model_copy(update={"oidc_sub": "new-alice-sub"}),
+    )
+    await add_member(client, admin_token, project_id, "alice", "annotator")
+    resp = await put_annotations(
+        client, project_id, sample_id, get_auth_token("alice"), "new_alice_ann"
+    )
+    assert resp.status_code == 200, resp.text
+
+    annotations = await get_annotations(client, project_id, sample_id, admin_token)
+    authors = {(a["created_by"], a["created_by_name"], a["label"]) for a in annotations}
+    assert authors == {
+        (old_alice_id, None, "old_alice_ann"),
+        (new_alice_id, "alice", "new_alice_ann"),
+    }

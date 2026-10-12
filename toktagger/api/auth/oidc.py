@@ -245,8 +245,8 @@ async def provision_user(
 ) -> UserOut:
     """Create or update the local user for an identity provider account.
 
-    The username is chosen at first sign-in and never changed afterwards, because
-    annotations store it in created_by. With sync_profile, the global role, email
+    The username is chosen at first sign-in and never changed afterwards, so it stays
+    the same where people see it. With sync_profile, the global role, email
     and display name follow the claims; access tokens often omit those claims, so
     bearer callers turn it off. A local is_active=False is not changed here.
     """
