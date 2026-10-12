@@ -71,7 +71,10 @@ async def lifespan(app: FastAPI):
     )
     app.state.project = None
 
-    if not config.settings.auth.issuer_url:
+    if (
+        config.settings.auth.provider == "canaille"
+        and not config.settings.auth.issuer_url
+    ):
         raise RuntimeError(
             "auth.provider=canaille requires launching via `toktagger` or run.py; "
             "for a standalone ASGI deployment set auth.provider=oidc"
