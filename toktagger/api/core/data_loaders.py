@@ -120,6 +120,20 @@ class LoaderRegistry:
         return loader_class.sample_data_type().model_json_schema()
 
 
+def _combine_signals(
+    results: dict[str, TimeSeriesData | Profile2DData | None], source: str
+) -> MultiVariateTimeSeriesData | MultiProfile2DData:
+    """Wrap per-signal results in a multi-signal container, keeping missing signals as None."""
+    loaded = [value for value in results.values() if value is not None]
+    if all(isinstance(value, TimeSeriesData) for value in loaded):
+        return MultiVariateTimeSeriesData(values=results)
+    if all(isinstance(value, Profile2DData) for value in loaded):
+        return MultiProfile2DData(values=results)
+    raise DataLoaderError(
+        f"Mixed data types found for {source}. Check signal names to ensure they all correspond to the same type of data (e.g., all time series or all 2D profiles)."
+    )
+
+
 @LoaderRegistry.register("image")
 class ImageDataLoader(DataLoader):
     """DataLoader for retrieving data using a folder of image files"""
@@ -376,14 +390,7 @@ class UDADataLoader(DataLoader):
                 f"Could not load any signals for shot ID '{sample.shot_id}'. Check UDA connectivity and signal names."
             )
 
-        if all(isinstance(value, TimeSeriesData) for value in results.values()):
-            return MultiVariateTimeSeriesData(values=results)
-        elif all(isinstance(value, Profile2DData) for value in results.values()):
-            return MultiProfile2DData(values=results)
-        else:
-            raise DataLoaderError(
-                f"Mixed data types found for shot ID '{sample.shot_id}'. Check UDA signal names to ensure they all correspond to the same type of data (e.g., all time series or all 2D profiles)."
-            )
+        return _combine_signals(results, f"shot ID '{sample.shot_id}' from UDA")
 
 
 @lru_cache(maxsize=128)
@@ -570,14 +577,7 @@ class SALDataLoader(DataLoader):
                 f"Could not load any signals for shot ID '{sample.shot_id}' from SAL. Check SAL connectivity and signal names."
             )
 
-        if all(isinstance(value, TimeSeriesData) for value in results.values()):
-            return MultiVariateTimeSeriesData(values=results)
-        elif all(isinstance(value, Profile2DData) for value in results.values()):
-            return MultiProfile2DData(values=results)
-        else:
-            raise DataLoaderError(
-                f"Mixed data types found for shot ID '{sample.shot_id}' from SAL. Check signal names to ensure they all correspond to the same type of data (e.g., all time series or all 2D profiles)."
-            )
+        return _combine_signals(results, f"shot ID '{sample.shot_id}' from SAL")
 
 
 @lru_cache(maxsize=128)
@@ -709,11 +709,4 @@ def _get_fair_mast_signals(
             f"Could not load any signals from FAIR-MAST file at '{file_path}'. Check signal names and file accessibility."
         )
 
-    if all(isinstance(value, TimeSeriesData) for value in results.values()):
-        return MultiVariateTimeSeriesData(values=results)
-    elif all(isinstance(value, Profile2DData) for value in results.values()):
-        return MultiProfile2DData(values=results)
-    else:
-        raise DataLoaderError(
-            f"Mixed data types found for file '{file_path}'. Check signal names to ensure they all correspond to the same type of data (e.g., all time series or all 2D profiles)."
-        )
+    return _combine_signals(results, f"file '{file_path}'")

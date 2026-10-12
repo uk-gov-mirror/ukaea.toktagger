@@ -12,6 +12,8 @@ from toktagger.api.schemas.samples import (
 from toktagger.api.schemas.data import (
     TimeSeriesData,
     MultiVariateTimeSeriesData,
+    Profile2DData,
+    MultiProfile2DData,
     ImageData,
     ImageParams,
     DataParams,
@@ -618,6 +620,32 @@ def test_fair_mast_dataloader():
     ip_values = numpy.array(data.values.get("magnetics/ip").values)
     assert numpy.min(ip_values) == -40806.55078125
     assert numpy.max(ip_values) == 649008.875
+
+
+def test_combine_signals_keeps_missing_time_series_signals():
+    ip = TimeSeriesData(time=[0.0, 1.0], values=[1.0, 2.0])
+
+    data = data_loaders._combine_signals({"ip": ip, "li": None}, "test")
+
+    assert isinstance(data, MultiVariateTimeSeriesData)
+    assert data.values == {"ip": ip, "li": None}
+
+
+def test_combine_signals_keeps_missing_profile_signals():
+    profile = Profile2DData(time=[0.0], dim_1=[0.0, 1.0], values=[[1.0, 2.0]])
+
+    data = data_loaders._combine_signals({"ne": profile, "te": None}, "test")
+
+    assert isinstance(data, MultiProfile2DData)
+    assert data.values == {"ne": profile, "te": None}
+
+
+def test_combine_signals_mixed_types_raises():
+    ip = TimeSeriesData(time=[0.0], values=[1.0])
+    profile = Profile2DData(time=[0.0], dim_1=[0.0], values=[[1.0]])
+
+    with pytest.raises(data_loaders.DataLoaderError, match="Mixed data types"):
+        data_loaders._combine_signals({"ip": ip, "ne": profile, "li": None}, "test")
 
 
 @pytest.mark.parametrize(
