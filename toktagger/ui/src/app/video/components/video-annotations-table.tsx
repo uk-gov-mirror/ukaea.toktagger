@@ -20,7 +20,7 @@ import {
   Tooltip,
   TooltipTrigger,
 } from "@adobe/react-spectrum";
-import Crosshairs from "@spectrum-icons/workflow/Crosshairs";
+import StepBackward from "@spectrum-icons/workflow/StepBackward";
 import Delete from "@spectrum-icons/workflow/Delete";
 import ImageMapPolygon from "@spectrum-icons/workflow/ImageMapPolygon";
 import ImageMapRectangle from "@spectrum-icons/workflow/ImageMapRectangle";
@@ -137,7 +137,7 @@ const VideoRowActions = ({
           aria-label="Jump to annotation"
           onPress={jumpToAnnotation}
         >
-          <Crosshairs />
+          <StepBackward />
         </ActionButton>
         <Tooltip>Jump to annotation</Tooltip>
       </TooltipTrigger>
