@@ -15,10 +15,10 @@ import {
   Row,
   Cell,
   Flex,
+  Selection,
   Tooltip,
   TooltipTrigger,
 } from "@adobe/react-spectrum";
-import Crosshairs from "@spectrum-icons/workflow/Crosshairs";
 import Delete from "@spectrum-icons/workflow/Delete";
 import {
   useTimeSeriesActions,
@@ -57,44 +57,26 @@ const AnnotationRowActions = ({
   annotation: TimeSeriesAnnotation;
 }) => {
   const { editMode } = useTimeSeriesState();
-  const { removeAnnotation, selectAnnotations, setFocusXRange } =
-    useTimeSeriesActions();
-
-  const jumpToAnnotation = () => {
-    const xs = annotation.points.map((point) => point.x);
-    setFocusXRange([Math.min(...xs), Math.max(...xs)]);
-    selectAnnotations([annotation.id]);
-  };
+  const { removeAnnotation } = useTimeSeriesActions();
 
   return (
-    <>
-      <TooltipTrigger delay={350}>
-        <ActionButton
-          isQuiet
-          aria-label="Jump to annotation"
-          onPress={jumpToAnnotation}
-        >
-          <Crosshairs />
-        </ActionButton>
-        <Tooltip>Jump to annotation</Tooltip>
-      </TooltipTrigger>
-      <TooltipTrigger delay={350}>
-        <ActionButton
-          isQuiet
-          isDisabled={!editMode}
-          aria-label="Delete annotation"
-          onPress={() => removeAnnotation(annotation.id)}
-        >
-          <Delete />
-        </ActionButton>
-        <Tooltip>Delete annotation</Tooltip>
-      </TooltipTrigger>
-    </>
+    <TooltipTrigger delay={350}>
+      <ActionButton
+        isQuiet
+        isDisabled={!editMode}
+        aria-label="Delete annotation"
+        onPress={() => removeAnnotation(annotation.id)}
+      >
+        <Delete />
+      </ActionButton>
+      <Tooltip>Delete annotation</Tooltip>
+    </TooltipTrigger>
   );
 };
 
 export const AnnotationsTable = () => {
   const { annotations, categories } = useTimeSeriesState();
+  const { selectAnnotations, setFocusXRange } = useTimeSeriesActions();
 
   const entries = useMemo<TableEntry[]>(
     () =>
@@ -112,13 +94,39 @@ export const AnnotationsTable = () => {
     [annotations, categories],
   );
 
+  const selectedKeys = annotations
+    .filter((annotation) => annotation.selected)
+    .map((annotation) => annotation.id);
+
+  // Mirrors the plot's selection, so rows and annotations highlight together
+  const onSelectionChange = (keys: Selection) => {
+    const selected =
+      keys === "all"
+        ? annotations
+        : annotations.filter((annotation) => keys.has(annotation.id));
+    selectAnnotations(selected.map((annotation) => annotation.id));
+
+    const xs = selected.flatMap((annotation) =>
+      annotation.points.map((point) => point.x),
+    );
+    if (xs.length > 0) setFocusXRange([Math.min(...xs), Math.max(...xs)]);
+  };
+
   return (
     <div className="relative w-[70%] overflow-x-auto shadow-md sm:rounded-lg ml-auto mr-auto p-4">
       {/* <ToolingControls /> */}
       <Flex justifyContent="center" marginBottom="size-200">
         <h1 className="text-xl font-bold">Annotations</h1>
       </Flex>
-      <TableView aria-label="Annotations table" width="100%" height="200px">
+      <TableView
+        aria-label="Annotations table"
+        width="100%"
+        height="200px"
+        selectionMode="multiple"
+        selectionStyle="highlight"
+        selectedKeys={selectedKeys}
+        onSelectionChange={onSelectionChange}
+      >
         <TableHeader>
           <Column key="marker" width={56} hideHeader>
             Marker
@@ -126,7 +134,7 @@ export const AnnotationsTable = () => {
           <Column key="label">Class Label</Column>
           <Column key="type">Type</Column>
           <Column key="created_by">Created By</Column>
-          <Column key="actions" width={112} hideHeader align="end">
+          <Column key="actions" width={56} hideHeader align="end">
             Actions
           </Column>
         </TableHeader>
