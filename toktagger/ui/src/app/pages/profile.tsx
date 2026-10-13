@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "@adobe/react-spectrum";
+import ApiTokens from "@/app/components/ui/apiTokens";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useBreadcrumbs } from "@/app/contexts/BreadcrumbContext";
 import { BACKEND_API_URL, apiFetch } from "@/app/core";
@@ -32,7 +33,14 @@ export default function ProfilePage() {
   }, []);
 
   return (
-    <Flex height="100%" justifyContent="center" alignItems="center">
+    <Flex
+      minHeight="100%"
+      direction="column"
+      justifyContent="center"
+      alignItems="center"
+      gap="size-300"
+      marginY="size-300"
+    >
       <View
         backgroundColor="gray-100"
         borderWidth="thin"
@@ -77,6 +85,17 @@ export default function ProfilePage() {
             </Link>
           )}
         </Flex>
+      </View>
+      <View
+        backgroundColor="gray-100"
+        borderWidth="thin"
+        borderColor="dark"
+        borderRadius="medium"
+        padding="size-300"
+        width="size-10000"
+        maxWidth="90%"
+      >
+        <ApiTokens />
       </View>
     </Flex>
   );

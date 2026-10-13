@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from toktagger.api import config
-from toktagger.api.auth import oidc, sessions
+from toktagger.api.auth import api_tokens, oidc, sessions
 from toktagger.api.auth.core import (
     create_access_token,
     decode_token_with_age,
@@ -76,8 +76,19 @@ def _require_active(user: UserOut) -> UserOut:
     return user
 
 
+async def _get_user_from_api_token(request: Request, token: str) -> UserOut:
+    db_client = request.app.state.db_client
+    user_id = await api_tokens.authenticate_api_token(db_client, token)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired API token")
+    user = await utils.get_user_by_id(db_client, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User no longer exists")
+    return _require_active(user)
+
+
 async def _get_user_from_bearer(request: Request, token: str) -> UserOut:
-    """Authenticate a bearer header, which holds the internal token or an IdP token.
+    """Authenticate a bearer header: the internal token, an API token or an IdP token.
 
     A bearer header cannot be attached by a cross-site caller, so it needs no CSRF
     cover, and the caller manages its own token, so the session does not slide.
@@ -85,6 +96,8 @@ async def _get_user_from_bearer(request: Request, token: str) -> UserOut:
     # Internal server-to-server token used by Ray-worker callbacks (sender.py).
     if secrets.compare_digest(token, get_internal_token()):
         return _INTERNAL_USER
+    if api_tokens.is_api_token(token):
+        return await _get_user_from_api_token(request, token)
 
     idp: oidc.IdentityProvider | None = request.app.state.idp
     if idp is None:
@@ -134,8 +147,21 @@ async def get_current_user(
     # Header first: Ray-worker callbacks and scripts never send a cookie, and an
     # explicit header should beat whatever session the same browser happens to hold.
     if bearer is not None:
+        request.state.via_session = False
         return await _get_user_from_bearer(request, bearer.credentials)
+    request.state.via_session = True
     return await _get_user_from_cookie(request, response)
+
+
+async def require_session_user(
+    request: Request, current_user: UserOut = Depends(get_current_user)
+) -> UserOut:
+    """Allow only a browser session, so a leaked API token cannot create more tokens."""
+    if not request.state.via_session:
+        raise HTTPException(
+            status_code=403, detail="Sign in with a browser to manage API tokens"
+        )
+    return current_user
 
 
 async def require_global_admin(

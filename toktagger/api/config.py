@@ -103,6 +103,11 @@ class Auth(pydantic.BaseModel):
         True,
         description="Whether to require the client_id in the audience of provider access tokens sent as Bearer tokens.",
     )
+    api_token_max_lifetime_days: int = pydantic.Field(
+        365,
+        description="Longest lifetime in days that a user can give a personal API token.",
+        gt=0,
+    )
     canaille_port: int = pydantic.Field(
         8003,
         description="Port for the managed Canaille server. Only used when provider is canaille.",

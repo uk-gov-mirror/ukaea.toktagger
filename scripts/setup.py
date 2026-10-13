@@ -32,7 +32,8 @@ def get_token() -> str:
     token = os.environ.get("TOKTAGGER_API_TOKEN")
     if not token:
         raise SetupError(
-            "Set TOKTAGGER_API_TOKEN to an access token from the identity provider."
+            "Set TOKTAGGER_API_TOKEN to an API token. Create one on the TokTagger "
+            "Profile page."
         )
     return token
 

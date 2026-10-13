@@ -185,13 +185,40 @@ Only members and admins can view samples and submit annotations. If you open the
 
 ## Scripts
 
-A script can call the API with a Bearer token. Send the **access token** of the identity provider in the header `Authorization: Bearer <token>`. TokTagger checks the signature, the issuer, the expiry and the audience of the token. It then uses the same rules as for a browser user.
+A script can call the API with a Bearer token. Send the token in the header `Authorization: Bearer <token>`. TokTagger then uses the same rules as for a browser user.
+
+### Personal API tokens
+
+Use a personal API token for scripts. To create a token:
+
+1. Sign in to TokTagger.
+2. Open **Profile** from the Projects page.
+3. In **API tokens**, enter a name for the token and select when the token expires.
+4. Click **Create token**.
+5. Copy the token. TokTagger shows the token one time only.
+
+A token has the same access as your account. Keep it secret. If a person gets your token, revoke it immediately: click the **Revoke** button next to the token.
+
+A token stops working when:
+
+- it expires
+- you revoke it
+- an admin deactivates or deletes your account.
+
+You cannot use an API token to create or revoke API tokens. Use a browser session for this.
+
+The longest lifetime of a token is `auth.api_token_max_lifetime_days` (default 365 days).
 
 The scripts `scripts/setup.py` and `scripts/create_mock_data.py` read the token from the environment variable `TOKTAGGER_API_TOKEN`:
 
 ```sh
-TOKTAGGER_API_TOKEN=<access token> python scripts/setup.py
+export TOKTAGGER_API_TOKEN=<API token>
+python scripts/setup.py
 ```
+
+### Identity provider access tokens
+
+A script can also send an access token of the identity provider. TokTagger checks the signature, the issuer, the expiry and the audience of the token. The identity provider must let the script get an access token. The default TokTagger clients in Canaille and in the Keycloak development realm do not do this.
 
 ---
 

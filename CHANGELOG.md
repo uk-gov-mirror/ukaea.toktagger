@@ -6,6 +6,7 @@
 * TokTagger does not connect identity provider accounts to users from the old password login. A user with the same name gets a new record.
 * Added `auth.session_max_age_seconds`. A browser session ends after this time (default 12 hours), and the user signs in again. Access tokens from scripts do not change the global role.
 * Removed `POST /auth/token`. Scripts send an identity provider access token and read it from `TOKTAGGER_API_TOKEN`.
+* Added personal API tokens. A user creates and revokes them on the Profile page, or with `/users/me/tokens`. A script sends one as a Bearer token. Added `auth.api_token_max_lifetime_days` (default 365).
 * Added `server.forwarded_allow_ips`, `server.gunicorn_timeout` and `server.cors_origins`.
 * Replaced `api.dockerfile` with a multi-stage `Dockerfile`. `docker-compose.yml` is now the production stack (Caddy, TokTagger, Keycloak, Postgres, MongoDB). The old development stack is in `docker-compose.dev.yml`. See `docs/deployment.md`.
 

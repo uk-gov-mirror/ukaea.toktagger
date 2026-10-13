@@ -447,6 +447,20 @@ export const LogoutResponseSchema = z.object({
   logout_url: z.string().nullable(),
 });
 
+export const ApiTokenSchema = z.object({
+  _id: z.string(),
+  name: z.string(),
+  hint: z.string(),
+  created_at: z.string(),
+  expires_at: z.string(),
+  last_used_at: z.string().nullable(),
+});
+export type ApiToken = z.infer<typeof ApiTokenSchema>;
+
+export const ApiTokenCreatedSchema = ApiTokenSchema.extend({
+  token: z.string(),
+});
+
 // Mirrors the backend's ProjectMember, as GET /users/me/memberships returns it.
 export const ProjectMemberSchema = z.object({
   project_id: z.string(),

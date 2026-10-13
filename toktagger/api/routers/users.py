@@ -1,11 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
+from toktagger.api import config
+from toktagger.api.auth import api_tokens
 from toktagger.api.auth.dependencies import (
     get_current_user,
     require_global_admin,
+    require_session_user,
 )
 from toktagger.api.crud import utils
 from toktagger.api.crud.db import MongoDBClient
+from toktagger.api.schemas.auth import ApiTokenCreate, ApiTokenCreated, ApiTokenOut
 from toktagger.api.schemas.users import UserOut, UserUpdate
 from toktagger.api.schemas.projects import ProjectMemberOut
 
@@ -36,6 +40,49 @@ async def list_my_memberships(
     return await utils.get_user_memberships(
         request.app.state.db_client, current_user.id
     )
+
+
+@router.get("/me/tokens", response_model=list[ApiTokenOut])
+async def list_my_api_tokens(
+    request: Request,
+    current_user: UserOut = Depends(require_session_user),
+) -> list[ApiTokenOut]:
+    return await api_tokens.list_api_tokens(
+        request.app.state.db_client, current_user.id
+    )
+
+
+@router.post("/me/tokens", response_model=ApiTokenCreated, status_code=201)
+async def create_my_api_token(
+    request: Request,
+    body: ApiTokenCreate,
+    current_user: UserOut = Depends(require_session_user),
+) -> ApiTokenCreated:
+    max_days = config.settings.auth.api_token_max_lifetime_days
+    if body.expires_in_days > max_days:
+        raise HTTPException(
+            status_code=422,
+            detail=f"An API token can be valid for at most {max_days} days",
+        )
+    return await api_tokens.create_api_token(
+        request.app.state.db_client,
+        current_user.id,
+        body.name,
+        body.expires_in_days * 24 * 60 * 60,
+    )
+
+
+@router.delete("/me/tokens/{token_id}", status_code=204)
+async def revoke_my_api_token(
+    request: Request,
+    token_id: str = Path(...),
+    current_user: UserOut = Depends(require_session_user),
+) -> None:
+    revoked = await api_tokens.revoke_api_token(
+        request.app.state.db_client, current_user.id, token_id
+    )
+    if not revoked:
+        raise HTTPException(status_code=404, detail="API token not found")
 
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -110,3 +157,4 @@ async def delete_user(
                 )
 
         await utils.delete_user(db_client, user_id)
+        await api_tokens.revoke_all_api_tokens(db_client, user_id)
