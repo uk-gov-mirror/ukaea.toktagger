@@ -1,7 +1,7 @@
 [project]
 name = "toktagger"
 version = "0.3.1"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 authors = [
 ]
 maintainers = [
@@ -18,7 +18,7 @@ dependencies = [
   "fsspec",
   "xarray",
   "s3fs",
-  "zarr",
+  "zarr>=3",
   "scipy",
   "pyarrow<24",
   "pymongo",
