@@ -84,10 +84,12 @@ type FocusOptions = Parameters<
 >[2];
 
 function useSelectInstance() {
-  const { setSelection, requestFocusInstance } = useVideoSession();
+  const { setSelection, requestFocusInstance, closePopup } = useVideoSession();
   const { setVideoLastClassName } = useVideoUiState();
 
   return (instance: InstanceProfile, focus: FocusOptions) => {
+    // Runs first because deselecting resets the session's track id
+    closePopup();
     setSelection({
       className: instance.className,
       trackId: canonicalizeTrackId(instance.trackId),
