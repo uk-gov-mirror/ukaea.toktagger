@@ -1,6 +1,6 @@
 "use client";
 
-import { ComponentType, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActionButton,
   ActionGroup,
@@ -22,13 +22,10 @@ import {
 } from "@adobe/react-spectrum";
 import Crosshairs from "@spectrum-icons/workflow/Crosshairs";
 import Delete from "@spectrum-icons/workflow/Delete";
-import {
-  BoundingBoxMarker,
-  FrameLabelMarker,
-  MarkerProps,
-  PointMarker,
-  PolygonMarker,
-} from "@/app/components/ui/annotationMarkers";
+import ImageMapPolygon from "@spectrum-icons/workflow/ImageMapPolygon";
+import ImageMapRectangle from "@spectrum-icons/workflow/ImageMapRectangle";
+import Label from "@spectrum-icons/workflow/Label";
+import Target from "@spectrum-icons/workflow/Target";
 import { useSample } from "@/app/contexts/SampleContext";
 import { useVideoUiState } from "@/app/contexts/VideoContext";
 import {
@@ -39,15 +36,13 @@ import {
 import { useVideoSession } from "@/app/video/components/video-session";
 import { canonicalizeTrackId } from "@/app/video/components/video-utils";
 
-const VIDEO_MARKER_ICONS: Record<
-  VideoAnnotationType,
-  ComponentType<MarkerProps>
-> = {
-  [VideoAnnotationType.BOUNDING_BOX]: BoundingBoxMarker,
-  [VideoAnnotationType.POLYGON]: PolygonMarker,
-  [VideoAnnotationType.POINT]: PointMarker,
-  [VideoAnnotationType.FRAME_LABEL]: FrameLabelMarker,
-};
+const VIDEO_TYPE_ICONS: Record<VideoAnnotationType, typeof ImageMapRectangle> =
+  {
+    [VideoAnnotationType.BOUNDING_BOX]: ImageMapRectangle,
+    [VideoAnnotationType.POLYGON]: ImageMapPolygon,
+    [VideoAnnotationType.POINT]: Target,
+    [VideoAnnotationType.FRAME_LABEL]: Label,
+  };
 
 type VideoTableScope = "all" | "frame";
 
@@ -274,14 +269,12 @@ export const VideoAnnotationsTable = () => {
         </TableHeader>
         <TableBody items={rows}>
           {({ id, instance }: TableRow) => {
-            const Marker = VIDEO_MARKER_ICONS[instance.type];
+            const Icon = VIDEO_TYPE_ICONS[instance.type];
             return (
               <Row key={id}>
                 <Cell>
                   <Flex justifyContent="center">
-                    <span role="img" aria-label={instance.type}>
-                      <Marker color="currentColor" />
-                    </span>
+                    <Icon aria-label={instance.type} size="S" />
                   </Flex>
                 </Cell>
                 <Cell>{instance.className}</Cell>

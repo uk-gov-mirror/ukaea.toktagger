@@ -45,28 +45,3 @@ export const PolygonMarker = ({ color }: MarkerProps) => (
     />
   </svg>
 );
-
-export const PointMarker = ({ color }: MarkerProps) => (
-  <svg width="20" height="20" viewBox={MARKER_VIEWBOX}>
-    <circle
-      cx="12"
-      cy="12"
-      r="6"
-      fill="none"
-      stroke={color}
-      strokeWidth="2.5"
-    />
-  </svg>
-);
-
-export const FrameLabelMarker = ({ color }: MarkerProps) => (
-  <svg width="20" height="20" viewBox={MARKER_VIEWBOX}>
-    <path
-      d="M3 5h10l8 7-8 7H3z"
-      fill="none"
-      stroke={color}
-      strokeWidth="2.5"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
