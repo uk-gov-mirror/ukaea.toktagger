@@ -42,6 +42,7 @@ export default function ProfilePage() {
       marginY="size-300"
     >
       <View
+        data-testid="profile-details"
         backgroundColor="gray-100"
         borderWidth="thin"
         borderColor="dark"

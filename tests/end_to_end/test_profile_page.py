@@ -1,6 +1,7 @@
 import re
 
 import pytest
+import requests
 
 pytest.importorskip("playwright")
 from playwright.sync_api import expect
@@ -9,6 +10,7 @@ from tests.end_to_end.conftest import login_as
 from tests.endpoints import create_user
 
 PROFILE_URL = "http://localhost:8002/ui/profile"
+ME_URL = "http://localhost:8002/auth/me"
 
 
 def test_profile_shows_own_details_read_only(server_setup, admin_token, browser):
@@ -23,7 +25,8 @@ def test_profile_shows_own_details_read_only(server_setup, admin_token, browser)
         expect(field(text)).to_be_visible()
     # Shown as both username and name, because Canaille sets the formatted name to it.
     expect(field("profuser1")).to_have_count(2)
-    expect(user_page.get_by_role("textbox")).to_have_count(0)
+    details = user_page.get_by_test_id("profile-details")
+    expect(details.get_by_role("textbox")).to_have_count(0)
     expect(user_page.get_by_role("button", name="Change Password")).to_have_count(0)
 
     user_page.context.close()
@@ -34,3 +37,33 @@ def test_profile_links_to_account_management(server_setup, admin_token, page):
     link = page.get_by_role("link", name="Manage account")
     expect(link).to_be_visible()
     expect(link).to_have_attribute("href", "http://localhost:8003/")
+
+
+def test_api_token_create_use_and_revoke(server_setup, admin_token, page):
+    page.goto(PROFILE_URL)
+    page.get_by_role("textbox", name="Token name").fill("e2e script")
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/users/me/tokens")
+            and response.request.method == "POST"
+        )
+    ):
+        page.get_by_role("button", name="Create token").click()
+
+    token = page.get_by_role("textbox", name="New API token").input_value()
+    assert token.startswith("tt_")
+    me = requests.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["username"] == "admin"
+
+    page.get_by_role("button", name="Revoke e2e script").click()
+    with page.expect_response(
+        lambda response: (
+            "/users/me/tokens/" in response.url and response.request.method == "DELETE"
+        )
+    ):
+        page.get_by_role("dialog").get_by_role("button", name="Revoke").click()
+    expect(page.get_by_role("button", name="Revoke e2e script")).to_have_count(0)
+
+    me = requests.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 401
