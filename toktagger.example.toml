@@ -48,6 +48,9 @@
 # Whether to require the client_id in the audience of provider access tokens sent as Bearer tokens.
 # verify_bearer_audience = true
 
+# Longest lifetime in days that a user can give a personal API token.
+# api_token_max_lifetime_days = 365
+
 # Port for the managed Canaille server. Only used when provider is canaille.
 # canaille_port = 8003
 
