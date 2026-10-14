@@ -112,7 +112,6 @@ export const TimeSeriesView = () => {
         //grid: { rows: 1, columns: 1, pattern: "independent" },
         dragmode: "pan",
         autosize: true,
-        height: window.innerHeight * 0.9,
         xaxis: {
           minallowed: minTime,
           maxallowed: maxTime,

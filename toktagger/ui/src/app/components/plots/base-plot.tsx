@@ -576,8 +576,8 @@ export const BaseTimeSeriesPlot = ({
 
   return (
     <div className="w-full px-6 py-3 space-y-3 flex-col">
-      {/* Div where plot is inserted */}
-      <div id={plotId} className="" aria-label={ariaLabel}>
+      {/* Div where plot is inserted; its height lets Plotly's responsive 100% sizing resolve instead of collapsing to 0 */}
+      <div id={plotId} className="h-[90vh]" aria-label={ariaLabel}>
         <>
           {React.Children.map(children, (child) => {
             return React.isValidElement(child)

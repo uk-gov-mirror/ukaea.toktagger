@@ -188,7 +188,6 @@ const buildPlotLayout = (
   applyGlobalStyle(
     {
       autosize: true,
-      height: window.innerHeight * 0.9,
       xaxis: {
         title: { text: "" },
         domain: [0, 1],
