@@ -178,6 +178,16 @@ export const TimeSeriesProvider = ({
     sessionStorage.setItem(`ts-edit-mode-${projectId}`, String(editMode));
   }, [editMode, projectId]);
 
+  // Selection is an Edit Mode concept, so leaving Edit Mode clears it
+  useEffect(() => {
+    if (editMode) return;
+    setAnnotations((prev) =>
+      prev.some((annotation) => annotation.selected)
+        ? prev.map((annotation) => ({ ...annotation, selected: false }))
+        : prev,
+    );
+  }, [editMode]);
+
   // Persist activeTool to sessionStorage on every change. Skipped while a
   // restore is pending, so the initial null does not wipe the saved tool.
   useEffect(() => {
