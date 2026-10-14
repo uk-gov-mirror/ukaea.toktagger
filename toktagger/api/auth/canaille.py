@@ -38,10 +38,13 @@ BROKER = "dramatiq_eager_broker:EagerBroker"
 DATABASE = "sql"
 
 [CANAILLE.ACL.DEFAULT]
+PERMISSIONS = ["edit_self", "use_oidc"]
+READ = ["display_name", "user_name", "emails", "password"]
+WRITE = ["display_name", "emails", "password"]
 
 [CANAILLE.ACL.ADMIN]
 PERMISSIONS = ["manage_oidc", "manage_users", "manage_all_groups", "delete_account", "impersonate_users"]
-WRITE = ["groups", "lock_date"]
+WRITE = ["groups", "lock_date", "user_name"]
 FILTER = [{{groups = "{admin_group}"}}]
 
 [CANAILLE_SQL]
