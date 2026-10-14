@@ -9,7 +9,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 ADMIN_USERNAME = "admin"
 READY_TIMEOUT_SECONDS = 20
 STOP_TIMEOUT_SECONDS = 5
+CLI_TIMEOUT_SECONDS = 60
 CANAILLE_SCOPES = ("openid", "profile", "email", "groups")
 
 CONFIG_TEMPLATE = """\
@@ -64,7 +65,13 @@ def _toml_inline_table(values: dict[str, str]) -> str:
 
 
 def _canaille_executable() -> Path:
-    return Path(sys.executable).parent / "canaille"
+    executable = Path(sys.executable).parent / "canaille"
+    if not executable.exists():
+        raise RuntimeError(
+            f"Canaille executable not found at {executable}. "
+            "Reinstall toktagger so its canaille dependency is available."
+        )
+    return executable
 
 
 class ManagedCanaille:
@@ -86,16 +93,21 @@ class ManagedCanaille:
 
     def _cli(self, *arguments: str) -> str:
         environment = {**os.environ, "CANAILLE_CONFIG": str(self.config_path)}
-        result = subprocess.run(
-            [str(_canaille_executable()), *arguments],
-            env=environment,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"canaille {' '.join(arguments[:2])} failed: {result.stderr.strip()}"
+        command = f"canaille {' '.join(arguments[:2])}"
+        try:
+            result = subprocess.run(
+                [str(_canaille_executable()), *arguments],
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=CLI_TIMEOUT_SECONDS,
             )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(
+                f"{command} did not finish within {CLI_TIMEOUT_SECONDS} seconds."
+            ) from error
+        if result.returncode != 0:
+            raise RuntimeError(f"{command} failed: {result.stderr.strip()}")
         return result.stdout
 
     def _load_keys(self) -> dict[str, object]:
@@ -184,7 +196,26 @@ class ManagedCanaille:
             flush=True,
         )
 
+    def _update_client_urls(self) -> None:
+        record = json.loads(self.client_path.read_text())
+        public_url = config.settings.public_url
+        if record["public_url"] == public_url:
+            return
+        self._cli("set", "client", record["client_id"], *self._client_arguments())
+        record["public_url"] = public_url
+        write_private_file(self.client_path, json.dumps(record))
+
     def ensure_provisioned(self) -> None:
+        try:
+            self._ensure_provisioned()
+        except PermissionError as error:
+            raise RuntimeError(
+                f"Cannot access the Canaille directory {self.directory}: {error}. "
+                "It was probably created by another user. Run TokTagger as that "
+                "user, or set server.cache_dir to a directory you own."
+            ) from error
+
+    def _ensure_provisioned(self) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
         with FileLock(self.directory / "provision.lock", timeout=120):
             self._render_config()
@@ -197,15 +228,6 @@ class ManagedCanaille:
                     raise
             else:
                 self._update_client_urls()
-
-    def _update_client_urls(self) -> None:
-        record = json.loads(self.client_path.read_text())
-        public_url = config.settings.public_url
-        if record["public_url"] == public_url:
-            return
-        self._cli("set", "client", record["client_id"], *self._client_arguments())
-        record["public_url"] = public_url
-        write_private_file(self.client_path, json.dumps(record))
 
     def create_user(
         self,
@@ -307,12 +329,12 @@ class ManagedCanaille:
             os.environ[f"AUTH_{name.upper()}"] = value
 
 
-def _exit_on_sigterm(signum: int, frame: object) -> None:
+def _exit_on_sigterm(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
 @contextmanager
-def managed_idp() -> Iterator[ManagedCanaille | None]:
+def managed_idp() -> Generator[ManagedCanaille | None]:
     """Run the local identity provider for the duration of the block, when configured."""
     if config.settings.auth.provider != "canaille":
         yield None
