@@ -125,12 +125,6 @@ const VideoRowActions = ({
   const selectInstance = useSelectInstance();
 
   const jumpToAnnotation = () => {
-    // In This Frame scope jumping to the first frame would navigate away and drop the row
-    if (scope === "frame") {
-      selectInstance(instance, { onlyIfOnCurrentFrame: true });
-      return;
-    }
-
     const firstFrame = instance.frames[0];
     setDataParams((prev) => ({ ...prev, name: "image", frame: firstFrame }));
     selectInstance(instance, { targetFrame: firstFrame });

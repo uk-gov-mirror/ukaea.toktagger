@@ -73,7 +73,7 @@ Below the frame, the annotations table lists one row per instance (a class label
 </figure>
 
 - **Click on a row** to select that instance and highlight it on the image, if it is present in the current frame. This also switches to that instance's annotation tool. If the selected instance is not present on the current frame, drawing while it is selected adds a new annotation to this frame with the same track ID. Choosing a different tool starts a new track instead. Click the row again to deselect it.
-- **Jump to annotation** (rewind icon): In All Frames, jump to the first frame where the instance is present. In This Frame, select the instance on the current frame.
+- **Jump to annotation** (rewind icon): Jump to the first frame where the instance is present, and select it there.
 - **Delete annotation** (bin icon): In All Frames, delete the instance across all frames where it is present. In This Frame, delete it from the current frame only.
 - **Delete all**: In All Frames, delete all annotations across all frames. In This Frame, delete all annotations on the current frame.
 
