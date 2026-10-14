@@ -14,6 +14,7 @@ from ultralytics.data.augment import LetterBox
 from ultralytics.models.yolo.detect import DetectionTrainer
 from ultralytics.models.rtdetr.train import RTDETRTrainer
 from ultralytics.utils import LOGGER as ULTRALYTICS_LOGGER, RANK
+from ultralytics import settings
 
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -305,6 +306,8 @@ class ToktaggerDetectionTrainer(DetectionTrainer):
         self._tok_val_dataset = val_dataset
         self._tok_class_names = class_names
         self._tok_progress_callback = progress_callback
+        # Disable Ultralytics mlflow tracking
+        settings.update({"mlflow": False})
 
         super().__init__(*args, **kwargs)
 
