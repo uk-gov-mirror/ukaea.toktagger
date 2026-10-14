@@ -320,8 +320,8 @@ def test_predict_converts_yolo_boxes_to_video_annotations(monkeypatch):
         [0.2, 0.65]
     )
     assert [annotation.created_by for annotation in predictions[0]] == [
-        "yolo_ufo",
-        "yolo_ufo",
+        "YOLO",
+        "YOLO",
     ]
     assert [annotation.validated for annotation in predictions[0]] == [
         False,

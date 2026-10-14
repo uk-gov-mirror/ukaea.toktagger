@@ -255,7 +255,7 @@ def build_video_frame_manifest(
 
 
 @ModelRegistry.register(
-    "yolo_ufo",
+    "YOLO",
     ["video"],
     YoloTrainParams,
     YoloPredictParams,
@@ -459,7 +459,7 @@ class YoloVideoDetectionModel(BaseUltralyticsDetection):
 
 
 @ModelRegistry.register(
-    "yolo_ufo_p2",
+    "YOLO-P2",
     ["video"],
     YoloP2TrainParams,
     YoloPredictParams,
@@ -498,7 +498,7 @@ class YoloVideoDetectionP2Model(YoloVideoDetectionModel):
 
 
 @ModelRegistry.register(
-    "rtdetr_ufo",
+    "RT-DETR",
     ["video"],
     RTDETRTrainParams,
     RTDETRPredictParams,
