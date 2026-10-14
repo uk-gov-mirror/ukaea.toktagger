@@ -31,6 +31,8 @@ import type { DrawingTool } from "./types";
 export function VideoAnnotationToolbar(props: { desiredFrame: number }) {
   const {
     frame,
+    selection,
+    setSelection,
     drawingTool,
     setDrawingTool,
     editMode,
@@ -42,7 +44,12 @@ export function VideoAnnotationToolbar(props: { desiredFrame: number }) {
   const api = useAnnotator<AnnotoriousOpenSeadragonAnnotator>();
 
   const toggleTool = (tool: DrawingTool) => {
-    setDrawingTool(drawingTool === tool ? null : tool);
+    const next = drawingTool === tool ? null : tool;
+    // A track keeps its annotation type, so picking a tool here starts a new track
+    if (next && selection.trackId) {
+      setSelection({ ...selection, trackId: null, source: "explicit" });
+    }
+    setDrawingTool(next);
   };
 
   const resetView = () => {
