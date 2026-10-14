@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
@@ -15,6 +16,7 @@ from toktagger.api.schemas.annotations import (
     AnnotationOutTypeAdapter,
     AnnotationOutTypes,
 )
+from toktagger.api.schemas.auth import ApiTokenOut
 from toktagger.api.schemas.models import Model, ModelIn, ModelUpdate
 from toktagger.api.schemas.projects import (
     Project,
@@ -736,6 +738,19 @@ async def get_user_by_id(db_client: MongoDBClient, user_id: str) -> UserOut | No
 async def get_all_users(db_client: MongoDBClient) -> list[UserOut]:
     docs = await db_client.get_all_documents("users")
     return [UserOut.model_validate(d) for d in docs]
+
+
+async def get_api_tokens(db_client: MongoDBClient, user_id: str) -> list[ApiTokenOut]:
+    await db_client.delete_filtered_documents(
+        "api_tokens", {"expires_at": {"$lt": time.time()}}
+    )
+    docs = await db_client.get_filtered_documents(
+        "api_tokens",
+        {"user_id": convert_to_objectid(user_id, "users")},
+        sort_by="created_at",
+        sort_direction="descending",
+    )
+    return [ApiTokenOut.model_validate({**d, "_id": str(d["_id"])}) for d in docs]
 
 
 async def create_user(db_client: MongoDBClient, user: UserIn) -> str:

@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AuthConfig(BaseModel):
@@ -16,6 +16,21 @@ class LogoutResponse(BaseModel):
 class ApiTokenCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     expires_in_days: int = Field(30, gt=0)
+
+
+class ApiToken(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    token_hash: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    hint: str = Field(..., min_length=1, max_length=8)
+    created_at: float = Field(..., gt=0)
+    expires_at: float = Field(..., gt=0)
+    last_used_at: float | None = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def check_expiry_after_creation(self) -> Self:
+        if self.expires_at <= self.created_at:
+            raise ValueError("expires_at must be later than created_at")
+        return self
 
 
 class ApiTokenOut(BaseModel):

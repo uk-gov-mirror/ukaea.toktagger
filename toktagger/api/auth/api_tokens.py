@@ -5,12 +5,10 @@ import secrets
 import time
 from typing import Any
 
-
 from toktagger.api.crud.db import MongoDBClient
 from toktagger.api.schemas import convert_to_objectid
-from toktagger.api.schemas.auth import ApiTokenCreated, ApiTokenOut
+from toktagger.api.schemas.auth import ApiToken, ApiTokenCreated, ApiTokenOut
 
-API_TOKENS_COLLECTION = "api_tokens"
 TOKEN_PREFIX = "tt_"
 HINT_LENGTH = 4
 LAST_USED_RESOLUTION_SECONDS = 60
@@ -34,31 +32,19 @@ async def create_api_token(
     """Store a new token for a user and return it. Only its hash is stored."""
     token = TOKEN_PREFIX + secrets.token_urlsafe(32)
     now = time.time()
-    document = {
-        "user_id": convert_to_objectid(user_id, "users"),
-        "name": name,
-        "token_hash": _hash(token),
-        "hint": token[-HINT_LENGTH:],
-        "created_at": now,
-        "expires_at": now + lifetime_seconds,
-        "last_used_at": None,
-    }
-    result = await db_client.db[API_TOKENS_COLLECTION].insert_one(document)
-    created = _to_out({**document, "_id": result.inserted_id})
-    return ApiTokenCreated(**created.model_dump(), token=token)
-
-
-async def list_api_tokens(db_client: MongoDBClient, user_id: str) -> list[ApiTokenOut]:
-    tokens = db_client.db[API_TOKENS_COLLECTION]
-    await tokens.delete_many({"expires_at": {"$lt": time.time()}})
-    documents = await tokens.find(
-        {"user_id": convert_to_objectid(user_id, "users")}
-    ).to_list()
-    return sorted(
-        (_to_out(document) for document in documents),
-        key=lambda token: token.created_at,
-        reverse=True,
+    api_token = ApiToken(
+        name=name,
+        token_hash=_hash(token),
+        hint=token[-HINT_LENGTH:],
+        created_at=now,
+        expires_at=now + lifetime_seconds,
     )
+    user_object_id = convert_to_objectid(user_id, "users")
+    token_id = await db_client.insert(
+        "api_tokens", api_token, ids={"user_id": user_object_id}
+    )
+    created = _to_out({**api_token.model_dump(), "_id": token_id})
+    return ApiTokenCreated(**created.model_dump(), token=token)
 
 
 async def revoke_api_token(
@@ -66,32 +52,32 @@ async def revoke_api_token(
 ) -> bool:
     """Delete a token of the user. Return False when the user has no such token."""
     # delete_many, because Mongita's delete_one ignores every other field when _id is set.
-    result = await db_client.db[API_TOKENS_COLLECTION].delete_many(
+    result = await db_client.delete_filtered_documents(
+        "api_tokens",
         {
             "_id": convert_to_objectid(token_id, "tokens"),
             "user_id": convert_to_objectid(user_id, "users"),
-        }
+        },
     )
     return result.deleted_count == 1
 
 
-async def revoke_all_api_tokens(db_client: MongoDBClient, user_id: str) -> None:
-    await db_client.db[API_TOKENS_COLLECTION].delete_many(
-        {"user_id": convert_to_objectid(user_id, "users")}
-    )
-
-
 async def authenticate_api_token(db_client: MongoDBClient, token: str) -> str | None:
     """Return the user ID that owns a token, or None when it is unknown or expired."""
-    tokens = db_client.db[API_TOKENS_COLLECTION]
-    document = await tokens.find_one({"token_hash": _hash(token)})
+    documents = await db_client.get_filtered_documents(
+        "api_tokens", {"token_hash": _hash(token)}, limit=1
+    )
     now = time.time()
-    if document is None or document["expires_at"] <= now:
+    if not documents:
         return None
-    last_used_at = document.get("last_used_at")
+    document = documents[0]
+    api_token = ApiToken.model_validate(document)
+    if api_token.expires_at <= now:
+        return None
+    last_used_at = api_token.last_used_at
     # Throttled so that a busy script does not write to the database on every request.
     if last_used_at is None or now - last_used_at >= LAST_USED_RESOLUTION_SECONDS:
-        await tokens.update_one(
+        await db_client.db["api_tokens"].update_one(
             {"_id": document["_id"]}, {"$set": {"last_used_at": now}}
         )
     return str(document["user_id"])

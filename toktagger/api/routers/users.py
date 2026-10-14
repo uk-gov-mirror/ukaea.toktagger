@@ -9,6 +9,7 @@ from toktagger.api.auth.dependencies import (
 )
 from toktagger.api.crud import utils
 from toktagger.api.crud.db import MongoDBClient
+from toktagger.api.schemas import convert_to_objectid
 from toktagger.api.schemas.auth import ApiTokenCreate, ApiTokenCreated, ApiTokenOut
 from toktagger.api.schemas.users import UserOut, UserUpdate
 from toktagger.api.schemas.projects import ProjectMemberOut
@@ -47,9 +48,7 @@ async def list_my_api_tokens(
     request: Request,
     current_user: UserOut = Depends(require_session_user),
 ) -> list[ApiTokenOut]:
-    return await api_tokens.list_api_tokens(
-        request.app.state.db_client, current_user.id
-    )
+    return await utils.get_api_tokens(request.app.state.db_client, current_user.id)
 
 
 @router.post("/me/tokens", response_model=ApiTokenCreated, status_code=201)
@@ -157,4 +156,6 @@ async def delete_user(
                 )
 
         await utils.delete_user(db_client, user_id)
-        await api_tokens.revoke_all_api_tokens(db_client, user_id)
+        await db_client.delete_filtered_documents(
+            "api_tokens", {"user_id": convert_to_objectid(user_id, "users")}
+        )

@@ -20,6 +20,16 @@ from toktagger.api.crud.mongita_client import AsyncMongitaClient
 DATABASE_NAME = "event_db"
 COLLECTION_NAME = "shots"
 
+CollectionName = typing.Literal[
+    "projects",
+    "annotations",
+    "models",
+    "samples",
+    "users",
+    "project_members",
+    "api_tokens",
+]
+
 T = typing.TypeVar("T", bound=pydantic.BaseModel)
 
 
@@ -46,9 +56,7 @@ class MongoDBClient:
 
     async def insert(
         self,
-        collection: typing.Literal[
-            "projects", "annotations", "models", "samples", "users", "project_members"
-        ],
+        collection: CollectionName,
         model: T,
         ids: dict[str, ObjectId] | None = None,
     ):
@@ -60,9 +68,7 @@ class MongoDBClient:
 
     async def insert_many(
         self,
-        collection: typing.Literal[
-            "projects", "annotations", "models", "samples", "users", "project_members"
-        ],
+        collection: CollectionName,
         models: list[T],
         ids: dict | list[dict] | None = None,
         exclude: set[str] | None = None,
@@ -86,9 +92,7 @@ class MongoDBClient:
 
     async def update(
         self,
-        collection: typing.Literal[
-            "projects", "annotations", "models", "samples", "users", "project_members"
-        ],
+        collection: CollectionName,
         model: T,
         object_id: ObjectId,
     ):
@@ -104,9 +108,7 @@ class MongoDBClient:
 
     async def get_document_by_id(
         self,
-        collection: typing.Literal[
-            "projects", "annotations", "models", "samples", "users", "project_members"
-        ],
+        collection: CollectionName,
         object_id: ObjectId,
     ):
         return await self.db[collection].find_one({"_id": object_id})
@@ -119,9 +121,7 @@ class MongoDBClient:
 
     async def get_filtered_documents(
         self,
-        collection: typing.Literal[
-            "projects", "annotations", "models", "samples", "users", "project_members"
-        ],
+        collection: CollectionName,
         filters: dict | None = None,
         sort_by: str = "_id",
         sort_direction: typing.Literal["ascending", "descending"] = "descending",
@@ -141,9 +141,7 @@ class MongoDBClient:
 
     async def delete_filtered_documents(
         self,
-        collection: typing.Literal[
-            "projects", "annotations", "models", "samples", "users", "project_members"
-        ],
+        collection: CollectionName,
         filters: dict | None = None,
     ):
         return await self.db[collection].delete_many(filters or {})

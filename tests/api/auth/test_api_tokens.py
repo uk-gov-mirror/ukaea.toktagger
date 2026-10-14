@@ -6,7 +6,6 @@ import pytest
 
 from tests.identity import get_auth_token, session_headers
 from toktagger.api import config
-from toktagger.api.auth.api_tokens import API_TOKENS_COLLECTION
 
 
 def _bearer(token: str) -> dict[str, str]:
@@ -60,7 +59,7 @@ async def test_only_the_hash_is_stored(
     unauthenticated_api_client, setup_db_auth, db_client
 ):
     created = await _create(unauthenticated_api_client)
-    stored = await db_client.db[API_TOKENS_COLLECTION].find({}).to_list()
+    stored = await db_client.db["api_tokens"].find({}).to_list()
     assert len(stored) == 1
     assert created["token"] not in stored[0].values()
 
@@ -103,8 +102,8 @@ async def test_expired_token_is_rejected(
 ):
     client = unauthenticated_api_client
     created = await _create(client)
-    await db_client.db[API_TOKENS_COLLECTION].update_many(
-        {}, {"$set": {"expires_at": time.time() - 1}}
+    await db_client.db["api_tokens"].update_many(
+        {}, {"$set": {"created_at": time.time() - 100, "expires_at": time.time() - 1}}
     )
 
     response = await client.get("/auth/me", headers=_bearer(created["token"]))
@@ -149,7 +148,7 @@ async def test_deleting_a_user_removes_their_tokens(
         headers=session_headers(get_auth_token("admin")),
     )
     assert response.status_code == 200
-    assert await db_client.db[API_TOKENS_COLLECTION].count_documents({}) == 0
+    assert await db_client.db["api_tokens"].count_documents({}) == 0
 
 
 @pytest.mark.asyncio
