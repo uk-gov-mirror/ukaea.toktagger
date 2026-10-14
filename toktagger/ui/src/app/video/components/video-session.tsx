@@ -66,7 +66,11 @@ import {
   normalizeOverlayForSession,
   toAnnotoriousDrawingTool,
 } from "./anno-utils";
-import { clampOverlayToNaturalImage, sameOverlay } from "./overlay-sync-utils";
+import {
+  clampOverlayToNaturalImage,
+  replaceAnnotoriousOverlay,
+  sameOverlay,
+} from "./overlay-sync-utils";
 
 /**
  * Session state for the frame-by-frame annotation workflow.
@@ -810,7 +814,10 @@ export function VideoSessionProvider(props: {
       if (isEditableEventTarget(event.target)) return;
 
       if (event.key === "Control") {
-        if (!event.repeat) setCtrlHeld(true);
+        if (event.repeat) return;
+        // Commit an in-progress edit first so the overlay sync doesn't revert it.
+        if (editMode) flushCurrentFrameOverlay();
+        setCtrlHeld(true);
         return;
       }
 
@@ -845,7 +852,7 @@ export function VideoSessionProvider(props: {
       window.removeEventListener("blur", releaseCtrl);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [api, editMode, setEditMode]);
+  }, [api, editMode, flushCurrentFrameOverlay, setEditMode]);
 
   const clearCurrentFrame = useCallback(() => {
     api?.setSelected?.();
@@ -1054,8 +1061,12 @@ export function VideoSessionProvider(props: {
         return { w, h };
       })();
       const natural = imageNatural ?? viewerNatural;
-      const x = natural ? Math.max(0, Math.min(natural.w, rawX)) : rawX;
-      const y = natural ? Math.max(0, Math.min(natural.h, rawY)) : rawY;
+      const x = natural
+        ? Math.max(0, Math.min(natural.w - 1, Math.floor(rawX)))
+        : Math.floor(rawX);
+      const y = natural
+        ? Math.max(0, Math.min(natural.h - 1, Math.floor(rawY)))
+        : Math.floor(rawY);
 
       const raw = api.getAnnotations();
       const used = collectUsedTrackIdsForClass(cls, raw);
@@ -1066,8 +1077,8 @@ export function VideoSessionProvider(props: {
         frame,
         track_id: String(trackId),
         label: cls,
-        x: Math.round(x),
-        y: Math.round(y),
+        x,
+        y,
         created_by: "manual",
       };
       const pointAnnotation = videoPointToAnno(dbPoint, frameKey);
@@ -1088,7 +1099,7 @@ export function VideoSessionProvider(props: {
       try {
         api.cancelDrawing?.();
         api.setSelected?.();
-        api.setAnnotations?.(normalized, true);
+        replaceAnnotoriousOverlay(api, normalized);
         applyAnnotatorInteractionMode();
       } finally {
         finishProgrammaticAnnotationSync();
@@ -1204,7 +1215,7 @@ export function VideoSessionProvider(props: {
             }
           } else {
             api.setSelected?.();
-            api.setAnnotations?.(normalized, true);
+            replaceAnnotoriousOverlay(api, normalized);
           }
 
           applyAnnotatorInteractionMode();
@@ -1380,7 +1391,7 @@ export function VideoSessionProvider(props: {
     try {
       // Clear selection so popup closes when switching frames / overlays
       api.setSelected();
-      api.setAnnotations(desiredOverlay, true);
+      replaceAnnotoriousOverlay(api, desiredOverlay);
       applyAnnotatorInteractionMode();
       rafId = requestAnimationFrame(() => {
         tryFocusPending();

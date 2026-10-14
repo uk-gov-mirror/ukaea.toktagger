@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import OpenSeadragon from "openseadragon";
 import {
   OpenSeadragonAnnotator,
@@ -157,6 +157,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
   const { setVideoLastClassName } = useVideoUiState();
   const {
     frame,
+    byFrame,
     setImageNatural,
     selection,
     setSelection,
@@ -178,8 +179,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
   const [dismissedPopupAnnotationId, setDismissedPopupAnnotationId] = useState<
     string | null
   >(null);
-  const [isPointAnnotationSelected, setIsPointAnnotationSelected] =
-    useState(false);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const classItems = useMemo(
     () => annotationLabels.map((label) => ({ name: label.name })),
     [annotationLabels],
@@ -190,15 +190,14 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
 
     const onSelectionChanged = (arr: ImageAnnotation[]) => {
       if (arr.length === 0) {
-        setIsPointAnnotationSelected(false);
+        setSelectedPointId(null);
         setDismissedPopupAnnotationId(null);
         return;
       }
 
-      setIsPointAnnotationSelected(isPointAnno(arr[0]));
-
       const selectedId =
         typeof arr[0]?.id === "string" ? String(arr[0].id) : null;
+      setSelectedPointId(isPointAnno(arr[0]) ? selectedId : null);
       if (!selectedId) {
         setDismissedPopupAnnotationId(null);
         return;
@@ -234,12 +233,18 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     () => `data:image/png;base64,${imageBase64}`,
     [imageBase64],
   );
+  const viewer = api?.viewer;
+  const savedViewRef = useRef<{
+    bounds: OpenSeadragon.Rect;
+    size: OpenSeadragon.Point;
+  } | null>(null);
 
   useEffect(() => {
     if (!api?.viewer) return;
 
-    const onOpen = () => {
-      const item = api.viewer.world.getItemAt(0);
+    const viewer = api.viewer;
+    const onImageAdded = () => {
+      const item = viewer.world.getItemAt(0);
       if (!item) return;
 
       const size = item.getContentSize();
@@ -250,13 +255,95 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
       }
     };
 
-    api.viewer.addHandler("open", onOpen);
-    onOpen();
+    viewer.world.addHandler("add-item", onImageAdded);
+    onImageAdded();
 
     return () => {
-      api.viewer.removeHandler("open", onOpen);
+      viewer.world.removeHandler("add-item", onImageAdded);
     };
-  }, [api, dataUrl, setImageNatural]);
+  }, [api, dataUrl, frame, setImageNatural]);
+
+  useEffect(() => {
+    if (!viewer) return;
+
+    const dots = new Set<HTMLElement>();
+    const removeDots = () => {
+      dots.forEach((dot) => viewer.removeOverlay(dot));
+      dots.clear();
+    };
+
+    const addPointDots = () => {
+      removeDots();
+      if (hideAnnotations || !viewer.isOpen()) return;
+
+      for (const annotation of byFrame.get(frame) ?? []) {
+        const point = readPointGeometry(annotation);
+        if (!point || (editMode && annotation.id === selectedPointId)) {
+          continue;
+        }
+
+        const dot = document.createElement("div");
+        dot.id = `toktagger-video-point-${annotation.id}`;
+        dot.style.width = "4px";
+        dot.style.height = "4px";
+        dot.style.boxSizing = "border-box";
+        dot.style.border = "1px solid #222";
+        dot.style.borderRadius = "50%";
+        dot.style.backgroundColor = "white";
+        dot.style.pointerEvents = "none";
+        dot.setAttribute("aria-hidden", "true");
+
+        viewer.addOverlay({
+          element: dot,
+          location: viewer.viewport.imageToViewportCoordinates(
+            point.x,
+            point.y,
+          ),
+          placement: OpenSeadragon.Placement.CENTER,
+          checkResize: false,
+        });
+        dot.parentElement?.style.setProperty("pointer-events", "none");
+        dots.add(dot);
+      }
+    };
+
+    viewer.world.addHandler("add-item", addPointDots);
+    addPointDots();
+
+    return () => {
+      viewer.world.removeHandler("add-item", addPointDots);
+      removeDots();
+    };
+  }, [viewer, byFrame, frame, hideAnnotations, editMode, selectedPointId]);
+
+  useEffect(() => {
+    if (!viewer) return;
+
+    const saveView = (event: OpenSeadragon.RemoveItemWorldEvent) => {
+      savedViewRef.current = {
+        bounds: viewer.viewport.getBounds(),
+        size: event.item.getContentSize(),
+      };
+    };
+
+    const restoreView = (event: OpenSeadragon.AddItemWorldEvent) => {
+      const saved = savedViewRef.current;
+      if (!saved || !saved.size.equals(event.item.getContentSize())) return;
+
+      // Deferred so it lands after the Annotorious wrapper's goHome() in addTiledImage's success callback.
+      queueMicrotask(() =>
+        viewer.viewport.fitBoundsWithConstraints(saved.bounds, true),
+      );
+    };
+
+    viewer.world.addHandler("remove-item", saveView);
+    viewer.world.addHandler("add-item", restoreView);
+
+    return () => {
+      viewer.world.removeHandler("remove-item", saveView);
+      viewer.world.removeHandler("add-item", restoreView);
+    };
+  }, [viewer]);
 
   useEffect(() => {
     if (!api?.viewer) return;
@@ -527,12 +614,13 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
         url: dataUrl,
       },
       minZoomImageRatio: 0.8,
-      maxZoomPixelRatio: 10,
+      maxZoomPixelRatio: 100,
       visibilityRatio: 0.5,
       constrainDuringPan: true,
       animationTime: 0.3,
       showNavigationControl: false,
       mouseNavEnabled: false,
+      imageSmoothingEnabled: false,
     }),
     [dataUrl],
   );
@@ -542,7 +630,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
       ? readPointGeometry(annotation)
       : null;
     if (point) {
-      return `x=${Math.round(point.x)}, y=${Math.round(point.y)}`;
+      return `x=${Math.floor(point.x)}, y=${Math.floor(point.y)}`;
     }
 
     const rect = isRectangleAnno(annotation)
@@ -567,11 +655,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
 
   return (
     <div className="w-full flex justify-center">
-      <div
-        className={`relative w-full max-w-[1100px] h-[calc(100dvh-240px)] min-h-[360px] ${
-          isPointAnnotationSelected ? "video-point-selected" : ""
-        }`}
-      >
+      <div className="relative w-full max-w-[1100px] h-[calc(100dvh-240px)] min-h-[360px]">
         <OpenSeadragonAnnotator
           tool={annotoriousDrawingTool}
           drawingEnabled={annotoriousDrawingEnabled}
@@ -633,16 +717,6 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
             }}
           />
         </OpenSeadragonAnnotator>
-
-        <style>{`
-          .video-point-selected .a9s-corner-top,
-          .video-point-selected .a9s-corner-handle-right,
-          .video-point-selected .a9s-corner-handle-bottom,
-          .video-point-selected .a9s-corner-handle-left {
-            display: none;
-            pointer-events: none;
-          }
-        `}</style>
 
         <Menu
           id={VIDEO_CANVAS_MENU_ID}
