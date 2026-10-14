@@ -86,9 +86,10 @@ The user can now sign in to TokTagger.
 
 ## Use Keycloak or Another Identity Provider
 
-Set `auth.provider` to `oidc` and give TokTagger the details of your provider:
+To use an identity provider, add an `[auth]` section to the `toktagger.toml` file in your working directory. Set `provider` to `oidc` and give TokTagger the details of your provider:
 
 ```toml
+# toktagger.toml
 [auth]
 provider = "oidc"
 issuer_url = "https://auth.example.com/realms/toktagger"
@@ -125,7 +126,7 @@ Start the stack:
 docker compose -f docker-compose.dev.yml up
 ```
 
-Open `http://localhost:5173` or `http://localhost:8002` and sign in as `admin`. Keycloak asks for a new password. The Keycloak administration console is at `http://localhost:8080` (user `admin`, password `admin`).
+Open `http://localhost:5173` or `http://localhost:8002` and sign in as `admin`. Keycloak asks for a new password. The Keycloak administration console is at `http://localhost:8003` (user `admin`, password `admin`).
 
 Set `KEYCLOAK_CLIENT_SECRET` in your environment to replace the default development client secret.
 
@@ -139,8 +140,6 @@ Set `KEYCLOAK_CLIENT_SECRET` in your environment to replace the default developm
 Open `http://<host>:<port>/ui/login` (or the root URL). Click **Sign in**. The identity provider shows its sign-in page. After you sign in, you return to TokTagger.
 
 TokTagger creates its own record for a user at the first sign-in. The record contains the user name, the email address and the display name. TokTagger takes the user name from the identity provider claim `preferred_username`. If that name is already in use, TokTagger adds a number. TokTagger never changes a user name after the first sign-in, because annotations store it.
-
-TokTagger does not connect an identity provider account to a user from the old password login, also when the user names are the same. The identity provider account gets a new record, for example `admin2`. An admin must add the project memberships of the new record again.
 
 !!! note
     A user does not appear in the TokTagger user list or in the project member list until the first sign-in.
