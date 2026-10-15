@@ -108,6 +108,7 @@ async def test_expired_token_is_rejected(
 
     response = await client.get("/auth/me", headers=_bearer(created["token"]))
     assert response.status_code == 401
+    assert await db_client.db["api_tokens"].count_documents({}) == 0
 
 
 @pytest.mark.asyncio

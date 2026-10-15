@@ -3,14 +3,12 @@
 import hashlib
 import secrets
 import time
-from typing import Any
 
 from toktagger.api.crud.db import MongoDBClient
 from toktagger.api.schemas import convert_to_objectid
 from toktagger.api.schemas.auth import (
     ApiToken,
     ApiTokenCreated,
-    ApiTokenOut,
     ApiTokenUpdate,
 )
 
@@ -25,10 +23,6 @@ def _hash(token: str) -> str:
 
 def is_api_token(token: str) -> bool:
     return token.startswith(TOKEN_PREFIX)
-
-
-def _to_out(document: dict[str, Any]) -> ApiTokenOut:
-    return ApiTokenOut.model_validate({**document, "_id": str(document["_id"])})
 
 
 async def create_api_token(
@@ -48,8 +42,9 @@ async def create_api_token(
     token_id = await db_client.insert(
         "api_tokens", api_token, ids={"user_id": user_object_id}
     )
-    created = _to_out({**api_token.model_dump(), "_id": token_id})
-    return ApiTokenCreated(**created.model_dump(), token=token)
+    return ApiTokenCreated.model_validate(
+        {**api_token.model_dump(), "_id": token_id, "token": token}
+    )
 
 
 async def revoke_api_token(
@@ -78,6 +73,9 @@ async def authenticate_api_token(db_client: MongoDBClient, token: str) -> str | 
     document = documents[0]
     api_token = ApiToken.model_validate(document)
     if api_token.expires_at <= now:
+        await db_client.delete_filtered_documents(
+            "api_tokens", {"_id": document["_id"]}
+        )
         return None
     last_used_at = api_token.last_used_at
     # Throttled so that a busy script does not write to the database on every request.

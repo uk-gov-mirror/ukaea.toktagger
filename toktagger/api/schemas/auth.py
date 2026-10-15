@@ -28,10 +28,15 @@ class SessionUpdate(BaseModel):
     refreshed_at: float | None = None
 
 
-class ApiToken(BaseModel):
+class ApiTokenBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
+    hint: str = Field(
+        ..., min_length=1, max_length=8, description="Last characters of the token."
+    )
+
+
+class ApiToken(ApiTokenBase):
     token_hash: str = Field(..., pattern=r"^[0-9a-f]{64}$")
-    hint: str = Field(..., min_length=1, max_length=8)
     created_at: float = Field(..., gt=0)
     expires_at: float = Field(..., gt=0)
     last_used_at: float | None = Field(None, gt=0)
@@ -47,12 +52,10 @@ class ApiTokenUpdate(BaseModel):
     last_used_at: float | None = Field(None, gt=0)
 
 
-class ApiTokenOut(BaseModel):
+class ApiTokenOut(ApiTokenBase):
     model_config = ConfigDict(validate_by_name=True)
 
     id: str = Field(..., alias="_id")
-    name: str
-    hint: str = Field(..., description="Last characters of the token.")
     created_at: datetime
     expires_at: datetime
     last_used_at: datetime | None = None
