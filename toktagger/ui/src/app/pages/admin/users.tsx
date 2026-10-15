@@ -17,6 +17,7 @@ import {
   ButtonGroup,
   Text,
   ToastQueue,
+  View,
 } from "@adobe/react-spectrum";
 import Delete from "@spectrum-icons/workflow/Delete";
 import { BACKEND_API_URL, apiFetch, formatApiDetail } from "@/app/core";
@@ -104,10 +105,12 @@ export default function AdminUsersPage() {
             <Heading level={2}>User Management</Heading>
           </Flex>
 
-          <Text UNSAFE_style={{ display: "block", marginBottom: 12 }}>
-            Users appear here after their first sign-in. Accounts, passwords and
-            roles are managed in the identity provider.
-          </Text>
+          <View marginBottom="size-150">
+            <Text>
+              Users appear here after their first sign-in. Accounts, passwords
+              and roles are managed in the identity provider.
+            </Text>
+          </View>
 
           <TableView aria-label="Users" selectionMode="none">
             <TableHeader>

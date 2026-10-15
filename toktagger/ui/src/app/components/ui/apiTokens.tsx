@@ -194,7 +194,7 @@ export default function ApiTokens() {
           </Column>
           <Column key="expires_at">Expires</Column>
           <Column key="last_used_at">Last used</Column>
-          <Column key="actions" width={70}>
+          <Column key="revoke" width={90}>
             Revoke
           </Column>
         </TableHeader>

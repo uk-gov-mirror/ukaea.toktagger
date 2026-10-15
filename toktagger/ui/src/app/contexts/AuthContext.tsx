@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import { ToastQueue } from "@adobe/react-spectrum";
 import { apiFetch, BACKEND_API_URL, setUnauthorizedHandler } from "@/app/core";
 import {
   CurrentUserSchema,
@@ -73,12 +74,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // A failed call must not strand the user in a logged-in UI, so sign out locally regardless.
     const res = await apiFetch(`${BACKEND_API_URL}/auth/logout`, {
       method: "POST",
     }).catch(() => null);
+    // A 401 means no session is left, and the unauthorized handler already signed out locally.
+    if (res?.status === 401) return;
+    if (!res?.ok) {
+      ToastQueue.negative(
+        "Sign out failed. You may still be signed in. Try again.",
+        { timeout: 5000 },
+      );
+      return;
+    }
     const parsed = LogoutResponseSchema.safeParse(
-      await res?.json().catch(() => null),
+      await res.json().catch(() => null),
     );
     setUser(null);
     if (parsed.success && parsed.data.logout_url) {

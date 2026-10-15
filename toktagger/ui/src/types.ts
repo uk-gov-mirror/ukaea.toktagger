@@ -411,16 +411,13 @@ export type TimeSeriesAnnotationPoint = {
   y: number;
 };
 
-export type TimeSeriesAnnotation = {
+export type TimeSeriesAnnotation = CreatedByFields & {
   id: string;
   // The backend's own _id, when this annotation already exists in the DB (e.g. loaded
   // via GET, possibly another user's). null for annotations drawn locally and not yet
   // saved. Must round-trip back out on save so the server can tell "existing" from
   // "new" and avoid re-stamping someone else's annotation under the saving user.
   db_id: string | null;
-  created_by: string;
-  created_by_name?: string | null;
-  created_by_deleted?: boolean;
   label: string;
   type: TimeSeriesAnnotationType;
   points: TimeSeriesAnnotationPoint[];
@@ -532,15 +529,17 @@ export const annotatorCreatedBy = (type: AnnotatorTypes) =>
 export const modelCreatedBy = (modelType: string) => `model::${modelType}`;
 
 // Display only; the raw created_by value is kept for ownership checks, filtering, etc.
+export type CreatedByFields = {
+  created_by: string;
+  created_by_name?: string | null;
+  created_by_deleted?: boolean;
+};
+
 export const displayCreatedBy = ({
   created_by,
   created_by_name,
   created_by_deleted,
-}: {
-  created_by: string;
-  created_by_name?: string | null;
-  created_by_deleted?: boolean;
-}) => {
+}: CreatedByFields) => {
   if (created_by_name) return created_by_name;
   if (created_by_deleted) return "Deleted user";
   return created_by.replace(/^(model|annotators)::/, "");

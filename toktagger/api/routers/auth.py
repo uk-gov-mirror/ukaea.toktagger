@@ -60,9 +60,7 @@ async def callback(
     return_to = request.session.pop("return_to", DEFAULT_RETURN_TO)
     try:
         token = await idp.client.authorize_access_token(request)
-        claims = token.get("userinfo", {})
-        if claims is None:
-            claims = {}
+        claims = token.get("userinfo") or {}
         if not oidc.extract_roles(claims, config.settings.auth.roles_claim):
             userinfo = await idp.client.userinfo(token=token)
             if not claims.get("sub") or userinfo.get("sub") == claims.get("sub"):
