@@ -535,12 +535,21 @@ export type CreatedByFields = {
   created_by_deleted?: boolean;
 };
 
+const NON_HUMAN_AUTHOR_KINDS: Record<string, string> = {
+  model: "model",
+  annotators: "annotator",
+};
+
 export const displayCreatedBy = ({
   created_by,
   created_by_name,
   created_by_deleted,
 }: CreatedByFields) => {
+  const [prefix, ...rest] = created_by.split("::");
+  const kind = rest.length > 0 ? NON_HUMAN_AUTHOR_KINDS[prefix] : undefined;
+  // Tag non-human authors so a user with the same name cannot be mistaken for them.
+  if (kind) return `${created_by_name || rest.join("::")} (${kind})`;
   if (created_by_name) return created_by_name;
   if (created_by_deleted) return "Deleted user";
-  return created_by.replace(/^(model|annotators)::/, "");
+  return created_by;
 };
