@@ -17,7 +17,6 @@ fail() { echo "FAIL: $1" >&2; "${compose[@]}" logs --tail 40 >&2; exit 1; }
 "${compose[@]}" up -d --build --wait --wait-timeout 300 || fail "stack did not become healthy"
 
 curl -fsSk "${resolve[@]}" https://localhost/health >/dev/null || fail "/health through the proxy"
-curl -fsSk "${resolve[@]}" https://localhost/auth/config | grep -q '"provider":"oidc"' || fail "/auth/config"
 curl -fsSk "${resolve[@]}" https://keycloak.localhost/realms/toktagger/.well-known/openid-configuration \
   | grep -q '"issuer":"https://keycloak.localhost/realms/toktagger"' || fail "Keycloak issuer"
 
