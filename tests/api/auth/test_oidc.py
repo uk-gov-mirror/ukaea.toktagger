@@ -308,7 +308,17 @@ async def test_provision_without_sync_keeps_role_and_profile(db_client, oidc_set
         },
     )
 
-    user = await oidc.provision_user(db_client, ISSUER, identity, sync_profile=False)
+    user = await oidc.provision_user(
+        db_client,
+        ISSUER,
+        {
+            **identity,
+            "groups": [],
+            "email": "alice@elsewhere.org",
+            "name": "Alice Changed",
+        },
+        sync_profile=False,
+    )
 
     assert user.global_role == "admin"
     assert user.email == "alice@example.com"

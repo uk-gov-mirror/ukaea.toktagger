@@ -49,6 +49,16 @@ def test_api_token_create_use_and_revoke(server_setup, admin_token, page):
     assert me.status_code == 200
     assert me.json()["username"] == "admin"
 
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.get_by_role("button", name="Copy").click()
+    expect(page.get_by_text("Copied to the clipboard")).to_be_visible()
+    assert page.evaluate("navigator.clipboard.readText()") == token
+
+    page.reload()
+    expect(page.get_by_role("button", name="Revoke e2e script")).to_be_visible()
+    expect(page.get_by_role("textbox", name="New API token")).to_have_count(0)
+    assert token not in page.content()
+
     page.get_by_role("button", name="Revoke e2e script").click()
     with page.expect_response(
         lambda response: (

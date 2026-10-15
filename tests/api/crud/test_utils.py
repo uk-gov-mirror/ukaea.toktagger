@@ -578,19 +578,28 @@ async def test_get_user_by_username_found(db_client, setup_db_auth):
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_oidc_identity(db_client, setup_db_auth):
-    issuer = USER_ADMIN.oidc_issuer
+async def test_get_user_by_oidc_identity_found(db_client, setup_db_auth):
+    user = await utils.get_user_by_oidc_identity(
+        db_client, USER_ADMIN.oidc_issuer, "alice-sub"
+    )
+    assert user is not None
+    assert user.username == "alice"
 
-    found = await utils.get_user_by_oidc_identity(db_client, issuer, "alice-sub")
-    wrong_issuer = await utils.get_user_by_oidc_identity(
+
+@pytest.mark.asyncio
+async def test_get_user_by_oidc_identity_wrong_issuer(db_client, setup_db_auth):
+    user = await utils.get_user_by_oidc_identity(
         db_client, "https://other.example", "alice-sub"
     )
-    unknown_sub = await utils.get_user_by_oidc_identity(db_client, issuer, "nobody")
+    assert user is None
 
-    assert found is not None
-    assert found.username == "alice"
-    assert wrong_issuer is None
-    assert unknown_sub is None
+
+@pytest.mark.asyncio
+async def test_get_user_by_oidc_identity_unknown_sub(db_client, setup_db_auth):
+    user = await utils.get_user_by_oidc_identity(
+        db_client, USER_ADMIN.oidc_issuer, "nobody"
+    )
+    assert user is None
 
 
 @pytest.mark.asyncio

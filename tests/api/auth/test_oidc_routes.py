@@ -15,7 +15,7 @@ from tests.api.auth.conftest import (
     sign_in,
 )
 from toktagger.api import config
-from toktagger.api.auth import oidc
+from toktagger.api.auth import oidc, sessions
 from tests.identity import get_auth_token
 from toktagger.api.auth.core import get_internal_token
 from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
@@ -36,6 +36,7 @@ async def test_login_redirects_to_the_provider_with_pkce(
     assert query["client_id"] == ["toktagger"]
     assert query["redirect_uri"] == [f"{PUBLIC_URL}/auth/callback"]
     assert query["code_challenge_method"] == ["S256"]
+    assert len(query["code_challenge"][0]) == 43
     assert query["scope"] == ["openid profile email"]
     assert "state" in query
     assert "tt_oidc_flow" in resp.headers["set-cookie"]
@@ -286,17 +287,25 @@ async def test_logout_has_no_url_when_the_provider_cannot_end_sessions(api_clien
 
 @pytest.mark.asyncio
 async def test_logout_succeeds_when_the_provider_is_unreachable(
-    api_client, idp, registered_idp, monkeypatch
+    unauthenticated_api_client, idp, registered_idp, monkeypatch, db_client
 ):
+    client = unauthenticated_api_client
+    await sign_in(client)
+    assert await db_client.db[sessions.SESSIONS_COLLECTION].count_documents({}) == 1
+
     async def unreachable():
         raise httpx.ConnectError("down")
 
     monkeypatch.setattr(registered_idp, "metadata", unreachable)
 
-    resp = await api_client.post("/auth/logout")
+    resp = await client.post(
+        "/auth/logout", headers={"X-CSRF-Token": client.cookies[CSRF_COOKIE_NAME]}
+    )
 
     assert resp.status_code == 200
     assert resp.json() == {"logout_url": None}
+    assert await db_client.db[sessions.SESSIONS_COLLECTION].count_documents({}) == 0
+    assert (await client.get("/auth/me")).status_code == 401
 
 
 @pytest.mark.asyncio

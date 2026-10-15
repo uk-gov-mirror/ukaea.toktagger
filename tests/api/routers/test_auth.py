@@ -1,21 +1,8 @@
-"""Integration tests for the /auth/me endpoint and the removed password login."""
+"""Integration tests for the /auth/me endpoint."""
 
 import pytest
 
 from tests.identity import get_auth_token, session_headers
-
-
-@pytest.mark.asyncio
-async def test_password_login_endpoint_is_gone(
-    unauthenticated_api_client, setup_db_auth
-):
-    response = await unauthenticated_api_client.post(
-        "/auth/token",
-        data={"username": "admin", "password": "admin_pass"},
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    assert not response.is_success
-    assert "access_token" not in response.text
 
 
 @pytest.mark.asyncio

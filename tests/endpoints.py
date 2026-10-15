@@ -13,6 +13,7 @@ from toktagger.api.schemas.annotations import TimeRegion
 # configured once (see set_session) rather than threaded through every
 # helper function's signature and every call site across the e2e test files.
 session = requests.Session()
+# Assigned by the identity_provider fixture in tests/conftest.py via set_identity_provider.
 identity_provider: ManagedCanaille
 
 

@@ -1,5 +1,6 @@
 """Personal API tokens: management through a browser session, use as a Bearer token."""
 
+import hashlib
 import time
 
 import pytest
@@ -62,12 +63,17 @@ async def test_only_the_hash_is_stored(
     stored = await db_client.db["api_tokens"].find({}).to_list()
     assert len(stored) == 1
     assert created["token"] not in stored[0].values()
+    assert (
+        stored[0]["token_hash"] == hashlib.sha256(created["token"].encode()).hexdigest()
+    )
 
 
 @pytest.mark.asyncio
 async def test_revoked_token_is_rejected(unauthenticated_api_client, setup_db_auth):
     client = unauthenticated_api_client
     created = await _create(client)
+    response = await client.get("/auth/me", headers=_bearer(created["token"]))
+    assert response.status_code == 200
 
     response = await client.delete(
         f"/users/me/tokens/{created['_id']}",
@@ -143,6 +149,7 @@ async def test_deleting_a_user_removes_their_tokens(
 ):
     client = unauthenticated_api_client
     await _create(client)
+    assert await db_client.db["api_tokens"].count_documents({}) == 1
 
     response = await client.delete(
         f"/users/{setup_db_auth['alice_id']}",
