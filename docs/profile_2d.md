@@ -90,6 +90,18 @@ creation:
 Bounding boxes and polygons are restricted to the heatmap, since their vertical
 extent is only meaningful against the heatmap's axis.
 
+### Annotations Table
+
+<figure markdown="span">
+   ![2D Profile Annotations Table](assets/profile-2d-annotations-table.png){ width="700" }
+  <figcaption>The annotations table, listing each annotation on the current sample.</figcaption>
+</figure>
+
+Below the plot, the annotations table lists every annotation on the current sample. Each row shows a marker in the annotation's colour, its class label, its type (time region, time point, bounding box or polygon) and who created it - `manual` for an annotation drawn by hand, or the name of the automated annotator or ML model that created it.
+
+- **Click on a row** to move the plot to that annotation. In Edit mode, this also selects the annotation. Selecting annotations on the plot highlights their rows in the table.
+- **Delete annotation** (bin icon): Delete that annotation. Deleting requires Edit mode.
+
 ## Creating Annotations
 
 TokTagger supports multiple annotation types for 2D profile data, each suited to different labeling tasks:

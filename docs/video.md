@@ -6,7 +6,7 @@ The video labelling interface is designed for annotating video data with points,
 
 <figure markdown="span">
    ![Video Interface](assets/video.png)
-  <figcaption>The video labelling interface showing a number of bounding box annotations on MAST camera data.</figcaption>
+  <figcaption>The video labelling interface showing a bounding box annotation on MAST camera data, with the annotations table below.</figcaption>
 </figure>
 
 For a given sample, the video UI allows you to cycle through different frames of the video, and make annotations. Annotations can be automatically propogated between adjacent frames, for the tracking of transient phenomena.
@@ -59,13 +59,25 @@ When reviewing completed annotations, remain in View mode whenever you do not in
 - **Hide Annotations toggle**: Allows you to temporarily hide annotations from the image - useful to see the image underneath an annotation to check if it is accurate.
 - **Class label**: The label to associate with the next annotation that is drawn. This can also be edited by right clicking on the image and selecting a new label from the menu.
 
-#### Instances List 
-The instances list within the video tools lets you interact with different annotations. You can:
+#### Annotations Table
+Below the frame, the annotations table lists one row per instance (a class label and track ID), sorted by the frame it first appears in. Use the **All Frames / This Frame** toggle above the table to list every instance, or only those present in the current frame. The columns are the annotation's marker, class label, type, track ID, first frame and who created it.
 
-- **Click on an annotation** in the list to highlight that annotation on the image, if it is present in the current frame.
-- **Delete**: Delete a given annotation across all frames where it is present.
-- **Jump to Frame**: Jump to the first frame where this annotation is present.
-- **Delete All Instances**: Delete all annotations across all frames.
+<figure markdown="span">
+   ![Video Annotations Table - All Frames](assets/video-annotations-table-all-frames.png){ width="700" }
+  <figcaption>All Frames: every instance in the sample, sorted by the frame it first appears in.</figcaption>
+</figure>
+
+<figure markdown="span">
+   ![Video Annotations Table - This Frame](assets/video-annotations-table-this-frame.png){ width="700" }
+  <figcaption>This Frame: only the instances present in the current frame.</figcaption>
+</figure>
+
+- **Click on a row** to select that instance and highlight it on the image, if it is present in the current frame. This also switches to that instance's annotation tool. If the selected instance is not present on the current frame, drawing while it is selected adds a new annotation to this frame with the same track ID. Choosing a different tool starts a new track instead. Click the row again to deselect it.
+- **Jump to annotation** (rewind icon): Jump to the first frame where the instance is present, and select it there.
+- **Delete annotation** (bin icon): In All Frames, delete the instance across all frames where it is present. In This Frame, delete it from the current frame only.
+- **Delete all**: In All Frames, delete all annotations across all frames. In This Frame, delete all annotations on the current frame.
+
+Deleting requires Edit mode, and asks for confirmation unless you are deleting a single instance from the current frame.
 
 
 **Keyboard Shortcuts:**
@@ -100,7 +112,7 @@ To edit an existing annotation, make sure that you are in Edit mode, and then se
 ## Delete Annotations
 To delete a single instance of an annotation in a specific frame, click on that annotation and then press the 'Delete' button in the popup which appears. 
 
-To delete all instances of an annotation, or to delete all instances of all annotations, use the `Instances` list within the `Video Tools` in the left hand toolbar.
+To delete all instances of an annotation, or to delete all instances of all annotations, use the annotations table below the frame.
 
 ## Import / Export Annotations
 In the left hand toolbar, there are dropdowns which allow you to either import or export sets of annotations from the selected sample. 

@@ -37,6 +37,18 @@ At the top of the interface, you'll find navigation controls to move through you
 - `Shift + ←`: Navigate to previous sample
 - `Shift + →`: Navigate to next sample
 
+### Annotations Table
+
+<figure markdown="span">
+   ![Time Series Annotations Table](assets/time-series-annotations-table.png){ width="700" }
+  <figcaption>The annotations table, listing each annotation on the current sample.</figcaption>
+</figure>
+
+Below the plot, the annotations table lists every annotation on the current sample. Each row shows a marker in the annotation's colour, its class label, its type (time region or time point) and who created it - `manual` for an annotation drawn by hand, or the name of the automated annotator or ML model that created it.
+
+- **Click on a row** to move the plot to that annotation. In Edit mode, this also selects the annotation. Selecting annotations on the plot highlights their rows in the table.
+- **Delete annotation** (bin icon): Delete that annotation. Deleting requires Edit mode.
+
 ### Sample Information
 
 The interface displays the current sample ID and project information, helping you keep track of which data you're annotating.
