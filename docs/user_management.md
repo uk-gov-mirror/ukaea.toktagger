@@ -170,7 +170,7 @@ Click **Delete** next to the user and confirm. This deletes the TokTagger record
 
 ## Profile Page
 
-Each signed-in user can open **Profile** from the Projects page. The page shows the user name, the email address and the display name. Click **Manage account** to change the password or other account data in the identity provider.
+Each signed-in user can open **Profile** from the Projects page. The page shows the user name, the email address and the display name.
 
 ---
 

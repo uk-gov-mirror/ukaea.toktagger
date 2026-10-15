@@ -12,7 +12,7 @@ from toktagger.api.auth.cookies import clear_session_cookies, set_session_cookie
 from toktagger.api.auth.core import create_access_token
 from toktagger.api.auth.dependencies import get_current_user
 from toktagger.api.crud.db import MongoDBClient
-from toktagger.api.schemas.auth import AuthConfig, LogoutResponse
+from toktagger.api.schemas.auth import LogoutResponse
 from toktagger.api.schemas.users import UserOut
 
 logger = logging.getLogger(__name__)
@@ -35,28 +35,6 @@ def _validate_return_to(return_to: str) -> str:
             status_code=400, detail="return_to must be a path under /ui/"
         )
     return return_to
-
-
-async def _account_url(idp: oidc.IdentityProvider | None) -> str | None:
-    auth = config.settings.auth
-    if auth.provider == "canaille":
-        return f"{config.settings.canaille_public_url}/"
-    issuer = str(auth.issuer_url)
-    if idp is not None:
-        try:
-            issuer = (await idp.metadata())["issuer"]
-        except oidc.IDP_ERRORS:
-            pass
-    issuer = issuer.rstrip("/")
-    return f"{issuer}/account" if "/realms/" in issuer else None
-
-
-@router.get("/config", response_model=AuthConfig)
-async def get_auth_config(request: Request) -> AuthConfig:
-    return AuthConfig(
-        provider=config.settings.auth.provider,
-        account_url=await _account_url(request.app.state.idp),
-    )
 
 
 @router.get("/login")

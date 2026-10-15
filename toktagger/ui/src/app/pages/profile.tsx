@@ -1,18 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
-import {
-  Divider,
-  Flex,
-  Heading,
-  Link,
-  Text,
-  View,
-} from "@adobe/react-spectrum";
+import { Divider, Flex, Heading, Text, View } from "@adobe/react-spectrum";
 import ApiTokens from "@/app/components/ui/apiTokens";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useBreadcrumbs } from "@/app/contexts/BreadcrumbContext";
-import { BACKEND_API_URL, apiFetch } from "@/app/core";
-import { AuthConfigSchema, type AuthConfig } from "@/types";
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -20,17 +10,6 @@ export default function ProfilePage() {
     { key: "projects", label: "Projects", href: "/ui/projects/" },
     { key: "profile", label: "Profile" },
   ]);
-  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
-
-  useEffect(() => {
-    const loadConfig = async () => {
-      const res = await apiFetch(`${BACKEND_API_URL}/auth/config`);
-      if (!res.ok) return;
-      const parsed = AuthConfigSchema.safeParse(await res.json());
-      if (parsed.success) setAuthConfig(parsed.data);
-    };
-    loadConfig().catch(() => {});
-  }, []);
 
   return (
     <Flex
@@ -79,12 +58,6 @@ export default function ProfilePage() {
               <Text>{user?.global_role}</Text>
             </Flex>
           </Flex>
-
-          {authConfig?.account_url && (
-            <Link href={authConfig.account_url} target="_blank">
-              Manage account
-            </Link>
-          )}
         </Flex>
       </View>
       <View

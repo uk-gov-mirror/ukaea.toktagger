@@ -437,12 +437,6 @@ export const CurrentUserSchema = z.object({
 });
 export type CurrentUser = z.infer<typeof CurrentUserSchema>;
 
-export const AuthConfigSchema = z.object({
-  provider: z.enum(["canaille", "oidc"]),
-  account_url: z.string().nullable(),
-});
-export type AuthConfig = z.infer<typeof AuthConfigSchema>;
-
 export const LogoutResponseSchema = z.object({
   logout_url: z.string().nullable(),
 });

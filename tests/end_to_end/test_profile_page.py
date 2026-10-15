@@ -32,13 +32,6 @@ def test_profile_shows_own_details_read_only(server_setup, admin_token, browser)
     user_page.context.close()
 
 
-def test_profile_links_to_account_management(server_setup, admin_token, page):
-    page.goto(PROFILE_URL)
-    link = page.get_by_role("link", name="Manage account")
-    expect(link).to_be_visible()
-    expect(link).to_have_attribute("href", "http://localhost:8003/")
-
-
 def test_api_token_create_use_and_revoke(server_setup, admin_token, page):
     page.goto(PROFILE_URL)
     page.get_by_role("textbox", name="Token name").fill("e2e script")

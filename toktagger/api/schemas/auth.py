@@ -1,12 +1,7 @@
 from datetime import datetime
-from typing import Literal, Self
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-
-class AuthConfig(BaseModel):
-    provider: Literal["canaille", "oidc"]
-    account_url: str | None = None
 
 
 class LogoutResponse(BaseModel):
