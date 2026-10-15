@@ -27,7 +27,7 @@ import {
 } from "@/app/contexts/VideoContext";
 import { useParams } from "react-router-dom";
 
-import { displayCreatedBy } from "@/app/components/annotators/types";
+import { displayCreatedBy } from "@/types";
 import { AnnotationPopup } from "@/app/video/components/annotation-popup";
 
 function FrameLabelBadges() {

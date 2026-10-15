@@ -386,8 +386,9 @@ async def add_author_names(
     """Set created_by_name on each annotation from its created_by value.
 
     A user ID resolves to that user's username and a model:: or annotators:: value to
-    the name after the prefix. A user ID with no user (a deleted account) stays None,
-    and any other legacy value, such as "manual", is shown as it is.
+    the name after the prefix. A user ID with no user (a deleted account) keeps a None
+    name and sets created_by_deleted, and any other legacy value, such as "manual", is
+    shown as it is.
     """
     user_ids = {
         annotation.created_by
@@ -401,6 +402,7 @@ async def add_author_names(
             annotation.created_by_name = author.split("::", 1)[1]
         elif ObjectId.is_valid(author):
             annotation.created_by_name = usernames.get(author)
+            annotation.created_by_deleted = author not in usernames
         else:
             annotation.created_by_name = author or None
     return annotations

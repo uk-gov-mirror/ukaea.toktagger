@@ -12,7 +12,7 @@ import {
   Flex,
 } from "@adobe/react-spectrum";
 import { useTimeSeriesState } from "@/app/contexts/TimeSeriesContext";
-import { displayCreatedBy } from "@/app/components/annotators/types";
+import { displayCreatedBy } from "@/types";
 
 interface MarkerProps {
   color: string;

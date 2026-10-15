@@ -12,6 +12,7 @@ export const BaseAnnotationSchema = z.object({
   created_by: z.string().default("manual"),
   // Read-only author name the backend resolves from created_by.
   created_by_name: z.string().nullish(),
+  created_by_deleted: z.boolean().optional(),
   signal_name: z.string().nullable().default(null),
   label: z.string(),
   type: z.string(),
@@ -419,6 +420,7 @@ export type TimeSeriesAnnotation = {
   db_id: string | null;
   created_by: string;
   created_by_name?: string | null;
+  created_by_deleted?: boolean;
   label: string;
   type: TimeSeriesAnnotationType;
   points: TimeSeriesAnnotationPoint[];
@@ -515,3 +517,31 @@ export interface SelectionRange {
     high: number;
   };
 }
+
+export enum AnnotatorTypes {
+  PEAK_DETECTION = "peak_detection",
+  CHANGE_POINT_DETECTION = "change_point_detection",
+  JUMP_DETECTION = "jump_detection",
+  OUTLIER_DETECTION = "outlier_detection",
+  PROFILE_2D_THRESHOLD = "profile_2d_threshold",
+}
+
+export const annotatorCreatedBy = (type: AnnotatorTypes) =>
+  `annotators::${type}`;
+
+export const modelCreatedBy = (modelType: string) => `model::${modelType}`;
+
+// Display only; the raw created_by value is kept for ownership checks, filtering, etc.
+export const displayCreatedBy = ({
+  created_by,
+  created_by_name,
+  created_by_deleted,
+}: {
+  created_by: string;
+  created_by_name?: string | null;
+  created_by_deleted?: boolean;
+}) => {
+  if (created_by_name) return created_by_name;
+  if (created_by_deleted) return "Deleted user";
+  return created_by.replace(/^(model|annotators)::/, "");
+};

@@ -143,6 +143,7 @@ class AnnotationOut(AnnotationBatch):
     shot_id: int
     # Resolved from created_by when read; None for a deleted user or a legacy placeholder.
     created_by_name: str | None = None
+    created_by_deleted: bool = False
 
 
 def create_out_model(base_class, name_suffix="Out"):
