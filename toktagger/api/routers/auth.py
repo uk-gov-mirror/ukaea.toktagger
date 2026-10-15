@@ -21,7 +21,6 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 DEFAULT_RETURN_TO = "/ui/projects"
 LOGIN_PATH = "/ui/login"
-RETURN_TO_SESSION_KEY = "return_to"
 ERROR_CODE_PATTERN = re.compile(r"[a-z_]{1,40}")
 
 
@@ -43,7 +42,7 @@ async def login_redirect(
     return_to: str = DEFAULT_RETURN_TO,
     idp: oidc.IdentityProvider = Depends(oidc.get_idp),
 ):
-    request.session[RETURN_TO_SESSION_KEY] = _validate_return_to(return_to)
+    request.session["return_to"] = _validate_return_to(return_to)
     try:
         return await idp.client.authorize_redirect(
             request, f"{config.settings.public_url}/auth/callback"
@@ -57,7 +56,8 @@ async def login_redirect(
 async def callback(
     request: Request, idp: oidc.IdentityProvider = Depends(oidc.get_idp)
 ):
-    return_to = request.session.pop(RETURN_TO_SESSION_KEY, DEFAULT_RETURN_TO)
+    db_client: MongoDBClient = request.app.state.db_client
+    return_to = request.session.pop("return_to", DEFAULT_RETURN_TO)
     try:
         token = await idp.client.authorize_access_token(request)
         claims = token.get("userinfo", {})
@@ -68,7 +68,6 @@ async def callback(
             if not claims.get("sub") or userinfo.get("sub") == claims.get("sub"):
                 claims = {**userinfo, **claims}
         issuer = (await idp.metadata())["issuer"]
-        db_client: MongoDBClient = request.app.state.db_client
         user = await oidc.provision_user(db_client, issuer, claims)
         if not user.is_active:
             return _login_error("inactive")
