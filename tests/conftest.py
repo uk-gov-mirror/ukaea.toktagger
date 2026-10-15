@@ -137,6 +137,7 @@ async def db_client(settings):
 async def unauthenticated_api_client(tmp_path, monkeypatch, db_client):
     monkeypatch.setattr(config.settings.server, "cache_dir", tmp_path)
     monkeypatch.setattr(auth_core, "_serializer", None)
+    monkeypatch.setattr(auth_core, "_fernet", None)
 
     server = Server()
     server.testing_mode = True

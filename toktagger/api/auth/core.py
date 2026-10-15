@@ -1,8 +1,12 @@
+import base64
 import os
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from filelock import FileLock
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -10,7 +14,10 @@ from toktagger.api import config
 
 _SALT = "toktagger-auth-v1"
 
+_ENCRYPTION_INFO = b"toktagger-stored-secrets-v1"
+
 _serializer: URLSafeTimedSerializer | None = None
+_fernet: Fernet | None = None
 _internal_token: str | None = None
 
 
@@ -73,7 +80,30 @@ def _get_serializer() -> URLSafeTimedSerializer:
     return _serializer
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+def _get_fernet() -> Fernet:
+    global _fernet
+    if _fernet is None:
+        key = HKDF(
+            algorithm=hashes.SHA256(), length=32, salt=None, info=_ENCRYPTION_INFO
+        ).derive(get_signing_secret().encode())
+        _fernet = Fernet(base64.urlsafe_b64encode(key))
+    return _fernet
+
+
+def encrypt_secret(value: str) -> str:
+    """Encrypt a value for storage, with a key derived from the signing secret."""
+    return _get_fernet().encrypt(value.encode()).decode()
+
+
+def decrypt_secret(value: str) -> str:
+    """Decrypt a value from encrypt_secret.
+
+    Raises cryptography.fernet.InvalidToken when the value or the signing secret changed.
+    """
+    return _get_fernet().decrypt(value).decode()
+
+
+def create_access_token(data: dict) -> str:
     return _get_serializer().dumps(data)
 
 

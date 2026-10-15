@@ -50,7 +50,7 @@ class IdentityProvider:
     """The OpenID Connect provider client and its cached signing keys."""
 
     def __init__(self, auth: config.Auth) -> None:
-        self._auth = auth
+        self._auth_settings = auth
         issuer = str(auth.issuer_url).rstrip("/")
         oauth = OAuth()
         oauth.register(
@@ -78,7 +78,7 @@ class IdentityProvider:
             except IDP_ERRORS as error:
                 if time.monotonic() + delay > deadline:
                     raise RuntimeError(
-                        f"Could not reach the identity provider at {self._auth.issuer_url}: {error}"
+                        f"Could not reach the identity provider at {self._auth_settings.issuer_url}: {error}"
                     ) from error
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 4)
@@ -91,15 +91,15 @@ class IdentityProvider:
         the server hit the provider on every request.
         """
         age = time.monotonic() - self._jwks_fetched_at
-        if self._jwks is not None and age <= JWKS_TTL_SECONDS:
-            if not force or age <= JWKS_MIN_REFRESH_SECONDS:
-                return self._jwks
-        metadata = await self.metadata()
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(metadata["jwks_uri"])
-            response.raise_for_status()
-        self._jwks = KeySet.import_key_set(response.json())
-        self._jwks_fetched_at = time.monotonic()
+        is_stale = self._jwks is None or age > JWKS_TTL_SECONDS
+        is_refresh_allowed = force and age > JWKS_MIN_REFRESH_SECONDS
+        if is_stale or is_refresh_allowed:
+            metadata = await self.metadata()
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(metadata["jwks_uri"])
+                response.raise_for_status()
+            self._jwks = KeySet.import_key_set(response.json())
+            self._jwks_fetched_at = time.monotonic()
         return self._jwks
 
     async def verify_access_token(self, token: str) -> dict[str, Any]:
@@ -120,8 +120,8 @@ class IdentityProvider:
             _validate_claims(decoded.claims, issuer)
         except (JoseError, KeyError, TypeError, httpx.HTTPError) as error:
             raise ValueError("Invalid token") from error
-        if self._auth.verify_bearer_audience and not _audience_matches(
-            decoded.claims, self._auth.client_id
+        if self._auth_settings.verify_bearer_audience and not _audience_matches(
+            decoded.claims, self._auth_settings.client_id
         ):
             raise ValueError("Invalid token audience")
         return decoded.claims
@@ -162,7 +162,8 @@ def _audience_matches(claims: dict[str, Any], client_id: str) -> bool:
     audience = claims.get("aud") or []
     if isinstance(audience, str):
         audience = [audience]
-    return client_id in audience or claims.get("azp") == client_id
+    authorised_party = claims.get("azp")
+    return client_id in audience and authorised_party in (None, client_id)
 
 
 def _has_key(keys: KeySet, key_id: str) -> bool:
@@ -204,7 +205,6 @@ def derive_username(claims: dict[str, Any]) -> str:
         claims.get("preferred_username"),
         email.split("@")[0] if isinstance(email, str) else None,
         full_name.replace(" ", "") if isinstance(full_name, str) else None,
-        claims.get("sub"),
     )
     for candidate in candidates:
         if isinstance(candidate, str) and (name := _strip_reserved_prefixes(candidate)):
@@ -270,11 +270,6 @@ async def provision_user(
     )
     email = claims.get("email")
     display_name = claims.get("name")
-
-    if not sync_profile:
-        existing = await utils.get_user_by_oidc_identity(db_client, issuer, sub)
-        if existing is not None:
-            return existing
 
     async with db_client.lock(f"users:oidc:{issuer}:{sub}"):
         user = await utils.get_user_by_oidc_identity(db_client, issuer, sub)

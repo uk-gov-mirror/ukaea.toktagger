@@ -18,6 +18,21 @@ class ApiTokenCreate(BaseModel):
     expires_in_days: int = Field(30, gt=0)
 
 
+class Session(BaseModel):
+    username: str
+    issuer: str
+    sub: str
+    refresh_token: str
+    id_token: str | None = None
+    refreshed_at: float
+
+
+class SessionUpdate(BaseModel):
+    refresh_token: str | None = None
+    id_token: str | None = None
+    refreshed_at: float | None = None
+
+
 class ApiToken(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     token_hash: str = Field(..., pattern=r"^[0-9a-f]{64}$")
@@ -31,6 +46,10 @@ class ApiToken(BaseModel):
         if self.expires_at <= self.created_at:
             raise ValueError("expires_at must be later than created_at")
         return self
+
+
+class ApiTokenUpdate(BaseModel):
+    last_used_at: float | None = Field(None, gt=0)
 
 
 class ApiTokenOut(BaseModel):

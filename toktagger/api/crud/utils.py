@@ -27,6 +27,7 @@ from toktagger.api.schemas.projects import (
 )
 from toktagger.api.schemas.samples import FileData, Sample, SampleSummary, SampleUpdate
 from toktagger.api.schemas.users import (
+    UserBase,
     UserIn,
     UserOut,
     UserUpdate,
@@ -713,15 +714,10 @@ async def sync_user_from_idp(
     display_name: str | None,
 ) -> UserOut:
     obj_id = convert_to_objectid(user_id, "users")
-    await db_client.db["users"].update_one(
-        {"_id": obj_id},
-        {
-            "$set": {
-                "global_role": global_role,
-                "email": email,
-                "display_name": display_name,
-            }
-        },
+    await db_client.update(
+        "users",
+        UserBase(global_role=global_role, email=email, display_name=display_name),
+        obj_id,
     )
     user = await get_user_by_id(db_client, user_id)
     if user is None:
@@ -768,9 +764,7 @@ async def update_user(
     user = await get_user_by_id(db_client, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    update_dict = updates.model_dump(exclude_none=True)
-    if update_dict:
-        await db_client.db["users"].update_one({"_id": obj_id}, {"$set": update_dict})
+    await db_client.update("users", updates, obj_id)
 
 
 async def delete_user(db_client: MongoDBClient, user_id: str) -> None:

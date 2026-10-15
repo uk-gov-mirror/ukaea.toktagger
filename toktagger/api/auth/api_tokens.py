@@ -7,7 +7,12 @@ from typing import Any
 
 from toktagger.api.crud.db import MongoDBClient
 from toktagger.api.schemas import convert_to_objectid
-from toktagger.api.schemas.auth import ApiToken, ApiTokenCreated, ApiTokenOut
+from toktagger.api.schemas.auth import (
+    ApiToken,
+    ApiTokenCreated,
+    ApiTokenOut,
+    ApiTokenUpdate,
+)
 
 TOKEN_PREFIX = "tt_"
 HINT_LENGTH = 4
@@ -77,7 +82,7 @@ async def authenticate_api_token(db_client: MongoDBClient, token: str) -> str | 
     last_used_at = api_token.last_used_at
     # Throttled so that a busy script does not write to the database on every request.
     if last_used_at is None or now - last_used_at >= LAST_USED_RESOLUTION_SECONDS:
-        await db_client.db["api_tokens"].update_one(
-            {"_id": document["_id"]}, {"$set": {"last_used_at": now}}
+        await db_client.update(
+            "api_tokens", ApiTokenUpdate(last_used_at=now), document["_id"]
         )
     return str(document["user_id"])

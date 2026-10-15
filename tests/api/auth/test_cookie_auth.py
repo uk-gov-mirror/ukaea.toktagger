@@ -14,7 +14,11 @@ from tests.api.auth.conftest import END_SESSION_URL, ISSUER, sign_in
 from tests.identity import get_auth_token, session_headers
 from toktagger.api import config
 from toktagger.api.auth import oidc, sessions
-from toktagger.api.auth.core import decode_token_with_age, get_internal_token
+from toktagger.api.auth.core import (
+    decode_token_with_age,
+    decrypt_secret,
+    get_internal_token,
+)
 from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
 from toktagger.api.crud import utils
 
@@ -240,7 +244,8 @@ async def test_sign_in_stores_the_provider_tokens_in_a_session(
         {"_id": payload["sid"]}
     )
     assert session["username"] == "admin"
-    assert session["refresh_token"] == "refresh-1"
+    assert session["refresh_token"] != "refresh-1"
+    assert decrypt_secret(session["refresh_token"]) == "refresh-1"
     assert session["id_token"] == "id-1"
 
 
@@ -323,6 +328,20 @@ async def test_refusal_at_the_provider_ends_the_session(
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
     idp.fake_refresh = {"refresh_token": "refresh-2"}
     assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_undecryptable_refresh_token_ends_the_session(
+    setup_db_auth, unauthenticated_api_client, db_client, refresh_due, idp
+):
+    """A changed signing secret leaves stored refresh tokens unreadable."""
+    await login(unauthenticated_api_client)
+    await db_client.db[sessions.SESSIONS_COLLECTION].update_many(
+        {}, {"$set": {"refresh_token": "refresh-1"}}
+    )
+
+    assert (await unauthenticated_api_client.get("/auth/me")).status_code == 401
+    assert idp.refresh_calls == []
 
 
 @pytest.mark.asyncio

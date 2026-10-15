@@ -57,9 +57,13 @@ def test_derive_username_prefers_preferred_username():
     assert oidc.derive_username(claims) == "alice"
 
 
-def test_derive_username_falls_back_to_email_then_sub():
+def test_derive_username_falls_back_to_email_then_name():
     assert oidc.derive_username({"email": "bob@x.org", "sub": "s"}) == "bob"
-    assert oidc.derive_username({"sub": "subject-9"}) == "subject-9"
+    assert oidc.derive_username({"name": "Bob Smith", "sub": "s"}) == "BobSmith"
+
+
+def test_derive_username_never_uses_sub():
+    assert oidc.derive_username({"sub": "subject-9"}) == "user"
 
 
 @pytest.mark.parametrize(
@@ -385,12 +389,32 @@ async def test_verify_accepts_a_valid_token(identity_provider, jwks_route, idp_k
 
 
 @pytest.mark.asyncio
-async def test_verify_accepts_the_client_as_authorised_party(
+async def test_verify_accepts_a_matching_audience_and_authorised_party(
     identity_provider, jwks_route, idp_key
 ):
-    token = mint_token(idp_key, aud=["account"], azp=CLIENT_ID)
+    token = mint_token(idp_key, aud=[CLIENT_ID], azp=CLIENT_ID)
 
     assert (await identity_provider.verify_access_token(token))["azp"] == CLIENT_ID
+
+
+@pytest.mark.asyncio
+async def test_verify_rejects_authorised_party_without_matching_audience(
+    identity_provider, jwks_route, idp_key
+):
+    with pytest.raises(ValueError):
+        await identity_provider.verify_access_token(
+            mint_token(idp_key, aud=["account"], azp=CLIENT_ID)
+        )
+
+
+@pytest.mark.asyncio
+async def test_verify_rejects_a_mismatched_authorised_party(
+    identity_provider, jwks_route, idp_key
+):
+    with pytest.raises(ValueError):
+        await identity_provider.verify_access_token(
+            mint_token(idp_key, aud=[CLIENT_ID], azp="someone-else")
+        )
 
 
 @pytest.mark.asyncio
