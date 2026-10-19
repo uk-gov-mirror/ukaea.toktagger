@@ -255,7 +255,7 @@ export function VideoView() {
 
   const parsed = ImageDataSchema.safeParse(data);
   if (!parsed.success) {
-    throw new Error("Invalid data for UFO view (expected ImageData)");
+    throw new Error("Invalid data for video view (expected ImageData)");
   }
 
   const imageBase64 = parsed.data.values;
