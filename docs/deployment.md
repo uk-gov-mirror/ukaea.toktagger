@@ -32,6 +32,9 @@ You need:
 
 2. Edit `.env`. Set the two host names. Replace each value marked `CHANGE` with a long random string. Use letters and digits only. You can make a string with `openssl rand -hex 32`.
 
+    !!! warning
+        You cannot change these values after the first start. The databases keep the first values in their volumes, and `docker compose down` does not remove the volumes. If you change a value and start the stack again, the stack stops working and it does not show a clear error. To change a value, stop the stack with `docker compose down -v`. This command deletes all your data.
+
 3. Start the stack:
 
     ```sh
