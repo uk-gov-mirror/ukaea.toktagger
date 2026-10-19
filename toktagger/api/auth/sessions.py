@@ -33,6 +33,7 @@ async def start_session(
     refresh_token = token.get("refresh_token")
     if not isinstance(refresh_token, str):
         raise ValueError("The identity provider returned no refresh token")
+    id_token = token.get("id_token")
     now = time.time()
     idle_cutoff = now - config.settings.auth.session_idle_timeout_seconds
     await db_client.delete_filtered_documents(
@@ -46,7 +47,7 @@ async def start_session(
             issuer=issuer,
             sub=sub,
             refresh_token=encrypt_secret(refresh_token),
-            id_token=token.get("id_token"),
+            id_token=encrypt_secret(id_token) if isinstance(id_token, str) else None,
             refreshed_at=now,
         ),
         ids={"_id": session_id},
@@ -90,12 +91,15 @@ async def refresh_session(
             raise SessionEndedError(
                 "The identity provider ended the session. Sign in again."
             ) from exc
+        id_token = token.get("id_token")
         # Saved before userinfo, so a failure there does not lose a rotated refresh token.
         await db_client.update(
             SESSIONS_COLLECTION,
             SessionUpdate(
                 refresh_token=encrypt_secret(token.get("refresh_token", refresh_token)),
-                id_token=token.get("id_token", session.id_token),
+                id_token=encrypt_secret(id_token)
+                if isinstance(id_token, str)
+                else session.id_token,
             ),
             session_id,
         )
@@ -119,4 +123,12 @@ async def end_session(db_client: MongoDBClient, session_id: str) -> str | None:
     """Remove a session and return its provider ID token, for the sign-out hint."""
     document = await db_client.get_document_by_id(SESSIONS_COLLECTION, session_id)
     await db_client.delete_document_by_id(SESSIONS_COLLECTION, session_id)
-    return Session.model_validate(document).id_token if document else None
+    if document is None:
+        return None
+    id_token = Session.model_validate(document).id_token
+    if id_token is None:
+        return None
+    try:
+        return decrypt_secret(id_token)
+    except InvalidToken:
+        return None

@@ -246,7 +246,8 @@ async def test_sign_in_stores_the_provider_tokens_in_a_session(
     assert session["username"] == "admin"
     assert session["refresh_token"] != "refresh-1"
     assert decrypt_secret(session["refresh_token"]) == "refresh-1"
-    assert session["id_token"] == "id-1"
+    assert session["id_token"] != "id-1"
+    assert decrypt_secret(session["id_token"]) == "id-1"
 
 
 @pytest.mark.asyncio
