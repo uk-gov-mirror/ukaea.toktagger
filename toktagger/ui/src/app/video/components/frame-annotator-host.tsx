@@ -2,8 +2,6 @@
  * The canvas: shows the current frame in OpenSeadragon with the Annotorious layer on top.
  * It handles points and frame labels itself, since Annotorious has no tools for them.
  */
-"use client";
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import OpenSeadragon from "openseadragon";
 import {
@@ -144,12 +142,7 @@ function findAnnotationAtPointer(
 }
 
 /** Renders the canvas for one frame's base64 image. */
-export function FrameAnnotatorHost(props: { imageBase64: string }) {
-  return <Inner imageBase64={props.imageBase64} />;
-}
-
-/** Syncing with Annotorious lives in the session, so this only renders and passes clicks to the session. */
-function Inner({ imageBase64 }: { imageBase64: string }) {
+export function FrameAnnotatorHost({ imageBase64 }: { imageBase64: string }) {
   const { annotationLabels } = useSample();
   const { setVideoLastClassName } = useVideoUiState();
   const {
@@ -483,7 +476,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     if (!cls) return;
 
     setVideoLastClassName(cls);
-    setSelection({ className: cls, trackId: null, source: "explicit" });
+    setSelection({ className: cls, trackId: null });
   };
 
   // Point tool: Ctrl + click places a point. Listening in the capture phase gets the click before Annotorious.

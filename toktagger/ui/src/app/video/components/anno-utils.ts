@@ -2,8 +2,6 @@
  * Converts annotations between the backend format and the Annotorious format. In Annotorious the class
  * label, track ID and creator are bodies (tagging, identifying, creator), and the frame is on target.source.
  */
-"use client";
-
 import {
   ShapeType,
   type AnnotationBody,
@@ -566,25 +564,4 @@ export function videoPointToAnno(
 
   const labelled = stampLabelAndTrack(anno, p.label, String(p.track_id));
   return stampPoint(stampCreator(labelled, p.created_by));
-}
-
-/** normalizeOverlay with named options. dedupeByInstance keeps only the last shape per instance. */
-export function normalizeOverlayForSession(args: {
-  raw: ImageAnnotation[];
-  frameKey: string;
-  fallback: { className: string | null; trackId: string | null };
-  allocTrackId?: (className: string) => string;
-  enforceBothBodies?: boolean;
-  dedupeByInstance?: boolean;
-}): ImageAnnotation[] {
-  return normalizeOverlay(
-    args.raw,
-    args.frameKey,
-    args.fallback,
-    args.allocTrackId,
-    {
-      enforceBothBodies: args.enforceBothBodies ?? true,
-      dedupeByInstance: args.dedupeByInstance ?? true,
-    },
-  );
 }

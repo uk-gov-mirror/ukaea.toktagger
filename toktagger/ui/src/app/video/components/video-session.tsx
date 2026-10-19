@@ -2,8 +2,6 @@
  * The video session, the core of the video view: the current frame, the byFrame cache, the
  * selection and drawing state. It keeps SampleContext, byFrame and Annotorious in step.
  */
-"use client";
-
 import React, {
   createContext,
   useCallback,
@@ -39,8 +37,6 @@ import type {
 } from "./types";
 import { buildSourceKey } from "./types";
 import {
-  allocateNextTrackId,
-  buildNextTrackIdState,
   deleteTrackAcrossFrames,
   canonicalizeTrackId,
   deriveFrameLabelInstances,
@@ -59,12 +55,12 @@ import {
 import {
   annoToVideoAnnotation,
   getLabelTrack,
+  normalizeOverlay,
   videoBBoxToAnno,
   videoPointToAnno,
   videoPolygonToAnno,
   stampPoint,
   stampLabelAndTrack,
-  normalizeOverlayForSession,
   toAnnotoriousDrawingTool,
 } from "./anno-utils";
 import {
@@ -79,17 +75,12 @@ type VideoSessionCtx = {
   sampleId: string;
 
   frame: FrameIndex;
-  setFrame: (n: FrameIndex) => void;
 
   /** Stable source key for the current frame (used as target.source on annotations). */
   frameKey: string;
 
   /** Per-frame editor cache derived from SampleContext annotations. */
   byFrame: ByFrameMap;
-
-  /** True if video edits have changed context annotations since the last save. */
-  dirty: boolean;
-  markSaved: () => void;
 
   /** The class label and track ID the next annotation will use. */
   selection: Selection;
@@ -117,8 +108,7 @@ type VideoSessionCtx = {
   hideAnnotations: boolean;
   setHideAnnotations: (v: boolean) => void;
 
-  /** Natural image dimensions for the currently loaded frame (used for clamping). */
-  imageNatural: { w: number; h: number } | null;
+  /** Reports the frame's natural image size, used to clamp shapes. */
   setImageNatural: (n: { w: number; h: number } | null) => void;
 
   /** Annotorious operations for components, so they never call its API directly. */
@@ -132,27 +122,17 @@ type VideoSessionCtx = {
   ) => void;
 
   // frame ops
-  getFrameList: (frame: FrameIndex) => ImageAnnotation[];
   /** Commit the current Annotorious overlay into SampleContext before frame navigation. */
   flushCurrentFrameOverlay: () => void;
   clearCurrentFrame: () => void;
   clearAllFrames: () => void;
 
   // instance ops
-  /** Selects the next numeric track ID for a class. Nothing calls this: new tracks use readable IDs. */
-  createNewInstanceForClass: (className: string) => {
-    className: string;
-    trackId: string;
-  };
-
   /** Deletes an instance on every frame. Takes the instance directly rather than reading the selection. */
   deleteInstanceAcrossFrames: (className: string, trackId: string) => void;
 
   /** Delete a specific instance on the current frame only, leaving its other frames intact. */
   deleteInstanceOnCurrentFrame: (className: string, trackId: string) => void;
-
-  /** Delete the currently selected instance across all frames. */
-  deleteSelectedInstanceAcrossFrames: () => void;
 
   /** Append missing manual instances from the current frame to the next frame in Edit mode. */
   forwardPropMissingManualToNext: (nextFrame: FrameIndex) => void;
@@ -459,9 +439,6 @@ export function VideoSessionProvider(props: {
   >(() => {});
   // An instance waiting to be selected once its frame's annotations are in Annotorious
   const pendingFocusRef = useRef<FocusRequest | null>(null);
-  const nextTrackNumsRef = useRef<Map<string, number>>(
-    buildNextTrackIdState(annotations),
-  );
   // The last outside change and our own last write, so the sync effect can tell them apart
   const lastExternalAnnotationSignatureRef = useRef<string | null>(null);
   const lastLocalAnnotationSignatureRef = useRef<string | null>(null);
@@ -499,20 +476,14 @@ export function VideoSessionProvider(props: {
 
   const frame: FrameIndex = (videoFrame ?? frameFromBackend) as FrameIndex;
 
-  const setFrame = useCallback((n: FrameIndex) => {
-    setVideoFrame(n);
-  }, []);
-
   const [byFrame, setByFrame] = useState<ByFrameMap>(() => new Map());
   // Refs mirror state so event handlers registered earlier still read the latest value
   const byFrameRef = useRef<ByFrameMap>(new Map());
   const annotationsRef = useRef<Annotation[]>(annotations);
-  const [dirty, setDirty] = useState(false);
 
   const [selection, setSelectionState] = useState<Selection>({
     className: null,
     trackId: null,
-    source: null,
   });
   const [drawingTool, setDrawingToolState] =
     useState<ActiveDrawingTool>(videoDrawingTool);
@@ -635,7 +606,6 @@ export function VideoSessionProvider(props: {
             ),
         ),
       );
-      setDirty(true);
     },
     [frame, setSampleAnnotations],
   );
@@ -670,7 +640,6 @@ export function VideoSessionProvider(props: {
 
       return [...prev, created.data];
     });
-    setDirty(true);
   }, [
     collectUsedTrackIdsForClass,
     frame,
@@ -678,11 +647,6 @@ export function VideoSessionProvider(props: {
     selection.trackId,
     setSampleAnnotations,
   ]);
-
-  const getFrameList = useCallback(
-    (f: FrameIndex) => byFrame.get(f) ?? [],
-    [byFrame],
-  );
 
   useEffect(() => {
     byFrameRef.current = byFrame;
@@ -706,7 +670,6 @@ export function VideoSessionProvider(props: {
     if (signature === lastExternalAnnotationSignatureRef.current) return;
     // This change is our own write from commitByFrame, so byFrame is already up to date
     if (signature === lastLocalAnnotationSignatureRef.current) {
-      nextTrackNumsRef.current = buildNextTrackIdState(dbAnnotations);
       lastExternalAnnotationSignatureRef.current = signature;
       return;
     }
@@ -720,14 +683,13 @@ export function VideoSessionProvider(props: {
     pendingFocusRef.current = null;
     byFrameRef.current = nextByFrame;
     setByFrame(nextByFrame);
-    nextTrackNumsRef.current = buildNextTrackIdState(dbAnnotations);
     lastExternalAnnotationSignatureRef.current = signature;
     lastLocalAnnotationSignatureRef.current = null;
   }, [annotations, projectId, sampleId, setSampleAnnotations]);
 
   /** Writes byFrame and the matching video annotations in SampleContext. */
   const commitByFrame = useCallback(
-    (next: ByFrameMap, opts?: { markDirty?: boolean }) => {
+    (next: ByFrameMap) => {
       byFrameRef.current = next;
       setByFrame(next);
       setSampleAnnotations((prev) => {
@@ -736,25 +698,19 @@ export function VideoSessionProvider(props: {
           videoAnnotationSignature(nextAnnotations);
         return nextAnnotations;
       });
-      if (opts?.markDirty) setDirty(true);
     },
     [setSampleAnnotations],
   );
 
   const updateByFrame = useCallback(
-    (
-      updater: (prev: ByFrameMap) => ByFrameMap,
-      opts?: { markDirty?: boolean },
-    ) => {
+    (updater: (prev: ByFrameMap) => ByFrameMap) => {
       const prev = byFrameRef.current;
       const next = updater(prev);
       if (next === prev) return;
-      commitByFrame(next, opts);
+      commitByFrame(next);
     },
     [commitByFrame],
   );
-
-  const markSaved = useCallback(() => setDirty(false), []);
 
   const setSelection = useCallback((next: Selection) => {
     setSelectionState(next);
@@ -862,7 +818,7 @@ export function VideoSessionProvider(props: {
     flushPendingOverlay();
     pendingFocusRef.current = null;
 
-    updateByFrame((prev) => mapClearFrame(prev, frame), { markDirty: true });
+    updateByFrame((prev) => mapClearFrame(prev, frame));
     setSampleAnnotations((prev) =>
       prev.filter((annotation) => parseFrameLabel(annotation)?.frame !== frame),
     );
@@ -889,7 +845,7 @@ export function VideoSessionProvider(props: {
     flushPendingOverlay();
     pendingFocusRef.current = null;
 
-    updateByFrame((prev) => mapClearAll(prev), { markDirty: true });
+    updateByFrame((prev) => mapClearAll(prev));
     setSampleAnnotations((prev) =>
       prev.filter((annotation) => !parseFrameLabel(annotation)),
     );
@@ -953,28 +909,18 @@ export function VideoSessionProvider(props: {
     hideAnnotations,
   ]);
 
-  const createNewInstanceForClass = useCallback((className: string) => {
-    const cname = (className || "").trim();
-    const trackId = allocateNextTrackId(nextTrackNumsRef.current, cname);
-
-    setSelectionState({ className: cname, trackId, source: "auto" });
-    return { className: cname, trackId };
-  }, []);
-
   const deleteInstanceAcrossFrames = useCallback(
     (className: string, trackId: string) => {
       const cls = (className || "").trim();
       const tid = canonicalizeTrackId(trackId || "");
       if (!cls || !tid) return;
 
-      updateByFrame(
-        (prev) =>
-          deleteTrackAcrossFrames(
-            prev,
-            { className: cls, trackId: tid },
-            getLabelTrack,
-          ),
-        { markDirty: true },
+      updateByFrame((prev) =>
+        deleteTrackAcrossFrames(
+          prev,
+          { className: cls, trackId: tid },
+          getLabelTrack,
+        ),
       );
       setSampleAnnotations((prev) =>
         prev.filter(
@@ -1001,44 +947,34 @@ export function VideoSessionProvider(props: {
       const tid = canonicalizeTrackId(trackId || "");
       if (!cls || !tid) return;
 
-      updateByFrame(
-        (prev) =>
-          mapSetFrame(
-            prev,
-            frame,
-            (prev.get(frame) ?? []).filter((annotation) => {
-              const got = getLabelTrack(annotation);
-              return !(
-                (got.className ?? "").trim() === cls &&
-                canonicalizeTrackId(got.trackId ?? "") === tid
-              );
-            }),
-          ),
-        { markDirty: true },
+      updateByFrame((prev) =>
+        mapSetFrame(
+          prev,
+          frame,
+          (prev.get(frame) ?? []).filter((annotation) => {
+            const got = getLabelTrack(annotation);
+            return !(
+              (got.className ?? "").trim() === cls &&
+              canonicalizeTrackId(got.trackId ?? "") === tid
+            );
+          }),
+        ),
       );
       removeFrameLabel(cls, tid);
     },
     [frame, removeFrameLabel, updateByFrame],
   );
 
-  /** Deletes the selected instance on every frame. */
-  const deleteSelectedInstanceAcrossFrames = useCallback(() => {
-    if (!selection.className || !selection.trackId) return;
-    deleteInstanceAcrossFrames(selection.className, selection.trackId);
-  }, [deleteInstanceAcrossFrames, selection.className, selection.trackId]);
-
   /** Append missing manual instances from the current frame to `nextFrame` in Edit mode. */
   const forwardPropMissingManualToNext = useCallback(
     (nextFrame: FrameIndex) => {
       if (!editMode) return;
 
-      updateByFrame(
-        (prev) =>
-          forwardPropagateMissingManualAnnotations(prev, frame, nextFrame, {
-            projectId,
-            sampleId,
-          }),
-        { markDirty: true },
+      updateByFrame((prev) =>
+        forwardPropagateMissingManualAnnotations(prev, frame, nextFrame, {
+          projectId,
+          sampleId,
+        }),
       );
 
       const nextAnnotations = propagateMissingManualFrameLabels(
@@ -1050,7 +986,6 @@ export function VideoSessionProvider(props: {
         setSampleAnnotations((prev) =>
           propagateMissingManualFrameLabels(prev, frame, nextFrame),
         );
-        setDirty(true);
       }
     },
     [
@@ -1107,17 +1042,13 @@ export function VideoSessionProvider(props: {
         created_by: "manual",
       };
       const pointAnnotation = videoPointToAnno(dbPoint, frameKey);
-      const normalized = normalizeOverlayForSession({
-        raw: [...raw, pointAnnotation],
-        frameKey,
-        fallback: { className: cls, trackId: String(trackId) },
-        enforceBothBodies: true,
-        dedupeByInstance: true,
+      const normalized = normalizeOverlay([...raw, pointAnnotation], frameKey, {
+        className: cls,
+        trackId: String(trackId),
       });
 
-      updateByFrame(
-        (prevByFrame) => mapSetFrame(prevByFrame, frame, normalized),
-        { markDirty: true },
+      updateByFrame((prevByFrame) =>
+        mapSetFrame(prevByFrame, frame, normalized),
       );
 
       isProgrammaticAnnoSyncRef.current = true;
@@ -1202,14 +1133,12 @@ export function VideoSessionProvider(props: {
             };
           })();
 
-      const normalized = normalizeOverlayForSession({
-        raw: clamped,
+      const normalized = normalizeOverlay(
+        clamped,
         frameKey,
-        fallback: { className: cls, trackId: fallbackTrackId },
+        { className: cls, trackId: fallbackTrackId },
         allocTrackId,
-        enforceBothBodies: true,
-        dedupeByInstance: true,
-      });
+      );
 
       // If clamping or labelling changed anything, show the corrected shapes in Annotorious too
       if (!sameOverlay(raw, normalized)) {
@@ -1246,21 +1175,20 @@ export function VideoSessionProvider(props: {
       }
 
       // Persist normalized overlay for this frame in the session store.
-      const prev = getFrameList(frame);
+      const prev = byFrame.get(frame) ?? [];
       if (!sameOverlay(prev, normalized)) {
-        updateByFrame(
-          (prevByFrame) => mapSetFrame(prevByFrame, frame, normalized),
-          { markDirty: true },
+        updateByFrame((prevByFrame) =>
+          mapSetFrame(prevByFrame, frame, normalized),
         );
       }
     },
     [
       api,
+      byFrame,
       collectUsedTrackIdsForClass,
       finishProgrammaticAnnotationSync,
       frame,
       frameKey,
-      getFrameList,
       imageNatural,
       selection.className,
       selection.trackId,
@@ -1445,7 +1373,6 @@ export function VideoSessionProvider(props: {
         setSelectionState({
           className,
           trackId: trackId || null,
-          source: "explicit",
         });
       }
     };
@@ -1469,7 +1396,6 @@ export function VideoSessionProvider(props: {
             setSelectionState({
               className,
               trackId: trackId || null,
-              source: "explicit",
             });
           }
         }
@@ -1518,13 +1444,13 @@ export function VideoSessionProvider(props: {
       // Patch only the new shape: replacing the whole overlay mid-create can break OpenSeadragon's drawing
       const createdForTool =
         drawingTool === "point" ? stampPoint(created) : created;
-      const patched = normalizeOverlayForSession({
-        raw: [stampLabelAndTrack(createdForTool, cls, String(trackId))],
+      const patched = normalizeOverlay(
+        [stampLabelAndTrack(createdForTool, cls, String(trackId))],
         frameKey,
-        fallback: { className: cls, trackId: String(trackId) },
-        enforceBothBodies: true,
-        dedupeByInstance: false,
-      })[0];
+        { className: cls, trackId: String(trackId) },
+        undefined,
+        { dedupeByInstance: false },
+      )[0];
 
       if (patched?.id === createdId) {
         api.updateAnnotation?.(patched);
@@ -1614,11 +1540,8 @@ export function VideoSessionProvider(props: {
       projectId,
       sampleId,
       frame,
-      setFrame,
       frameKey,
       byFrame,
-      dirty,
-      markSaved,
       selection,
       setSelection,
       instances,
@@ -1637,31 +1560,24 @@ export function VideoSessionProvider(props: {
       setPropagate,
       hideAnnotations,
       setHideAnnotations,
-      imageNatural,
       setImageNatural,
       createPointAnnotation,
       deleteAnnotation,
       closePopup,
       requestFocusInstance,
-      getFrameList,
       flushCurrentFrameOverlay,
       clearCurrentFrame,
       clearAllFrames,
-      createNewInstanceForClass,
       deleteInstanceAcrossFrames,
       deleteInstanceOnCurrentFrame,
-      deleteSelectedInstanceAcrossFrames,
       forwardPropMissingManualToNext,
     }),
     [
       projectId,
       sampleId,
       frame,
-      setFrame,
       frameKey,
       byFrame,
-      dirty,
-      markSaved,
       selection,
       setSelection,
       instances,
@@ -1680,20 +1596,16 @@ export function VideoSessionProvider(props: {
       setPropagate,
       hideAnnotations,
       setHideAnnotations,
-      imageNatural,
       setImageNatural,
       createPointAnnotation,
       deleteAnnotation,
       closePopup,
       requestFocusInstance,
-      getFrameList,
       flushCurrentFrameOverlay,
       clearCurrentFrame,
       clearAllFrames,
-      createNewInstanceForClass,
       deleteInstanceAcrossFrames,
       deleteInstanceOnCurrentFrame,
-      deleteSelectedInstanceAcrossFrames,
       forwardPropMissingManualToNext,
     ],
   );

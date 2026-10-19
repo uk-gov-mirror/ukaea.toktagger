@@ -1,8 +1,6 @@
 /**
  * Types used across the video view: the drawing tools, the selection and one table row (InstanceProfile).
  */
-"use client";
-
 import type { ImageAnnotation } from "@annotorious/react";
 
 /** Frame number within a video (0-based). */
@@ -15,14 +13,10 @@ export type AnnotoriousDrawingTool = Exclude<DrawingTool, "point" | "frame">;
 /** Identifies an instance as "className::trackId". */
 export type TrackKey = `${string}::${string}`;
 
-/** How the current selection was produced (user picked it vs. auto-assigned). */
-export type SelectionSource = "explicit" | "auto" | null;
-
 /** The class label and track ID the next annotation will use. With no track ID, a new track starts. */
 export type Selection = {
   className: string | null;
   trackId: string | null;
-  source: SelectionSource;
 };
 
 export enum VideoAnnotationType {
@@ -49,15 +43,6 @@ export type ByFrameMap = Map<FrameIndex, ImageAnnotation[]>;
 /** Build a TrackKey from a class + track id. */
 export function makeTrackKey(className: string, trackId: string): TrackKey {
   return `${className}::${trackId}`;
-}
-
-/** Parse a TrackKey back into its components. */
-export function parseTrackKey(key: TrackKey): {
-  className: string;
-  trackId: string;
-} {
-  const idx = key.lastIndexOf("::");
-  return { className: key.slice(0, idx), trackId: key.slice(idx + 2) };
 }
 
 /** The frame ID stored on each annotation's target.source, linking it to its project, sample and frame. */

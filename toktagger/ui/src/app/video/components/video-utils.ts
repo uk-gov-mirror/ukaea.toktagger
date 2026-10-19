@@ -2,16 +2,9 @@
  * Pure helpers for track IDs, instances, propagation and byFrame updates.
  * There is no React here, so this is the easiest place to read the rules.
  */
-"use client";
-
 import type { ImageAnnotation } from "@annotorious/react";
 import type { Annotation } from "@/types";
-import {
-  VideoBoundingBoxSchema,
-  VideoFrameLabelSchema,
-  VideoPointSchema,
-  VideoPolygonSchema,
-} from "@/types";
+import { VideoFrameLabelSchema } from "@/types";
 import type {
   ByFrameMap,
   FrameIndex,
@@ -38,11 +31,6 @@ export function isEditableEventTarget(target: EventTarget | null): boolean {
     target.type !== "checkbox" &&
     target.type !== "radio"
   );
-}
-
-/** Deep clone through JSON, which is enough for plain annotation data. */
-export function deepClone<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v)) as T;
 }
 
 /** Normalises a track ID for comparing: trimmed, lower case, with spaces turned into dashes. */
@@ -203,48 +191,6 @@ export function existingFrameLabelTrackIdsForClass(
   return out;
 }
 
-/** The highest numeric track ID used by each class, for allocateNextTrackId. */
-export function buildNextTrackIdState(
-  annotations: Annotation[],
-): Map<string, number> {
-  const nextTrackNums = new Map<string, number>();
-
-  for (const annotation of annotations) {
-    const parsed =
-      annotation.type === "video_bounding_box"
-        ? VideoBoundingBoxSchema.safeParse(annotation)
-        : annotation.type === "video_polygon"
-          ? VideoPolygonSchema.safeParse(annotation)
-          : annotation.type === "video_point"
-            ? VideoPointSchema.safeParse(annotation)
-            : null;
-    if (!parsed || !parsed.success) continue;
-
-    const className = (parsed.data.label || "").trim();
-    const numericTrackId = Number.parseInt(parsed.data.track_id || "", 10);
-
-    if (!className || !Number.isFinite(numericTrackId)) continue;
-
-    const prev = nextTrackNums.get(className) ?? 0;
-    if (numericTrackId > prev) {
-      nextTrackNums.set(className, numericTrackId);
-    }
-  }
-
-  return nextTrackNums;
-}
-
-/** Bumps a class's numeric track ID counter and returns the new ID. Mutates the map on purpose: the session owns it. */
-export function allocateNextTrackId(
-  nextTrackNums: Map<string, number>,
-  className: string,
-): string {
-  const key = (className || "").trim();
-  const next = (nextTrackNums.get(key) ?? 0) + 1;
-  nextTrackNums.set(key, next);
-  return String(next);
-}
-
 /** Immutable update: set a frame's overlay list. */
 export function mapSetFrame(
   prev: ByFrameMap,
@@ -268,13 +214,6 @@ export function mapClearAll(prev: ByFrameMap): ByFrameMap {
   const next = new Map<FrameIndex, ImageAnnotation[]>();
   for (const [f] of prev.entries()) next.set(f, []);
   return next;
-}
-
-/** Flatten all frame overlays into one list. */
-export function flattenByFrame(byFrame: ByFrameMap): ImageAnnotation[] {
-  const out: ImageAnnotation[] = [];
-  for (const list of byFrame.values()) out.push(...list);
-  return out;
 }
 
 function shapeAnnotationType(a: ImageAnnotation): VideoAnnotationType {
@@ -400,7 +339,7 @@ export function forwardPropagateMissingManualAnnotations(
     const instanceKey = makeTrackKey(trimmedClassName, canonicalTrackId);
     if (destinationKeys.has(instanceKey)) continue;
 
-    const clonedAnnotation = deepClone(annotation);
+    const clonedAnnotation = structuredClone(annotation);
     annotationsToPropagate.push({
       ...clonedAnnotation,
       target: { ...clonedAnnotation.target, source: destinationFrameSourceKey },
