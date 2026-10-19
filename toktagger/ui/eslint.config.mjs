@@ -94,6 +94,33 @@ const eslintConfig = [
       "jsx-a11y/no-static-element-interactions": "warn",
     },
   },
+  {
+    // These files rely on the React Compiler for memoisation, so fail lint if it would skip them
+    files: [
+      "src/app/components/annotators/labels.tsx",
+      "src/app/projects/page.tsx",
+      "src/app/projects/project_id/page.tsx",
+      "src/app/profile2d/components/profile2dViewParamsWidget.tsx",
+      "src/app/profile2d/components/profile2d.tsx",
+      "src/app/time_series/components/time-series.tsx",
+      "src/app/video/components/video-toolbox.tsx",
+      "src/app/video/components/frame-annotator-host.tsx",
+      "src/app/contexts/VideoContext.tsx",
+    ],
+    rules: {
+      "react-hooks/todo": "error",
+      "react-hooks/refs": "error",
+      "react-hooks/immutability": "error",
+      "react-hooks/globals": "error",
+      "react-hooks/purity": "error",
+      "react-hooks/set-state-in-render": "error",
+      "react-hooks/unsupported-syntax": "error",
+      "react-hooks/static-components": "error",
+      "react-hooks/use-memo": "error",
+      "react-hooks/component-hook-factories": "error",
+      "react-hooks/incompatible-library": "error",
+    },
+  },
 ];
 
 export default eslintConfig;
