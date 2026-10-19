@@ -17,14 +17,11 @@ import {
 } from "@annotorious/react";
 import type { Ellipse, EllipseGeometry } from "@annotorious/annotorious";
 import type {
-  AnnotoriousDrawingTool,
-  DrawingTool,
-  VideoAnnotationShape,
-  VideoBoundingBox,
-  VideoPoint,
-  VideoPolygon,
-} from "./types";
-import { classIdForName } from "./types";
+  VideoBoundingBoxInput,
+  VideoPointInput,
+  VideoPolygonInput,
+} from "@/types";
+import type { AnnotoriousDrawingTool, DrawingTool } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
 // A point is an ellipse marked with a shape: point body, since Annotorious has no point shape
@@ -346,7 +343,7 @@ export function normalizeOverlay(
 export function annoToVideoBBox(
   a: RectangleAnnotation,
   frame: number,
-): VideoBoundingBox | null {
+): VideoBoundingBoxInput | null {
   const g = readRectGeometry(a);
   if (!g) return null;
 
@@ -358,7 +355,6 @@ export function annoToVideoBBox(
     frame,
     track_id: String(trackId),
     label: String(className),
-    class_id: classIdForName(className),
     x_min: Math.round(g.x),
     y_min: Math.round(g.y),
     width: Math.round(g.w),
@@ -371,7 +367,7 @@ export function annoToVideoBBox(
 export function annoToVideoPolygon(
   a: PolygonAnnotation,
   frame: number,
-): VideoPolygon | null {
+): VideoPolygonInput | null {
   const g = readPolygonGeometry(a);
   if (!g) return null;
 
@@ -390,7 +386,6 @@ export function annoToVideoPolygon(
     frame,
     track_id: String(trackId),
     label: String(className),
-    class_id: classIdForName(className),
     segmentation: [coordinates],
     created_by: getAnnotationCreator(a),
   };
@@ -400,7 +395,7 @@ export function annoToVideoPolygon(
 export function annoToVideoPoint(
   a: ImageAnnotation,
   frame: number,
-): VideoPoint | null {
+): VideoPointInput | null {
   const g = readPointGeometry(a);
   if (!g) return null;
 
@@ -412,7 +407,6 @@ export function annoToVideoPoint(
     frame,
     track_id: String(trackId),
     label: String(className),
-    class_id: classIdForName(className),
     x: Math.floor(g.x),
     y: Math.floor(g.y),
     created_by: getAnnotationCreator(a),
@@ -423,7 +417,7 @@ export function annoToVideoPoint(
 export function annoToVideoAnnotation(
   a: ImageAnnotation,
   frame: number,
-): VideoAnnotationShape | null {
+): VideoBoundingBoxInput | VideoPolygonInput | VideoPointInput | null {
   if (isPointAnno(a)) return annoToVideoPoint(a, frame);
   if (isRectangleAnno(a)) return annoToVideoBBox(a, frame);
   if (isPolygonAnno(a)) return annoToVideoPolygon(a, frame);
@@ -432,7 +426,7 @@ export function annoToVideoAnnotation(
 
 /** Convert backend VideoBoundingBox -> Annotorious rectangle annotation. */
 export function videoBBoxToAnno(
-  b: VideoBoundingBox,
+  b: VideoBoundingBoxInput,
   frameKey: string,
 ): ImageAnnotation {
   const x = Number(b.x_min);
@@ -475,7 +469,7 @@ export function videoBBoxToAnno(
 
 /** Convert backend VideoPolygon -> Annotorious polygon annotation. */
 export function videoPolygonToAnno(
-  p: VideoPolygon,
+  p: VideoPolygonInput,
   frameKey: string,
 ): ImageAnnotation {
   const points: [number, number][] = [];
@@ -530,7 +524,7 @@ export function videoPolygonToAnno(
 
 /** Convert backend VideoPoint -> tagged Annotorious circle marker. */
 export function videoPointToAnno(
-  p: VideoPoint,
+  p: VideoPointInput,
   frameKey: string,
 ): ImageAnnotation {
   // Points are pixel indices; draw at the pixel centre.

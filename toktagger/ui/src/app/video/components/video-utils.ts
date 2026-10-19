@@ -18,12 +18,7 @@ import type {
   InstanceProfile,
   TrackKey,
 } from "./types";
-import {
-  classIdForName,
-  makeTrackKey,
-  buildSourceKey,
-  VideoAnnotationType,
-} from "./types";
+import { makeTrackKey, buildSourceKey, VideoAnnotationType } from "./types";
 import {
   getAnnotationCreator,
   getLabelTrack,
@@ -313,7 +308,6 @@ export function deriveInstances(
         map.set(key, {
           key,
           className,
-          classId: classIdForName(className),
           trackId,
           type: shapeAnnotationType(a),
           createdBy: getAnnotationCreator(a),
@@ -461,7 +455,6 @@ export function deriveFrameLabelInstances(
     return {
       key,
       className: entry.className,
-      classId: classIdForName(entry.className),
       trackId: entry.trackId,
       type: VideoAnnotationType.FRAME_LABEL,
       createdBy: entry.createdBy,

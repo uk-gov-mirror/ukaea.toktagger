@@ -21,7 +21,7 @@ import {
   type ImageAnnotation,
 } from "@annotorious/react";
 
-import type { Annotation, VideoFrameLabel } from "@/types";
+import type { Annotation, VideoFrameLabel, VideoPointInput } from "@/types";
 import { useSample } from "@/app/contexts/SampleContext";
 import { useVideoUiState } from "@/app/contexts/VideoContext";
 import {
@@ -36,9 +36,6 @@ import type {
   FrameIndex,
   InstanceProfile,
   Selection,
-  VideoBoundingBox,
-  VideoPoint,
-  VideoPolygon,
 } from "./types";
 import { buildSourceKey } from "./types";
 import {
@@ -332,11 +329,11 @@ function videoAnnotationsToByFrame(args: {
 
     let anno: ImageAnnotation | null = null;
     if (dbAnno.type === "video_bounding_box") {
-      anno = videoBBoxToAnno(dbAnno as VideoBoundingBox, key);
+      anno = videoBBoxToAnno(dbAnno, key);
     } else if (dbAnno.type === "video_polygon") {
-      anno = videoPolygonToAnno(dbAnno as VideoPolygon, key);
+      anno = videoPolygonToAnno(dbAnno, key);
     } else if (dbAnno.type === "video_point") {
-      anno = videoPointToAnno(dbAnno as VideoPoint, key);
+      anno = videoPointToAnno(dbAnno, key);
     }
     if (!anno) continue;
 
@@ -1100,7 +1097,7 @@ export function VideoSessionProvider(props: {
       const used = collectUsedTrackIdsForClass(cls, raw);
 
       const trackId = selection.trackId ?? uniqueReadableTrackId(used);
-      const dbPoint: VideoPoint = {
+      const dbPoint: VideoPointInput = {
         type: "video_point",
         frame,
         track_id: String(trackId),

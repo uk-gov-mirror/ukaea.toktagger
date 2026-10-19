@@ -1,6 +1,5 @@
 /**
- * Types used across the video view: the drawing tools, the selection, one table row (InstanceProfile)
- * and the backend payload shapes.
+ * Types used across the video view: the drawing tools, the selection and one table row (InstanceProfile).
  */
 "use client";
 
@@ -37,7 +36,6 @@ export enum VideoAnnotationType {
 export type InstanceProfile = {
   key: TrackKey;
   className: string;
-  classId: number;
   trackId: string;
   type: VideoAnnotationType;
   createdBy: string;
@@ -47,63 +45,6 @@ export type InstanceProfile = {
 
 /** In-memory annotation storage keyed by frame, using the native Annotorious model. */
 export type ByFrameMap = Map<FrameIndex, ImageAnnotation[]>;
-
-/** Backend payloads for video shapes. The same shapes also exist as Zod schemas in src/types.ts. */
-export type VideoBoundingBox = {
-  type: "video_bounding_box";
-  frame: number;
-  track_id: string;
-  label: string;
-  x_min: number;
-  y_min: number;
-  width: number;
-  height: number;
-  created_by?: string;
-  timestamp?: string;
-  class_id?: number;
-};
-
-export type VideoPolygon = {
-  type: "video_polygon";
-  frame: number;
-  track_id: string;
-  label: string;
-  segmentation: number[][];
-  created_by?: string;
-  timestamp?: string;
-  class_id?: number;
-};
-
-export type VideoPoint = {
-  type: "video_point";
-  frame: number;
-  track_id: string;
-  label: string;
-  x: number;
-  y: number;
-  created_by?: string;
-  timestamp?: string;
-  class_id?: number;
-};
-
-export type VideoAnnotationShape = VideoBoundingBox | VideoPolygon | VideoPoint;
-
-/** Maps label names to the numeric class_id saved with each shape. The UI's labels come from the project. */
-export const class_labels: { id: number; name: string }[] = [
-  { id: 1, name: "UFO" },
-  { id: 2, name: "Minor UFO" },
-  { id: 3, name: "Major UFO" },
-  { id: 4, name: "Disruption" },
-  { id: 5, name: "Marfe" },
-  { id: 6, name: "Other Anomaly" },
-];
-
-/** Resolve a human label name to a numeric class id (defaults to 1). */
-export function classIdForName(className: string): number {
-  const key = (className || "").trim().toLowerCase();
-  const hit = class_labels.find((c) => c.name.toLowerCase() === key);
-  return hit?.id ?? 1;
-}
 
 /** Build a TrackKey from a class + track id. */
 export function makeTrackKey(className: string, trackId: string): TrackKey {
