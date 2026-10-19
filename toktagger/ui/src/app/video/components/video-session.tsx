@@ -11,6 +11,7 @@ import React, {
   useEffect,
   useLayoutEffect,
   useRef,
+  type RefObject,
 } from "react";
 import {
   UserSelectAction,
@@ -146,6 +147,47 @@ type FocusRequest = {
   onlyIfOnCurrentFrame: boolean;
   targetFrame: FrameIndex | null;
 };
+
+// Events Annotorious fires during the sync are ignored, so the flag is only cleared on the next animation frame
+function withProgrammaticSync(syncRef: RefObject<boolean>, fn: () => void) {
+  syncRef.current = true;
+  try {
+    fn();
+  } finally {
+    requestAnimationFrame(() => {
+      syncRef.current = false;
+    });
+  }
+}
+
+function readImageSize(
+  api: AnnotoriousOpenSeadragonAnnotator,
+): { w: number; h: number } | null {
+  const item = api.viewer?.world?.getItemAt?.(0);
+  if (!item) return null;
+  const size = item.getContentSize?.();
+  const w = Math.round(Number(size?.x ?? 0));
+  const h = Math.round(Number(size?.y ?? 0));
+  if (!(w > 0 && h > 0)) return null;
+  return { w, h };
+}
+
+/** The selection a shape stands for, or null when it has no class label. */
+function selectionFromAnnotation(
+  annotation: ImageAnnotation,
+): Selection | null {
+  const got = getLabelTrack(annotation);
+  const className = (got.className ?? "").trim();
+  if (!className) return null;
+  return {
+    className,
+    trackId: canonicalizeTrackId(got.trackId ?? "") || null,
+  };
+}
+
+function clearTrackId(selection: Selection): Selection {
+  return selection.trackId ? { ...selection, trackId: null } : selection;
+}
 
 function parseVideoAnnotation(annotation: Annotation) {
   if (annotation.type === "video_bounding_box") {
@@ -716,13 +758,6 @@ export function VideoSessionProvider(props: {
     setSelectionState(next);
   }, []);
 
-  // Cleared on the next animation frame, so events Annotorious fires during the sync are still ignored
-  const finishProgrammaticAnnotationSync = useCallback(() => {
-    requestAnimationFrame(() => {
-      isProgrammaticAnnoSyncRef.current = false;
-    });
-  }, []);
-
   const flushPendingOverlay = useCallback(() => {
     if (isProgrammaticAnnoSyncRef.current) return;
     if (hideAnnotationsRef.current) return;
@@ -813,58 +848,37 @@ export function VideoSessionProvider(props: {
     };
   }, [api, editMode, flushCurrentFrameOverlay, setEditMode]);
 
-  const clearCurrentFrame = useCallback(() => {
-    api?.setSelected?.();
-    flushPendingOverlay();
-    pendingFocusRef.current = null;
-
-    updateByFrame((prev) => mapClearFrame(prev, frame));
-    setSampleAnnotations((prev) =>
-      prev.filter((annotation) => parseFrameLabel(annotation)?.frame !== frame),
-    );
-
-    isProgrammaticAnnoSyncRef.current = true;
-    try {
-      api?.cancelDrawing?.();
+  const clearFrames = useCallback(
+    (which: "current" | "all") => {
       api?.setSelected?.();
-      api?.setAnnotations?.([], true);
-    } finally {
-      finishProgrammaticAnnotationSync();
-    }
-  }, [
-    api,
-    finishProgrammaticAnnotationSync,
-    flushPendingOverlay,
-    frame,
-    setSampleAnnotations,
-    updateByFrame,
-  ]);
+      flushPendingOverlay();
+      pendingFocusRef.current = null;
 
-  const clearAllFrames = useCallback(() => {
-    api?.setSelected?.();
-    flushPendingOverlay();
-    pendingFocusRef.current = null;
+      updateByFrame((prev) =>
+        which === "current" ? mapClearFrame(prev, frame) : mapClearAll(prev),
+      );
+      setSampleAnnotations((prev) =>
+        prev.filter((annotation) =>
+          which === "current"
+            ? parseFrameLabel(annotation)?.frame !== frame
+            : !parseFrameLabel(annotation),
+        ),
+      );
 
-    updateByFrame((prev) => mapClearAll(prev));
-    setSampleAnnotations((prev) =>
-      prev.filter((annotation) => !parseFrameLabel(annotation)),
-    );
+      withProgrammaticSync(isProgrammaticAnnoSyncRef, () => {
+        api?.cancelDrawing?.();
+        api?.setSelected?.();
+        api?.setAnnotations?.([], true);
+      });
+    },
+    [api, flushPendingOverlay, frame, setSampleAnnotations, updateByFrame],
+  );
 
-    isProgrammaticAnnoSyncRef.current = true;
-    try {
-      api?.cancelDrawing?.();
-      api?.setSelected?.();
-      api?.setAnnotations?.([], true);
-    } finally {
-      finishProgrammaticAnnotationSync();
-    }
-  }, [
-    api,
-    finishProgrammaticAnnotationSync,
-    flushPendingOverlay,
-    setSampleAnnotations,
-    updateByFrame,
-  ]);
+  const clearCurrentFrame = useCallback(
+    () => clearFrames("current"),
+    [clearFrames],
+  );
+  const clearAllFrames = useCallback(() => clearFrames("all"), [clearFrames]);
 
   /** Tells Annotorious what clicks do (select, edit or nothing) and whether drawing is on. */
   const applyAnnotatorInteractionMode = useCallback(() => {
@@ -1011,16 +1025,7 @@ export function VideoSessionProvider(props: {
       const rawY = Number(point.y);
       if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return;
 
-      const viewerNatural = (() => {
-        const item = api.viewer?.world?.getItemAt?.(0);
-        if (!item) return null;
-        const size = item.getContentSize?.();
-        const w = Math.round(Number(size?.x ?? 0));
-        const h = Math.round(Number(size?.y ?? 0));
-        if (!(w > 0 && h > 0)) return null;
-        return { w, h };
-      })();
-      const natural = imageNatural ?? viewerNatural;
+      const natural = imageNatural ?? readImageSize(api);
       const x = natural
         ? Math.max(0, Math.min(natural.w - 1, Math.floor(rawX)))
         : Math.floor(rawX);
@@ -1051,21 +1056,17 @@ export function VideoSessionProvider(props: {
         mapSetFrame(prevByFrame, frame, normalized),
       );
 
-      isProgrammaticAnnoSyncRef.current = true;
-      try {
+      withProgrammaticSync(isProgrammaticAnnoSyncRef, () => {
         api.cancelDrawing?.();
         api.setSelected?.();
         replaceAnnotoriousOverlay(api, normalized);
         applyAnnotatorInteractionMode();
-      } finally {
-        finishProgrammaticAnnotationSync();
-      }
+      });
     },
     [
       api,
       applyAnnotatorInteractionMode,
       collectUsedTrackIdsForClass,
-      finishProgrammaticAnnotationSync,
       frame,
       frameKey,
       imageNatural,
@@ -1086,17 +1087,7 @@ export function VideoSessionProvider(props: {
       const raw = rawOverride ?? api.getAnnotations();
 
       // Keep shapes inside the image. imageNatural can lag behind a new frame, so fall back to the viewer.
-      const viewerNatural = (() => {
-        const item = api.viewer?.world?.getItemAt?.(0);
-        if (!item) return null;
-        const size = item.getContentSize?.();
-        const w = Math.round(Number(size?.x ?? 0));
-        const h = Math.round(Number(size?.y ?? 0));
-        if (!(w > 0 && h > 0)) return null;
-        return { w, h };
-      })();
-
-      const clampNatural = imageNatural ?? viewerNatural;
+      const clampNatural = imageNatural ?? readImageSize(api);
       const clamped = clampOverlayToNaturalImage(raw, clampNatural);
 
       const firstClassFrom = (list: ImageAnnotation[]) => {
@@ -1142,8 +1133,7 @@ export function VideoSessionProvider(props: {
 
       // If clamping or labelling changed anything, show the corrected shapes in Annotorious too
       if (!sameOverlay(raw, normalized)) {
-        isProgrammaticAnnoSyncRef.current = true;
-        try {
+        withProgrammaticSync(isProgrammaticAnnoSyncRef, () => {
           const rawById = new Map(
             raw
               .filter((annotation) => annotation.id)
@@ -1169,9 +1159,7 @@ export function VideoSessionProvider(props: {
           }
 
           applyAnnotatorInteractionMode();
-        } finally {
-          finishProgrammaticAnnotationSync();
-        }
+        });
       }
 
       // Persist normalized overlay for this frame in the session store.
@@ -1186,7 +1174,6 @@ export function VideoSessionProvider(props: {
       api,
       byFrame,
       collectUsedTrackIdsForClass,
-      finishProgrammaticAnnotationSync,
       frame,
       frameKey,
       imageNatural,
@@ -1326,8 +1313,7 @@ export function VideoSessionProvider(props: {
       };
     }
 
-    isProgrammaticAnnoSyncRef.current = true;
-    try {
+    withProgrammaticSync(isProgrammaticAnnoSyncRef, () => {
       // Clear selection so popup closes when switching frames / overlays
       api.setSelected();
       replaceAnnotoriousOverlay(api, desiredOverlay);
@@ -1335,19 +1321,11 @@ export function VideoSessionProvider(props: {
       rafId = requestAnimationFrame(() => {
         tryFocusPending();
       });
-    } finally {
-      finishProgrammaticAnnotationSync();
-    }
+    });
     return () => {
       if (rafId != null) cancelAnimationFrame(rafId);
     };
-  }, [
-    api,
-    applyAnnotatorInteractionMode,
-    desiredOverlay,
-    finishProgrammaticAnnotationSync,
-    tryFocusPending,
-  ]);
+  }, [api, applyAnnotatorInteractionMode, desiredOverlay, tryFocusPending]);
 
   // Annotorious events: create, update, delete and deselect all save through commitFromAnnotorious
   useEffect(() => {
@@ -1366,15 +1344,8 @@ export function VideoSessionProvider(props: {
         api.setSelected(id, editMode);
       }
 
-      const got = getLabelTrack(clicked);
-      const className = (got.className ?? "").trim();
-      const trackId = canonicalizeTrackId(got.trackId ?? "");
-      if (className) {
-        setSelectionState({
-          className,
-          trackId: trackId || null,
-        });
-      }
+      const next = selectionFromAnnotation(clicked);
+      if (next) setSelectionState(next);
     };
 
     const onSelectionChanged = (arr: ImageAnnotation[]) => {
@@ -1387,34 +1358,21 @@ export function VideoSessionProvider(props: {
 
       if (arr.length > 0) {
         if (!hideAnnotations) {
-          const selected = arr[0];
-          const got = getLabelTrack(selected);
-          const className = (got.className ?? "").trim();
-          const trackId = canonicalizeTrackId(got.trackId ?? "");
-
-          if (className) {
-            setSelectionState({
-              className,
-              trackId: trackId || null,
-            });
-          }
+          const next = selectionFromAnnotation(arr[0]);
+          if (next) setSelectionState(next);
         }
         return;
       }
 
       if (arr.length === 0) {
         if (hideAnnotations) {
-          setSelectionState((prev) =>
-            prev.trackId ? { ...prev, trackId: null } : prev,
-          );
+          setSelectionState(clearTrackId);
           applyAnnotatorInteractionMode();
           return;
         }
 
         commitFromAnnotorious();
-        setSelectionState((prev) =>
-          prev.trackId ? { ...prev, trackId: null } : prev,
-        );
+        setSelectionState(clearTrackId);
         applyAnnotatorInteractionMode();
       }
     };

@@ -88,6 +88,24 @@ function findAnnotationOverlay(viewerElement: HTMLElement | null) {
   return null;
 }
 
+// The viewer and the drawing layer on top of it, which both need to catch clicks
+function getClickTargets(viewer: OpenSeadragon.Viewer): HTMLElement[] {
+  const viewerElement = viewer.element as HTMLElement;
+  return [viewerElement, findAnnotationOverlay(viewerElement)].filter(
+    (target, index, list): target is HTMLElement =>
+      !!target && list.indexOf(target) === index,
+  );
+}
+
+function toImagePoint(viewer: OpenSeadragon.Viewer, event: MouseEvent) {
+  const viewerBounds = (viewer.element as HTMLElement).getBoundingClientRect();
+  const viewerPoint = new OpenSeadragon.Point(
+    event.clientX - viewerBounds.left,
+    event.clientY - viewerBounds.top,
+  );
+  return viewer.viewport.viewerElementToImageCoordinates(viewerPoint);
+}
+
 function stopEvent(event: Event) {
   event.preventDefault();
   event.stopPropagation();
@@ -124,14 +142,7 @@ function findAnnotationAtPointer(
   const viewer = api.viewer;
   if (!viewer) return null;
 
-  const viewerElement = viewer.element as HTMLElement;
-  const viewerBounds = viewerElement.getBoundingClientRect();
-  const viewerPoint = new OpenSeadragon.Point(
-    event.clientX - viewerBounds.left,
-    event.clientY - viewerBounds.top,
-  );
-  const imagePoint =
-    viewer.viewport.viewerElementToImageCoordinates(viewerPoint);
+  const imagePoint = toImagePoint(viewer, event);
 
   return (
     [...api.getAnnotations()]
@@ -388,12 +399,7 @@ export function FrameAnnotatorHost({ imageBase64 }: { imageBase64: string }) {
   useEffect(() => {
     if (!api?.viewer) return;
 
-    const viewerElement = api.viewer.element as HTMLElement;
-    const overlay = findAnnotationOverlay(viewerElement);
-    const targets = [viewerElement, overlay].filter(
-      (target, index, list): target is HTMLElement =>
-        !!target && list.indexOf(target) === index,
-    );
+    const targets = getClickTargets(api.viewer);
 
     const blockContextMenu = (event: MouseEvent) => {
       const annotation = hideAnnotations
@@ -484,24 +490,13 @@ export function FrameAnnotatorHost({ imageBase64 }: { imageBase64: string }) {
     if (!api?.viewer || !canDrawPoint) return;
 
     const viewer = api.viewer;
-    const viewerElement = viewer.element as HTMLElement;
-    const overlay = findAnnotationOverlay(viewerElement);
-    const targets = [viewerElement, overlay].filter(
-      (target, index, list): target is HTMLElement =>
-        !!target && list.indexOf(target) === index,
-    );
+    const targets = getClickTargets(viewer);
 
     const handlePointClick = (event: MouseEvent) => {
       if (isSecondaryMouseEvent(event)) return;
       if (isAnnotationPopupEventTarget(event.target)) return;
 
-      const viewerBounds = viewerElement.getBoundingClientRect();
-      const viewerPoint = new OpenSeadragon.Point(
-        event.clientX - viewerBounds.left,
-        event.clientY - viewerBounds.top,
-      );
-      const imagePoint =
-        viewer.viewport.viewerElementToImageCoordinates(viewerPoint);
+      const imagePoint = toImagePoint(viewer, event);
 
       stopEvent(event);
       api.cancelDrawing?.();
@@ -523,12 +518,7 @@ export function FrameAnnotatorHost({ imageBase64 }: { imageBase64: string }) {
   useEffect(() => {
     if (!api?.viewer || !canTagFrame) return;
 
-    const viewerElement = api.viewer.element as HTMLElement;
-    const overlay = findAnnotationOverlay(viewerElement);
-    const targets = [viewerElement, overlay].filter(
-      (target, index, list): target is HTMLElement =>
-        !!target && list.indexOf(target) === index,
-    );
+    const targets = getClickTargets(api.viewer);
 
     const handleFrameTagClick = (event: MouseEvent) => {
       if (isSecondaryMouseEvent(event)) return;
@@ -567,13 +557,7 @@ export function FrameAnnotatorHost({ imageBase64 }: { imageBase64: string }) {
     const viewerElement = viewer.element as HTMLElement;
 
     const handleMouseMove = (event: MouseEvent) => {
-      const viewerBounds = viewerElement.getBoundingClientRect();
-      const viewerPoint = new OpenSeadragon.Point(
-        event.clientX - viewerBounds.left,
-        event.clientY - viewerBounds.top,
-      );
-      const imagePoint =
-        viewer.viewport.viewerElementToImageCoordinates(viewerPoint);
+      const imagePoint = toImagePoint(viewer, event);
 
       const isOverAnnotation = api
         .getAnnotations()
