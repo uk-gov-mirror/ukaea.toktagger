@@ -1,3 +1,6 @@
+/**
+ * The right-hand annotation toolbar: the Edit/View Mode button, the four tool buttons and Reset View.
+ */
 "use client";
 
 import {
