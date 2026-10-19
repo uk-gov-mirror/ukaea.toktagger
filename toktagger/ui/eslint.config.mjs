@@ -106,6 +106,8 @@ const eslintConfig = [
       "src/app/video/components/video-toolbox.tsx",
       "src/app/video/components/frame-annotator-host.tsx",
       "src/app/contexts/VideoContext.tsx",
+      "src/app/contexts/TimeSeriesContext.tsx",
+      "src/app/components/ui/annotationsTable.tsx",
     ],
     rules: {
       "react-hooks/todo": "error",
