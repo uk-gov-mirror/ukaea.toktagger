@@ -16,7 +16,6 @@ toktagger --reload --no-browser
 npm --prefix toktagger/ui ci
 npm --prefix toktagger/ui run dev   # :5173 — expects the backend already running on :8002
 ```
-Or `docker compose -f docker-compose.dev.yml up` for the full stack (API + UI + Mongo + Mongo Express).
 
 ## Build, lint, test
 

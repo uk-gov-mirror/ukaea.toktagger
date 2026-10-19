@@ -121,28 +121,7 @@ In the identity provider, create a **confidential** client for TokTagger. Use th
 6. **Audience:** Add the client ID to the audience of access tokens. TokTagger needs this to accept access tokens from scripts.
 
 !!! note
-    TokTagger must reach the provider at the issuer URL, and the issuer in the provider metadata must match the URL the browser uses. If the two differ, set the provider hostname options. The Keycloak development stack in `docker-compose.dev.yml` shows how to do this.
-
-### Keycloak development stack
-
-`docker-compose.dev.yml` starts Keycloak with a ready realm from `deploy/keycloak/toktagger-realm.dev.json`. The realm contains:
-
-- the client `toktagger`, with PKCE and the group and audience mappers
-- the group `toktagger-admins`
-- one user `admin` with the temporary password `admin`, who is a member of `toktagger-admins`
-
-Start the stack:
-
-```sh
-docker compose -f docker-compose.dev.yml up
-```
-
-Open `http://localhost:5173` or `http://localhost:8002` and sign in as `admin`. Keycloak asks for a new password. The Keycloak administration console is at `http://localhost:8003` (user `admin`, password `admin`).
-
-Set `KEYCLOAK_CLIENT_SECRET` in your environment to replace the default development client secret.
-
-!!! warning
-    The development stack uses fixed passwords and plain HTTP. Do not use it for a shared server.
+    TokTagger must reach the provider at the issuer URL, and the issuer in the provider metadata must match the URL the browser uses. If the two differ, set the provider hostname options.
 
 ---
 

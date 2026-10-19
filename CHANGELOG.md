@@ -8,7 +8,7 @@
 * Removed `POST /auth/token`. Scripts send an identity provider access token and read it from `TOKTAGGER_API_TOKEN`.
 * Added personal API tokens. A user creates and revokes them on the Profile page, or with `/users/me/tokens`. A script sends one as a Bearer token. Added `auth.api_token_max_lifetime_days` (default 365).
 * Added `server.forwarded_allow_ips`, `server.gunicorn_timeout` and `server.cors_origins`.
-* Replaced `api.dockerfile` with a multi-stage `Dockerfile`. `docker-compose.yml` is now the production stack (Caddy, TokTagger, Keycloak, Postgres, MongoDB). The old development stack is in `docker-compose.dev.yml`. See `docs/deployment.md`.
+* Replaced `api.dockerfile` with a multi-stage `Dockerfile`. `docker-compose.yml` is now the production stack (Caddy, TokTagger, Keycloak, Postgres, MongoDB). See `docs/deployment.md`.
 
 ## [v0.3.1](https://github.com/ukaea/toktagger/releases/tag/v0.3.1) - 2025-07-03
 * Fixed bug related to loading float numpy arrays as images
