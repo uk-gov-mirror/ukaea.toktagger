@@ -29,6 +29,7 @@ import Target from "@spectrum-icons/workflow/Target";
 import { useSample } from "@/app/contexts/SampleContext";
 import { useVideoUiState } from "@/app/contexts/VideoContext";
 import {
+  DrawingTool,
   InstanceProfile,
   makeTrackKey,
   VideoAnnotationType,
@@ -43,6 +44,13 @@ const VIDEO_TYPE_ICONS: Record<VideoAnnotationType, typeof ImageMapRectangle> =
     [VideoAnnotationType.POINT]: Target,
     [VideoAnnotationType.FRAME_LABEL]: Label,
   };
+
+const VIDEO_TYPE_TOOLS: Record<VideoAnnotationType, DrawingTool> = {
+  [VideoAnnotationType.BOUNDING_BOX]: "rectangle",
+  [VideoAnnotationType.POLYGON]: "polygon",
+  [VideoAnnotationType.POINT]: "point",
+  [VideoAnnotationType.FRAME_LABEL]: "frame",
+};
 
 type VideoTableScope = "all" | "frame";
 
@@ -84,10 +92,14 @@ type FocusOptions = Parameters<
 >[2];
 
 function useSelectInstance() {
-  const { setSelection, requestFocusInstance } = useVideoSession();
+  const { setSelection, requestFocusInstance, closePopup, setDrawingTool } =
+    useVideoSession();
   const { setVideoLastClassName } = useVideoUiState();
 
   return (instance: InstanceProfile, focus: FocusOptions) => {
+    // Runs first because deselecting (here and in setDrawingTool) resets the session's track id
+    closePopup();
+    setDrawingTool(VIDEO_TYPE_TOOLS[instance.type]);
     setSelection({
       className: instance.className,
       trackId: canonicalizeTrackId(instance.trackId),
@@ -113,12 +125,6 @@ const VideoRowActions = ({
   const selectInstance = useSelectInstance();
 
   const jumpToAnnotation = () => {
-    // In This Frame scope jumping to the first frame would navigate away and drop the row
-    if (scope === "frame") {
-      selectInstance(instance, { onlyIfOnCurrentFrame: true });
-      return;
-    }
-
     const firstFrame = instance.frames[0];
     setDataParams((prev) => ({ ...prev, name: "image", frame: firstFrame }));
     selectInstance(instance, { targetFrame: firstFrame });
