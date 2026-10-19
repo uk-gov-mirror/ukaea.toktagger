@@ -10,6 +10,7 @@ from tests.api.auth.conftest import (
     AUTHORIZE_URL,
     END_SESSION_URL,
     ISSUER,
+    JWKS_URL,
     PUBLIC_URL,
     mint_token,
     sign_in,
@@ -395,6 +396,19 @@ async def test_bearer_idp_token_with_an_unknown_key_is_401(
     )
 
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_bearer_idp_token_is_503_when_the_provider_is_unreachable(
+    unauthenticated_api_client, registered_idp, respx_mock, idp_key
+):
+    respx_mock.get(JWKS_URL).mock(side_effect=httpx.ConnectError("down"))
+
+    resp = await unauthenticated_api_client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {mint_token(idp_key)}"}
+    )
+
+    assert resp.status_code == 503
 
 
 @pytest.mark.asyncio

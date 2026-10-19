@@ -121,6 +121,10 @@ async def _get_user_from_bearer(request: Request, token: str) -> UserOut:
         )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except (*oidc.IDP_ERRORS, LockTimeoutError) as exc:
+        raise HTTPException(
+            status_code=503, detail="The identity provider is not available."
+        ) from exc
     return _require_active(user)
 
 

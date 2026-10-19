@@ -106,19 +106,23 @@ class IdentityProvider:
         """Verify a provider-issued JWT and return its claims.
 
         Raises ValueError when the token is malformed, has an unknown signing key,
-        a bad signature, a wrong issuer or audience, or has expired.
+        a bad signature, a wrong issuer or audience, or has expired. IDP_ERRORS
+        propagate when the provider cannot supply its metadata or signing keys.
         """
         try:
             key_id = _token_key_id(token)
-            keys = await self.fetch_jwks()
-            if key_id is not None and not _has_key(keys, key_id):
-                keys = await self.fetch_jwks(force=True)
-                if not _has_key(keys, key_id):
-                    raise ValueError("Unknown signing key")
+        except ValueError as error:
+            raise ValueError("Invalid token") from error
+        keys = await self.fetch_jwks()
+        if key_id is not None and not _has_key(keys, key_id):
+            keys = await self.fetch_jwks(force=True)
+            if not _has_key(keys, key_id):
+                raise ValueError("Unknown signing key")
+        issuer = (await self.metadata())["issuer"]
+        try:
             decoded = jwt.decode(token, keys, algorithms=SIGNING_ALGORITHMS)
-            issuer = (await self.metadata())["issuer"]
             _validate_claims(decoded.claims, issuer)
-        except (JoseError, KeyError, TypeError, httpx.HTTPError) as error:
+        except (JoseError, KeyError, TypeError) as error:
             raise ValueError("Invalid token") from error
         if self._auth_settings.verify_bearer_audience and not _audience_matches(
             decoded.claims, self._auth_settings.client_id

@@ -522,12 +522,12 @@ async def test_verify_rejects_malformed_tokens(identity_provider, jwks_route, to
 
 
 @pytest.mark.asyncio
-async def test_verify_reports_provider_outage_as_invalid_token(
+async def test_verify_lets_a_provider_outage_propagate(
     identity_provider, respx_mock, idp_key
 ):
     respx_mock.get(JWKS_URL).mock(side_effect=httpx.ConnectError("down"))
 
-    with pytest.raises(ValueError):
+    with pytest.raises(httpx.ConnectError):
         await identity_provider.verify_access_token(mint_token(idp_key))
 
 
