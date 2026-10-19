@@ -517,7 +517,9 @@ export function VideoSessionProvider(props: {
   const canDrawPoint = canCreate && drawingTool === "point";
   const canTagFrame = canCreate && drawingTool === "frame";
   const drawIntentRef = useRef(drawIntent);
-  drawIntentRef.current = drawIntent;
+  useEffect(() => {
+    drawIntentRef.current = drawIntent;
+  }, [drawIntent]);
 
   const setHideAnnotations = useCallback(
     (v: boolean) => {
