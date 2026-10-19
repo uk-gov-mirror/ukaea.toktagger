@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
 from toktagger.api import config
-from toktagger.api.auth import api_tokens
+from toktagger.api.auth import api_tokens, sessions
 from toktagger.api.auth.dependencies import (
     get_current_user,
     require_global_admin,
@@ -129,6 +129,8 @@ async def update_user(
                 detail="Cannot deactivate the last active admin account",
             )
         await utils.update_user(db_client, user_id, body)
+    target = next(u for u in all_users if u.id == user_id)
+    await sessions.end_user_sessions(db_client, target.username)
 
 
 @router.delete("/{user_id}")
@@ -159,3 +161,5 @@ async def delete_user(
         await db_client.delete_filtered_documents(
             "api_tokens", {"user_id": convert_to_objectid(user_id, "users")}
         )
+    if target:
+        await sessions.end_user_sessions(db_client, target.username)

@@ -132,3 +132,10 @@ async def end_session(db_client: MongoDBClient, session_id: str) -> str | None:
         return decrypt_secret(id_token)
     except InvalidToken:
         return None
+
+
+async def end_user_sessions(db_client: MongoDBClient, username: str) -> None:
+    """Remove every session of a user, so a deleted or inactive account cannot refresh."""
+    await db_client.delete_filtered_documents(
+        SESSIONS_COLLECTION, {"username": username}
+    )

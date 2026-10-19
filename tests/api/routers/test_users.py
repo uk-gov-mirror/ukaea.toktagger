@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from toktagger.api.auth import sessions
 from tests.api.auth.conftest import add_member
 from tests.identity import get_auth_token, session_headers
 
@@ -546,3 +547,32 @@ async def test_list_my_memberships_is_self_scoped(
 
     # "me" must not be read as a user_id by GET /users/{user_id}
     assert (await client.get("/users/me/memberships")).status_code == 401
+
+
+async def _session_usernames(db_client) -> set[str]:
+    documents = await db_client.db[sessions.SESSIONS_COLLECTION].find({}).to_list()
+    return {document["username"] for document in documents}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "body"),
+    [("PUT", {"is_active": False}), ("DELETE", None)],
+)
+async def test_deactivating_or_deleting_a_user_ends_their_sessions(
+    unauthenticated_api_client, setup_db_auth, db_client, method, body
+):
+    for username in ("alice", "bob"):
+        await sessions.start_session(
+            db_client, username, "issuer", f"{username}-sub", {"refresh_token": "r"}
+        )
+
+    response = await unauthenticated_api_client.request(
+        method,
+        f"/users/{setup_db_auth['bob_id']}",
+        json=body,
+        headers=_as_user("admin"),
+    )
+
+    assert response.status_code == 200
+    assert await _session_usernames(db_client) == {"alice"}
