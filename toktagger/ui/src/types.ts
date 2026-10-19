@@ -104,6 +104,12 @@ export const VideoPointSchema = VideoAnnotationBaseSchema.extend({
 export type VideoPoint = z.infer<typeof VideoPointSchema>;
 export type VideoPointInput = z.input<typeof VideoPointSchema>;
 
+export const VideoShapeSchema = z.discriminatedUnion("type", [
+  VideoBoundingBoxSchema,
+  VideoPolygonSchema,
+  VideoPointSchema,
+]);
+
 export const AnnotationSchema = z.union([
   TimePointSchema,
   TimeRegionSchema,

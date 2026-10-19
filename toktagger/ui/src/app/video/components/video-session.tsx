@@ -23,12 +23,7 @@ import {
 import type { Annotation, VideoFrameLabel, VideoPointInput } from "@/types";
 import { useSample } from "@/app/contexts/SampleContext";
 import { useVideoUiState } from "@/app/contexts/VideoContext";
-import {
-  VideoBoundingBoxSchema,
-  VideoFrameLabelSchema,
-  VideoPointSchema,
-  VideoPolygonSchema,
-} from "@/types";
+import { VideoFrameLabelSchema, VideoShapeSchema } from "@/types";
 import type {
   ActiveDrawingTool,
   ByFrameMap,
@@ -189,22 +184,6 @@ function clearTrackId(selection: Selection): Selection {
   return selection.trackId ? { ...selection, trackId: null } : selection;
 }
 
-function parseVideoAnnotation(annotation: Annotation) {
-  if (annotation.type === "video_bounding_box") {
-    return VideoBoundingBoxSchema.safeParse(annotation);
-  }
-
-  if (annotation.type === "video_polygon") {
-    return VideoPolygonSchema.safeParse(annotation);
-  }
-
-  if (annotation.type === "video_point") {
-    return VideoPointSchema.safeParse(annotation);
-  }
-
-  return null;
-}
-
 function videoAnnotationDedupeKey(annotation: Annotation): string | null {
   if (annotation.type === "video_frame_label") {
     const parsed = VideoFrameLabelSchema.safeParse(annotation);
@@ -217,8 +196,8 @@ function videoAnnotationDedupeKey(annotation: Annotation): string | null {
     return `video_frame_label::${frame}::${trimmedLabel}`;
   }
 
-  const parsed = parseVideoAnnotation(annotation);
-  if (!parsed?.success) return null;
+  const parsed = VideoShapeSchema.safeParse(annotation);
+  if (!parsed.success) return null;
 
   const item = parsed.data;
   const label = (item.label ?? "").trim();
@@ -271,8 +250,8 @@ function videoAnnotationSignature(annotations: Annotation[]): string {
   const entries: string[] = [];
 
   for (const annotation of annotations ?? []) {
-    const parsed = parseVideoAnnotation(annotation);
-    if (!parsed?.success) continue;
+    const parsed = VideoShapeSchema.safeParse(annotation);
+    if (!parsed.success) continue;
 
     const item = parsed.data;
     if (item.type === "video_bounding_box") {
@@ -336,10 +315,7 @@ function videoAnnotationsToByFrame(args: {
   const byFrame = new Map<number, ImageAnnotation[]>();
 
   for (const annotation of args.dbAnnotations ?? []) {
-    const parsed = parseVideoAnnotation(annotation);
-
-    if (!parsed) continue;
-
+    const parsed = VideoShapeSchema.safeParse(annotation);
     if (!parsed.success) continue;
 
     const dbAnno = parsed.data;
@@ -406,20 +382,8 @@ function videoAnnotationsFromByFrame(byFrame: ByFrameMap): Annotation[] {
       const shape = annoToVideoAnnotation(annotation, frame);
       if (!shape) continue;
 
-      let parsed:
-        | ReturnType<typeof VideoBoundingBoxSchema.safeParse>
-        | ReturnType<typeof VideoPointSchema.safeParse>
-        | ReturnType<typeof VideoPolygonSchema.safeParse>
-        | null = null;
-      if (shape.type === "video_bounding_box") {
-        parsed = VideoBoundingBoxSchema.safeParse(shape);
-      } else if (shape.type === "video_polygon") {
-        parsed = VideoPolygonSchema.safeParse(shape);
-      } else if (shape.type === "video_point") {
-        parsed = VideoPointSchema.safeParse(shape);
-      }
-
-      if (parsed?.success) out.push(parsed.data);
+      const parsed = VideoShapeSchema.safeParse(shape);
+      if (parsed.success) out.push(parsed.data);
     }
   }
 
