@@ -44,7 +44,7 @@ READ = ["display_name", "user_name", "emails", "password"]
 WRITE = ["display_name", "emails", "password"]
 
 [CANAILLE.ACL.ADMIN]
-PERMISSIONS = ["manage_oidc", "manage_users", "manage_all_groups", "delete_account", "impersonate_users"]
+PERMISSIONS = ["manage_oidc", "manage_users", "delete_account", "impersonate_users"]
 WRITE = ["groups", "lock_date", "user_name"]
 FILTER = [{{groups = "{admin_group}"}}]
 
