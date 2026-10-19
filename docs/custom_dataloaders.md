@@ -413,7 +413,7 @@ server.run()
 You can then provide the path to your script when running docker compose. For example, say we have the above script in a file called `custom_toktagger.py` - We simply need to add `CUSTOM_SCRIPT=./custom_toktagger.py` before the docker compose command, and a SQL URL as an environment variable:
 
 ```sh
-CUSTOM_SCRIPT=./custom_toktagger.py SQL_URL=<Your URL> docker compose --env-file .env.dev -f docker-compose.dev.yml up --build
+CUSTOM_SCRIPT=./custom_toktagger.py SQL_URL=<Your URL> docker compose -f docker-compose.dev.yml up --build
 ```
 
 !!! tip

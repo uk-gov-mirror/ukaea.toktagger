@@ -478,7 +478,7 @@ server.run()
 Then provide the path to your script when running docker compose:
 
 ```sh
-CUSTOM_SCRIPT=./custom_toktagger.py docker compose --env-file .env.dev -f docker-compose.dev.yml up --build
+CUSTOM_SCRIPT=./custom_toktagger.py docker compose -f docker-compose.dev.yml up --build
 ```
 
 !!! tip
