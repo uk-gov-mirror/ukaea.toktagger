@@ -1,7 +1,26 @@
 import { Config, PlotlyHTMLElement } from "plotly.js";
 import { z } from "zod/v4";
 
-export const BaseAnnotationSchema = z.object({
+// Display only; the raw created_by value is kept for ownership checks, filtering, etc.
+export const CreatedBySchema = z.object({
+  created_by: z.string().default("manual"),
+  // Read-only author name the backend resolves from created_by.
+  created_by_name: z.string().nullish(),
+  created_by_deleted: z.boolean().optional(),
+});
+export type CreatedByFields = z.infer<typeof CreatedBySchema>;
+
+export const pickCreatedBy = ({
+  created_by,
+  created_by_name,
+  created_by_deleted,
+}: CreatedByFields): CreatedByFields => ({
+  created_by,
+  created_by_name,
+  created_by_deleted,
+});
+
+export const BaseAnnotationSchema = CreatedBySchema.extend({
   _id: z.string().nullable().default(null),
   project_id: z.string().nullable().default(null),
   sample_id: z.string().nullable().default(null),
@@ -9,10 +28,6 @@ export const BaseAnnotationSchema = z.object({
   timestamp: z.string().optional(),
   validated: z.boolean().nullable().default(null),
   uncertainty: z.number().nullable().default(1),
-  created_by: z.string().default("manual"),
-  // Read-only author name the backend resolves from created_by.
-  created_by_name: z.string().nullish(),
-  created_by_deleted: z.boolean().optional(),
   signal_name: z.string().nullable().default(null),
   label: z.string(),
   type: z.string(),
@@ -527,13 +542,6 @@ export const annotatorCreatedBy = (type: AnnotatorTypes) =>
   `annotators::${type}`;
 
 export const modelCreatedBy = (modelType: string) => `model::${modelType}`;
-
-// Display only; the raw created_by value is kept for ownership checks, filtering, etc.
-export type CreatedByFields = {
-  created_by: string;
-  created_by_name?: string | null;
-  created_by_deleted?: boolean;
-};
 
 const NON_HUMAN_AUTHOR_KINDS: Record<string, string> = {
   model: "model",
