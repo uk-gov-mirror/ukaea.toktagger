@@ -677,6 +677,33 @@ async def import_annotations(
             )
 
 
+async def store_predictions(
+    db_client: MongoDBClient,
+    project_id: str,
+    model_type: str,
+    samples: list[Sample],
+    annotations: list[AnnotationBatchTypes],
+) -> None:
+    """Write a finished prediction task's output, trusting only what the server sent it.
+
+    Authorship, validation and the target samples come from the server, so a
+    compromised worker cannot pass predictions off as a user's validated work or
+    write outside the predicted samples.
+    """
+    shot_ids = {sample.shot_id for sample in samples}
+    predictions = [
+        annotation for annotation in annotations if annotation.shot_id in shot_ids
+    ]
+    for annotation in predictions:
+        annotation.created_by = f"model::{model_type}"
+        annotation.validated = False
+    for sample in samples:
+        await update_sample(
+            db_client, sample.id, SampleUpdate(validated_annotations=False)
+        )
+    await import_annotations(db_client, project_id, predictions)
+
+
 async def get_user_by_username(
     db_client: MongoDBClient, username: str
 ) -> UserOut | None:

@@ -51,9 +51,8 @@ async def models_api_client(monkeypatch, settings, db_client, ray_session):
     monkeypatch.setenv("API_URL", "http://test")
     monkeypatch.setenv("MAX_GPU_ACTORS", 1)
     monkeypatch.setenv("FORCE_NUM_GPUS", True)
-    # So send_batch_annotations/send_batch_samples (replayed from the test process
-    # in collect_predict_results) authenticate as the internal worker user, matching
-    # what main.py._setup_ray does for real Ray workers in production.
+    # So send_model_updates (replayed from the test process in collect_train_results)
+    # authenticates as the internal worker user, as real Ray workers do in production.
     monkeypatch.setenv("API_TOKEN", get_internal_token())
 
     server._setup_app()

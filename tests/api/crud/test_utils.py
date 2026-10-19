@@ -863,3 +863,29 @@ async def test_get_user_projects_as_admin(db_client, setup_db_auth, setup_db):
     )
     # setup_db adds 3 projects + setup_db_auth adds 2 more = 5 total
     assert len(projects) == 5
+
+
+@pytest.mark.asyncio
+async def test_store_predictions_trusts_only_server_values(db_client, setup_db):
+    """A worker cannot choose the author, or write outside the samples it was sent."""
+    project_id = setup_db["project_id_1"]
+    sample = await utils.get_sample(db_client, project_id, setup_db["sample_id_1"])
+    predictions = [
+        ANNOTATION_1.model_copy(update={"shot_id": 1, "created_by": "someone-else"}),
+        ANNOTATION_2.model_copy(update={"shot_id": 2}),
+    ]
+
+    await utils.store_predictions(
+        db_client, project_id, "disruption_cnn", [sample], predictions
+    )
+
+    stored = await db_client.get_filtered_documents(
+        "annotations", filters={"created_by": "model::disruption_cnn"}
+    )
+    assert [annotation["shot_id"] for annotation in stored] == [1]
+    assert all(
+        annotation["created_by"] != "someone-else"
+        for annotation in await db_client.get_filtered_documents("annotations")
+    )
+    updated = await utils.get_sample(db_client, project_id, setup_db["sample_id_1"])
+    assert updated.validated_annotations is False

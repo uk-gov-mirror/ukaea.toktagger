@@ -3,6 +3,8 @@
 import time
 
 import pytest
+import pytest_asyncio
+from bson import ObjectId
 from httpx import AsyncClient
 from joserfc import jwt
 from joserfc.jwk import KeySet, RSAKey
@@ -10,6 +12,8 @@ from joserfc.jwk import KeySet, RSAKey
 from tests.identity import session_headers
 from toktagger.api import config
 from toktagger.api.auth import oidc
+from toktagger.api.models import check_models_enabled
+from toktagger.api.schemas.models import ModelIn
 
 ISSUER = "https://idp.example.com/realms/toktagger"
 JWKS_URL = f"{ISSUER}/protocol/openid-connect/certs"
@@ -143,3 +147,20 @@ async def add_member(
         headers=session_headers(token),
     )
     assert resp.status_code == 200, resp.text
+
+
+@pytest_asyncio.fixture
+async def model_status_url(setup_db_auth, unauthenticated_api_client, db_client):
+    """The model status route Ray workers call back on, with the models-enabled gate lifted."""
+    project_id = setup_db_auth["project_id"]
+    # model_construct: ModelIn's type validator needs the optional models registry.
+    model = ModelIn.model_construct(
+        type="disruption_cnn", version=1, status="training", progress=0, score=0
+    )
+    model_id = await db_client.insert(
+        "models", model, ids={"project_id": ObjectId(project_id)}
+    )
+    overrides = unauthenticated_api_client.app.dependency_overrides
+    overrides[check_models_enabled] = lambda: None
+    yield f"/projects/{project_id}/models/{model_id}"
+    overrides.pop(check_models_enabled, None)

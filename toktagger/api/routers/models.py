@@ -14,6 +14,7 @@ from toktagger.api.auth.dependencies import (
     get_current_user,
     require_project_admin_role,
     require_project_annotator,
+    require_project_annotator_or_internal,
     require_project_viewer,
 )
 from toktagger.api.crud import utils
@@ -30,6 +31,7 @@ from toktagger.api.schemas.models import (
     ModelUpdate,
 )
 from toktagger.api.schemas.projects import Project
+from toktagger.api.schemas.samples import Sample
 from toktagger.api.schemas.users import UserOut
 
 # Only import large packages if models dependencies installed
@@ -50,6 +52,40 @@ else:
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Strong references, so a pending write is not garbage-collected before it runs.
+_prediction_writes: set[asyncio.Task] = set()
+
+
+async def _write_predictions(
+    db_client: MongoDBClient,
+    project_id: str,
+    model_type: str,
+    samples: list[Sample],
+    predict_task: "ray.ObjectRef",
+) -> None:
+    try:
+        result = await predict_task
+        await utils.store_predictions(
+            db_client, project_id, model_type, samples, result["annotations_batch"]
+        )
+    except Exception:
+        logger.exception(f"Failed to store predictions for project {project_id}")
+
+
+def store_predictions_when_done(
+    db_client: MongoDBClient,
+    project_id: str,
+    model_type: str,
+    samples: list[Sample],
+    predict_task: "ray.ObjectRef",
+) -> None:
+    """Write a prediction task's results to the database when it finishes, without blocking."""
+    write = asyncio.create_task(
+        _write_predictions(db_client, project_id, model_type, samples, predict_task)
+    )
+    _prediction_writes.add(write)
+    write.add_done_callback(_prediction_writes.discard)
 
 
 def validate_model_params(model_type: str, schema_type: str, params: dict):
@@ -750,6 +786,9 @@ async def predict(
         use_gpu=use_gpu,
     )
     task_id = await task_registry.register.remote([predict_task])
+    store_predictions_when_done(
+        db_client, project.id, model.type, samples, predict_task
+    )
 
     return {"task_id": task_id}
 
@@ -849,6 +888,7 @@ async def create_sample_predictions(
         use_gpu=use_gpu,
     )
     task_id = await task_registry.register.remote([task])
+    store_predictions_when_done(db_client, project.id, model.type, [sample], task)
 
     return {"task_id": task_id}
 
@@ -933,7 +973,7 @@ async def update_model(
     project_id: str = Path(
         description="The ID of the project to make model predictions for."
     ),
-    current_user: UserOut = Depends(require_project_annotator),
+    current_user: UserOut = Depends(require_project_annotator_or_internal),
     _models_enabled: None = Depends(check_models_enabled),
     model_id: str = Path(
         description="The ID of the model to update information about."

@@ -439,11 +439,11 @@ async def test_toktagger_session_token_is_401_as_a_bearer_with_an_idp(
 
 @pytest.mark.asyncio
 async def test_internal_token_still_works_with_an_idp_registered(
-    setup_db_auth, unauthenticated_api_client, registered_idp
+    model_status_url, unauthenticated_api_client, registered_idp
 ):
     resp = await unauthenticated_api_client.put(
-        f"/projects/{setup_db_auth['project_id']}/samples",
-        json=[],
+        model_status_url,
+        json={"progress": 50},
         headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 

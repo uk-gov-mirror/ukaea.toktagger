@@ -14,11 +14,8 @@ from bson import ObjectId
 from tests.identity import get_auth_token, session_headers
 from tests.db_definitions import TEST_ISSUER
 from toktagger.api import config
-from toktagger.api.core.sender import (
-    send_batch_annotations,
-    send_batch_samples,
-    send_model_updates,
-)
+from toktagger.api.core.sender import send_model_updates
+from toktagger.api.routers import models as models_router
 from toktagger.api.schemas.users import UserIn
 from toktagger.api.schemas.models import (
     GitlabLoadParams,
@@ -39,14 +36,8 @@ def wait_for_results(
 
 
 async def collect_predict_results(models_api_client, task_id):
-    results = wait_for_results(models_api_client.app.state.task_registry, task_id)
-    with patch("requests.put", models_api_client.put):
-        response = await send_batch_annotations(
-            results["project_id"], results["annotations_batch"]
-        )
-        assert response.status_code == 200
-        await send_batch_samples(results["project_id"], results["samples_batch"])
-        assert response.status_code == 200
+    wait_for_results(models_api_client.app.state.task_registry, task_id)
+    await asyncio.gather(*models_router._prediction_writes)
 
 
 async def collect_train_results(models_api_client, task_id):
@@ -257,7 +248,7 @@ async def test_predict_endpoint_survives_same_named_human_save(
 
     Unlike test_user_save_does_not_corrupt_prefixed_predictions in
     test_model_auth.py (which hand-crafts the "model::" annotation via a direct
-    PUT with the internal token), this exercises the actual /predict endpoint and
+    import), this exercises the actual /predict endpoint and
     Ray worker pipeline end to end, with real per-user JWT auth.
     """
     client = models_api_client

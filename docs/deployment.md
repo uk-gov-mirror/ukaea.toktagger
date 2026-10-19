@@ -72,13 +72,11 @@ The `api` service sets `SERVER_FORWARDED_ALLOW_IPS` to `*`. Only Caddy can reach
 
 ## Machine learning workers
 
-When `TOKTAGGER_EXTRAS` is `models`, TokTagger starts Ray workers. The workers train models, load weights and write the results back to the API. Each worker has an internal token for this. The token can only:
+When `TOKTAGGER_EXTRAS` is `models`, TokTagger starts Ray workers. The workers train models, load weights and make predictions. The server writes the predictions to the database when each task ends.
 
-- Update the status of a model.
-- Update samples.
-- Import annotations.
+Each worker has an internal token. The token can only update the status and the progress of a model. It cannot read projects, and it cannot change samples, annotations or users.
 
-The token is valid for all projects. Thus code that runs in a worker can change the samples and annotations of every project. Code runs in a worker when a weights file uses `pickle`. To decrease this risk on a shared server, do these steps:
+Code runs in a worker when a weights file uses `pickle`. This code can read the data that the worker loads, and it can send a wrong model status. To decrease this risk on a shared server, do these steps:
 
 1. Set `MODELS_LOAD_SAFETENSORS_ONLY=true`. Then the workers do not load `pickle` files.
 2. Set `MODELS_LOCAL_LOAD_ENABLED=false`. The default is `true`.

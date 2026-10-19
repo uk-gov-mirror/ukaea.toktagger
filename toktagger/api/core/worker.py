@@ -8,11 +8,7 @@ import ray
 from pydantic import ValidationError
 from ray.exceptions import ActorDiedError
 
-from toktagger.api.core.sender import (
-    send_batch_annotations,
-    send_batch_samples,
-    send_model_updates,
-)
+from toktagger.api.core.sender import send_model_updates
 from toktagger.api.models.loaders import (
     GitlabLoader,
     HuggingfaceLoader,
@@ -214,11 +210,8 @@ def get_predictions(
                 annotation = AnnotationBatchTypeAdapter.validate_python(annotation)
             except ValidationError as e:
                 logger.error(f"Failed to validate annotation: {e}")
+                continue
             annotations_batch.append(annotation)
-
-    # Return predictions over rest API to server
-    send_batch_samples(project.id, samples_batch)
-    send_batch_annotations(project.id, annotations_batch)
 
     logger.info(f"Predictions for project {project.id} complete!")
 

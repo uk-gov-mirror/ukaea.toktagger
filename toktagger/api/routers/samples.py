@@ -120,10 +120,9 @@ async def add_samples(
     # Attribute to the caller, as on the import/save routes in routers/annotations.py:
     # the incoming created_by is a client-side placeholder ("manual"), not a real user.
     # Synthetic authorship (model predictions) is preserved so seeding still works.
-    is_internal = current_user.username == "__internal__"
     for annotation_list in all_annotations:
         for annotation in annotation_list or []:
-            if not is_internal and not (annotation.created_by or "").startswith(
+            if not (annotation.created_by or "").startswith(
                 RESERVED_CREATED_BY_PREFIXES
             ):
                 annotation.created_by = current_user.id

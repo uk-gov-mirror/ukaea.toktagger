@@ -1,7 +1,7 @@
 """
 Tests for model × auth interactions:
-  1. Internal API token lets Ray-worker callbacks bypass the annotator guard, and
-     is rejected on every other endpoint.
+  1. Internal API token can update model status on any project, and is rejected
+     on every other endpoint.
   2. Unauthenticated sender is rejected when auth is required.
   3. Non-admin bulk import enforces created_by = current user.
   4. Global admin bulk import allows arbitrary created_by.
@@ -40,23 +40,6 @@ def annotation_payload(
 
 
 @pytest.mark.asyncio
-async def test_internal_token_accepted_for_import(
-    setup_db_auth, unauthenticated_api_client
-):
-    """PUT /annotations with the server-internal token should be accepted as admin."""
-    client = unauthenticated_api_client
-    project_id = setup_db_auth["project_id"]
-
-    internal_token = get_internal_token()
-    resp = await client.put(
-        f"/projects/{project_id}/annotations",
-        json=annotation_payload(created_by="alice"),
-        headers={"Authorization": f"Bearer {internal_token}"},
-    )
-    assert resp.status_code == 200
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -64,12 +47,15 @@ async def test_internal_token_accepted_for_import(
         ("GET", "/users"),
         ("DELETE", "/projects/{project_id}"),
         ("POST", "/projects/{project_id}/samples"),
+        ("PUT", "/projects/{project_id}/samples"),
+        ("PUT", "/projects/{project_id}/annotations"),
+        ("POST", "/projects"),
     ],
 )
 async def test_internal_token_rejected_outside_worker_callbacks(
     setup_db_auth, unauthenticated_api_client, method, path
 ):
-    """A leaked worker token must not reach admin endpoints, only the result callbacks."""
+    """A leaked worker token must reach only the model status route, nothing else."""
     resp = await unauthenticated_api_client.request(
         method,
         path.format(project_id=setup_db_auth["project_id"]),
@@ -79,6 +65,33 @@ async def test_internal_token_rejected_outside_worker_callbacks(
 
     assert resp.status_code == 403, resp.text
     assert resp.json()["detail"] == "The internal token is not valid here"
+
+
+@pytest.mark.asyncio
+async def test_internal_token_updates_model_status_without_membership(
+    model_status_url, unauthenticated_api_client
+):
+    """Ray workers report progress on every project, though the internal user is a member of none."""
+    resp = await unauthenticated_api_client.put(
+        model_status_url,
+        json={"progress": 50},
+        headers={"Authorization": f"Bearer {get_internal_token()}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_non_member_cannot_update_model_status(
+    model_status_url, unauthenticated_api_client
+):
+    resp = await unauthenticated_api_client.put(
+        model_status_url,
+        json={"progress": 50},
+        headers=session_headers(get_auth_token("alice")),
+    )
+
+    assert resp.status_code == 403, resp.text
 
 
 @pytest.mark.asyncio
@@ -158,32 +171,6 @@ async def test_import_admin_is_attributed_as_self(
 
 
 @pytest.mark.asyncio
-async def test_internal_token_preserves_arbitrary_created_by(
-    setup_db_auth, unauthenticated_api_client
-):
-    """The internal token (Ray worker) can import with model:: prefixed created_by."""
-    client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
-    project_id = setup_db_auth["project_id"]
-
-    internal_token = get_internal_token()
-    resp = await client.put(
-        f"/projects/{project_id}/annotations",
-        json=annotation_payload(created_by="model::disruption_cnn"),
-        headers={"Authorization": f"Bearer {internal_token}"},
-    )
-    assert resp.status_code == 200
-
-    get_resp = await client.get(
-        f"/projects/{project_id}/annotations",
-        headers=session_headers(admin_token),
-    )
-    annotations = get_resp.json()
-    assert len(annotations) == 1
-    assert annotations[0]["created_by"] == "model::disruption_cnn"
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "preferred_username",
     [
@@ -225,8 +212,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
     prefix (e.g. 'model::disruption_cnn' or 'annotators::peak_detection'). The
     prefix is the separator.
 
-    This hand-crafts the prefixed annotation via a direct PUT with the internal
-    token, so it only proves the import endpoint's exemption logic — not that the
+    This hand-crafts the prefixed annotation via a direct import, so it only proves the import endpoint's exemption logic — not that the
     real /predict pipeline or annotator suggestion pipeline actually produces that
     prefix. For the real end-to-end version of the model case (actual /predict
     call, real Ray worker, real per-user JWTs), see
@@ -249,12 +235,11 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
         ),
     )
 
-    # Insert a machine-made annotation via the internal token.
-    internal_token = get_internal_token()
+    # Import keeps a reserved-prefix author, so an admin import seeds the machine annotation.
     await client.put(
         f"/projects/{project_id}/annotations",
         json=annotation_payload(label="machine_pred", created_by=prefixed_created_by),
-        headers={"Authorization": f"Bearer {internal_token}"},
+        headers=session_headers(admin_token),
     )
 
     # The human user saves their own annotation for the same sample.

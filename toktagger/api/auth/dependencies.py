@@ -21,21 +21,17 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
+INTERNAL_USER_ID = "000000000000000000000001"
+
 _INTERNAL_USER = UserOut(
-    id="000000000000000000000001",
+    id=INTERNAL_USER_ID,
     username="__internal__",
-    global_role="admin",
+    global_role="user",
     is_active=True,
 )
 
-# Ray workers only report results back (sender.py), so a leaked token opens nothing more.
-_INTERNAL_ROUTES = frozenset(
-    {
-        ("PUT", "/projects/{project_id}/annotations"),
-        ("PUT", "/projects/{project_id}/samples"),
-        ("PUT", "/projects/{project_id}/models/{model_id}"),
-    }
-)
+# Ray workers only report model status back (sender.py), so a leaked token opens nothing more.
+_INTERNAL_ROUTES = frozenset({("PUT", "/projects/{project_id}/models/{model_id}")})
 
 
 def _require_csrf(request: Request, payload: dict):
@@ -245,3 +241,16 @@ async def require_project_admin_role(
             detail="Project admin access required",
         )
     return current_user
+
+
+async def require_project_annotator_or_internal(
+    project_id: str,
+    request: Request,
+    current_user: UserOut = Depends(get_current_user),
+) -> UserOut:
+    """Allow a project annotator, or the internal user that Ray workers call back as."""
+    if current_user.id == INTERNAL_USER_ID:
+        return current_user
+    # Resolved here, not via Depends: get_project_membership rejects the non-member internal user.
+    membership = await get_project_membership(project_id, request, current_user)
+    return await require_project_annotator(membership, current_user)

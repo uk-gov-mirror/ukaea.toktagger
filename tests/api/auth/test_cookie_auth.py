@@ -185,7 +185,7 @@ async def test_cookie_auth_allows_safe_request_without_csrf_header(
 
 
 @pytest.mark.asyncio
-async def test_header_auth_skips_csrf(setup_db_auth, unauthenticated_api_client):
+async def test_header_auth_skips_csrf(model_status_url, unauthenticated_api_client):
     """Bearer callers must never need a CSRF header.
 
     Ray workers call back in with a bearer token and no cookie jar (sender.py), as do
@@ -193,8 +193,8 @@ async def test_header_auth_skips_csrf(setup_db_auth, unauthenticated_api_client)
     so it needs no CSRF cover — do not "tighten" this into requiring one for everybody.
     """
     resp = await unauthenticated_api_client.put(
-        f"/projects/{setup_db_auth['project_id']}/samples",
-        json=[],
+        model_status_url,
+        json={"progress": 50},
         headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
@@ -203,14 +203,14 @@ async def test_header_auth_skips_csrf(setup_db_auth, unauthenticated_api_client)
 
 @pytest.mark.asyncio
 async def test_internal_token_still_accepted_with_cookie_present(
-    setup_db_auth, unauthenticated_api_client
+    model_status_url, unauthenticated_api_client
 ):
     """The server-to-server bypass must survive the cookie path being added."""
     await login(unauthenticated_api_client, username="outsider")
 
     resp = await unauthenticated_api_client.put(
-        f"/projects/{setup_db_auth['project_id']}/samples",
-        json=[],
+        model_status_url,
+        json={"progress": 50},
         headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
@@ -410,12 +410,12 @@ async def test_refresh_keeps_the_csrf_token_usable(
 
 @pytest.mark.asyncio
 async def test_bearer_caller_is_never_refreshed(
-    setup_db_auth, unauthenticated_api_client, refresh_due, idp
+    model_status_url, unauthenticated_api_client, refresh_due, idp
 ):
     """Scripts and Ray callbacks hold their own token; handing them a cookie is wrong."""
     resp = await unauthenticated_api_client.put(
-        f"/projects/{setup_db_auth['project_id']}/samples",
-        json=[],
+        model_status_url,
+        json={"progress": 50},
         headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
