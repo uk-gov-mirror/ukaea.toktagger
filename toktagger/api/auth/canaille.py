@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import secrets
+import shutil
 import signal
 import socket
 import subprocess
@@ -65,13 +66,14 @@ def _toml_inline_table(values: dict[str, str]) -> str:
 
 
 def _canaille_executable() -> Path:
-    executable = Path(sys.executable).parent / "canaille"
-    if not executable.exists():
+    scripts_directory = Path(sys.executable).parent
+    executable = shutil.which("canaille", path=str(scripts_directory))
+    if executable is None:
         raise RuntimeError(
-            f"Canaille executable not found at {executable}. "
+            f"Canaille executable not found in {scripts_directory}. "
             "Reinstall toktagger so its canaille dependency is available."
         )
-    return executable
+    return Path(executable)
 
 
 class ManagedCanaille:
@@ -129,7 +131,7 @@ class ManagedCanaille:
             server_name=issuer.netloc,
             scheme=issuer.scheme,
             admin_group=config.settings.auth.admin_group,
-            database_path=self.database_path,
+            database_path=self.database_path.as_posix(),
             jwk=_toml_inline_table(keys["jwk"]),  # type: ignore[arg-type]
             trusted_domain=public.hostname,
         )
@@ -302,6 +304,15 @@ class ManagedCanaille:
     def stop(self) -> None:
         process, self._process = self._process, None
         if process is None or process.poll() is not None:
+            return
+        # Windows has no process groups, so kill the server's whole process tree.
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(process.pid)],
+                capture_output=True,
+                check=False,
+            )
+            process.wait(timeout=STOP_TIMEOUT_SECONDS)
             return
         try:
             os.killpg(process.pid, signal.SIGTERM)
