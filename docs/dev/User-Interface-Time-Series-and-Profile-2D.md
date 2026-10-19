@@ -42,9 +42,6 @@ Inside the view, change annotations through the `useTimeSeriesActions()` actions
 
 It listens for pointer events on the plot and forwards them to the active tool. Ctrl + pointer down starts a drawing, so long as the user is in edit mode and has picked a tool. Pixel positions are converted to data coordinates with Plotly's axis transforms. After every zoom or pan it bumps `forceUpdate`, which makes the tools redraw at their new positions.
 
-!!! warning
-    The axis transforms (`p2d`, `d2p`) are Plotly internals, typed in `ExtendedPlotlyHTMLElement`. Check them first if anything breaks after upgrading `plotly.js`.
-
 ### Annotation Tools
 Each tool is a component that does two things in two effects:
 
@@ -69,3 +66,9 @@ Each tool gives its shapes an `aria-label` (`time-zone`, `time-point`, `bounding
 3. Create the component in `components/tools/`, using an existing tool such as `BoundingBox` as a template.
 4. Add Box Select support in `findSelectedAnnotations`, and a marker for the annotations table.
 5. Add it as a child of `BaseTimeSeriesPlot` in each view that should offer it.
+
+### How It Fits Together
+
+<figure markdown="span">
+   ![How annotations flow between SampleContext, TimeSeriesContext, the annotation tools and the Plotly plot](../assets/ui/plotly-d3-diagram.jpg)
+</figure>
