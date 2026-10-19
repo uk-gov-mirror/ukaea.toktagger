@@ -78,9 +78,20 @@ TokTagger keeps the Canaille data in the `canaille` folder of the server `cache_
 1. Sign in to Canaille at `http://localhost:8003` as `admin`.
 2. Open **Users** and click **Add a user**.
 3. Enter the user name, the email address and a password.
-4. To make the user a TokTagger admin, add the user to the group `toktagger-admins`.
+4. To make the user a TokTagger admin, add the user to the group `toktagger-admins`. Refer to [Update a user](#update-a-user).
 
 The user can now sign in to TokTagger.
+
+### Update a user
+
+1. Sign in to Canaille at `http://localhost:8003` as `admin`.
+2. Open **Users** and click the user name.
+3. Open the **Account settings** tab.
+4. Change the user details. To make the user a TokTagger admin, add `toktagger-admins` in the **Groups** field. To remove the admin role, remove `toktagger-admins` from the field.
+5. Click **Edit** to save the changes.
+
+!!! note
+    On this page, the **Edit** button saves the changes.
 
 ---
 

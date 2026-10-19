@@ -89,8 +89,13 @@ toktagger --workers 1 --reload
 For server deployments, run with multiple workers and disable the automatic browser launch:
 
 ```sh
-toktagger --workers 4 --host 0.0.0.0 --port 8002 --no-browser
+toktagger --workers 4 --no-browser
 ```
+
+The default host is `localhost`. Only the local machine can connect to it. To let other users on the network connect, add `--host 0.0.0.0`.
+
+> [!WARNING]
+> `--host 0.0.0.0` makes TokTagger available to all devices that can reach the machine on port 8002. The traffic is not encrypted. Use it only on a trusted network. For other deployments, use the `docker-compose.yml` stack, which puts TokTagger behind a TLS proxy.
 
 Or directly via Gunicorn (use `python -m gunicorn` to ensure the correct virtual environment is used):
 
