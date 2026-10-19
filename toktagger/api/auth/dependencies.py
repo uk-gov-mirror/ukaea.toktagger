@@ -1,6 +1,7 @@
 import secrets
 
 from fastapi import Depends, HTTPException, Request, Response
+from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from toktagger.api import config
@@ -25,6 +26,15 @@ _INTERNAL_USER = UserOut(
     username="__internal__",
     global_role="admin",
     is_active=True,
+)
+
+# Ray workers only report results back (sender.py), so a leaked token opens nothing more.
+_INTERNAL_ROUTES = frozenset(
+    {
+        ("PUT", "/projects/{project_id}/annotations"),
+        ("PUT", "/projects/{project_id}/samples"),
+        ("PUT", "/projects/{project_id}/models/{model_id}"),
+    }
 )
 
 
@@ -95,6 +105,12 @@ async def _get_user_from_bearer(request: Request, token: str) -> UserOut:
     """
     # Internal server-to-server token used by Ray-worker callbacks (sender.py).
     if secrets.compare_digest(token, get_internal_token()):
+        route = request.scope.get("route")
+        route_path = route.path if isinstance(route, APIRoute) else None
+        if (request.method, route_path) not in _INTERNAL_ROUTES:
+            raise HTTPException(
+                status_code=403, detail="The internal token is not valid here"
+            )
         return _INTERNAL_USER
     if api_tokens.is_api_token(token):
         return await _get_user_from_api_token(request, token)

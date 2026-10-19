@@ -1,6 +1,7 @@
 """
 Tests for model × auth interactions:
-  1. Internal API token lets Ray-worker callbacks bypass the annotator guard.
+  1. Internal API token lets Ray-worker callbacks bypass the annotator guard, and
+     is rejected on every other endpoint.
   2. Unauthenticated sender is rejected when auth is required.
   3. Non-admin bulk import enforces created_by = current user.
   4. Global admin bulk import allows arbitrary created_by.
@@ -53,6 +54,31 @@ async def test_internal_token_accepted_for_import(
         headers={"Authorization": f"Bearer {internal_token}"},
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/auth/me"),
+        ("GET", "/users"),
+        ("DELETE", "/projects/{project_id}"),
+        ("POST", "/projects/{project_id}/samples"),
+    ],
+)
+async def test_internal_token_rejected_outside_worker_callbacks(
+    setup_db_auth, unauthenticated_api_client, method, path
+):
+    """A leaked worker token must not reach admin endpoints, only the result callbacks."""
+    resp = await unauthenticated_api_client.request(
+        method,
+        path.format(project_id=setup_db_auth["project_id"]),
+        json=[],
+        headers={"Authorization": f"Bearer {get_internal_token()}"},
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"] == "The internal token is not valid here"
 
 
 @pytest.mark.asyncio

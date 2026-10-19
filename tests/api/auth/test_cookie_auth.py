@@ -192,8 +192,9 @@ async def test_header_auth_skips_csrf(setup_db_auth, unauthenticated_api_client)
     scripts and most of this suite. A header cannot be attached by a cross-site caller,
     so it needs no CSRF cover — do not "tighten" this into requiring one for everybody.
     """
-    resp = await unauthenticated_api_client.delete(
-        f"/projects/{setup_db_auth['project_id']}",
+    resp = await unauthenticated_api_client.put(
+        f"/projects/{setup_db_auth['project_id']}/samples",
+        json=[],
         headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
@@ -205,14 +206,15 @@ async def test_internal_token_still_accepted_with_cookie_present(
     setup_db_auth, unauthenticated_api_client
 ):
     """The server-to-server bypass must survive the cookie path being added."""
-    await login(unauthenticated_api_client)
+    await login(unauthenticated_api_client, username="outsider")
 
-    resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {get_internal_token()}"}
+    resp = await unauthenticated_api_client.put(
+        f"/projects/{setup_db_auth['project_id']}/samples",
+        json=[],
+        headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["username"] == "__internal__"
 
 
 def has_set_cookie(resp, name: str) -> bool:
@@ -411,8 +413,10 @@ async def test_bearer_caller_is_never_refreshed(
     setup_db_auth, unauthenticated_api_client, refresh_due, idp
 ):
     """Scripts and Ray callbacks hold their own token; handing them a cookie is wrong."""
-    resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {get_internal_token()}"}
+    resp = await unauthenticated_api_client.put(
+        f"/projects/{setup_db_auth['project_id']}/samples",
+        json=[],
+        headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
     assert resp.status_code == 200, resp.text

@@ -439,14 +439,15 @@ async def test_toktagger_session_token_is_401_as_a_bearer_with_an_idp(
 
 @pytest.mark.asyncio
 async def test_internal_token_still_works_with_an_idp_registered(
-    unauthenticated_api_client, registered_idp
+    setup_db_auth, unauthenticated_api_client, registered_idp
 ):
-    resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {get_internal_token()}"}
+    resp = await unauthenticated_api_client.put(
+        f"/projects/{setup_db_auth['project_id']}/samples",
+        json=[],
+        headers={"Authorization": f"Bearer {get_internal_token()}"},
     )
 
-    assert resp.status_code == 200
-    assert resp.json()["username"] == "__internal__"
+    assert resp.status_code == 200, resp.text
 
 
 @pytest.mark.asyncio
