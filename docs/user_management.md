@@ -162,6 +162,8 @@ TokTagger shows the global role as read-only. Change it in the identity provider
 
 Click **Deactivate** (or **Activate**) next to the user. A deactivated user cannot use TokTagger. The identity provider cannot override this setting. TokTagger keeps the annotations of the user. You cannot deactivate your own account. You cannot deactivate the last active admin.
 
+If a deactivated user tries to sign in, TokTagger shows an error. When the user clicks **Sign In** again, the identity provider asks for credentials again. The user can then sign in with a different account.
+
 ### Deleting a User
 
 Click **Delete** next to the user and confirm. This deletes the TokTagger record and the project memberships of the user. It does not delete the account in the identity provider. The user can sign in again and TokTagger creates a new record. You cannot delete the last active admin.

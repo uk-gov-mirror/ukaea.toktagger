@@ -207,6 +207,24 @@ async def test_callback_refuses_an_inactive_user(
 
 
 @pytest.mark.asyncio
+async def test_login_after_an_inactive_refusal_forces_the_provider_to_ask_again(
+    unauthenticated_api_client, idp, db_client
+):
+    await sign_in(unauthenticated_api_client)
+    unauthenticated_api_client.cookies.clear()
+    await db_client.db["users"].update_one(
+        {"username": "alice"}, {"$set": {"is_active": False}}
+    )
+    await sign_in(unauthenticated_api_client)
+
+    retry = await unauthenticated_api_client.get("/auth/login")
+    later = await unauthenticated_api_client.get("/auth/login")
+
+    assert parse_qs(urlparse(retry.headers["location"]).query)["prompt"] == ["login"]
+    assert "prompt" not in parse_qs(urlparse(later.headers["location"]).query)
+
+
+@pytest.mark.asyncio
 async def test_callback_reports_provider_errors_by_code_only(
     unauthenticated_api_client, idp
 ):

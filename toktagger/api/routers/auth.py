@@ -22,6 +22,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 DEFAULT_RETURN_TO = "/ui/projects"
 LOGIN_PATH = "/ui/login"
 ERROR_CODE_PATTERN = re.compile(r"[a-z_]{1,40}")
+FORCE_LOGIN_KEY = "force_login"
 
 
 def _login_error(code: str) -> RedirectResponse:
@@ -43,9 +44,11 @@ async def login_redirect(
     idp: oidc.IdentityProvider = Depends(oidc.get_idp),
 ):
     request.session["return_to"] = _validate_return_to(return_to)
+    # The provider session still holds the refused account, so make the provider ask again.
+    extra = {"prompt": "login"} if request.session.pop(FORCE_LOGIN_KEY, False) else {}
     try:
         return await idp.client.authorize_redirect(
-            request, f"{config.settings.public_url}/auth/callback"
+            request, f"{config.settings.public_url}/auth/callback", **extra
         )
     except oidc.IDP_ERRORS:
         logger.exception("Could not start sign-in with the identity provider")
@@ -68,6 +71,7 @@ async def callback(
         issuer = (await idp.metadata())["issuer"]
         user = await oidc.provision_user(db_client, issuer, claims)
         if not user.is_active:
+            request.session[FORCE_LOGIN_KEY] = True
             return _login_error("inactive")
         session_id = await sessions.start_session(
             db_client, user.username, issuer, claims["sub"], token
