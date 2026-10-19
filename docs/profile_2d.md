@@ -92,6 +92,7 @@ extent is only meaningful against the heatmap's axis.
 
 Annotations can only be created, selected, moved or deleted in edit mode. In view
 mode you can still zoom and pan freely without accidentally changing an annotation.
+Switching back to view mode clears any selection.
 
 ### Annotations Table
 
