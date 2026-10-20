@@ -116,7 +116,16 @@ Set `TOKTAGGER_HOST=localhost` and `KEYCLOAK_HOST=keycloak.localhost`. Caddy the
 
 ## Add test data
 
-To make sure that the stack works, add test data with the setup scripts. First, sign in to TokTagger and make an API token (read [User management](user_management.md)). Then send the HTTPS address of TokTagger with `--url`.
+To make sure that the stack works, add test data with the setup scripts. The scripts write the data files into the `data/` folder of the repository, and the server must read these files. The file `docker-compose.test.yml` attaches this folder to the `api` container as read-only. Start the stack with the two files:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.test.yml up -d --build
+```
+
+!!! warning
+    Use `docker-compose.test.yml` only for tests. Do not attach the repository to a shared server.
+
+Then sign in to TokTagger and make an API token (read [User management](user_management.md)). Then send the HTTPS address of TokTagger with `--url`.
 
 On a server with a valid certificate:
 
