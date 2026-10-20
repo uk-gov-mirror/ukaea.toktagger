@@ -1,3 +1,7 @@
+/**
+ * The video session, the core of the video view: the current frame, the byFrame cache, the
+ * selection and drawing state. It keeps SampleContext, byFrame and Annotorious in step.
+ */
 "use client";
 
 import React, {
@@ -72,11 +76,7 @@ import {
   sameOverlay,
 } from "./overlay-sync-utils";
 
-/**
- * Session state for the frame-by-frame annotation workflow.
- * Mirrors SampleContext annotations into per-frame overlays and keeps selection,
- * drawing mode, forward propagation, and Annotorious event wiring in one place.
- */
+/** Everything the session shares through useVideoSession(). */
 type VideoSessionCtx = {
   projectId: string;
   sampleId: string;
@@ -94,11 +94,11 @@ type VideoSessionCtx = {
   dirty: boolean;
   markSaved: () => void;
 
-  /** Current "armed" selection for drawing and instance operations. */
+  /** The class label and track ID the next annotation will use. */
   selection: Selection;
   setSelection: (next: Selection) => void;
 
-  /** Derived instance summary across all frames (used by sidebar UI). */
+  /** One entry per instance (class label + track ID) across all frames, for the annotations table. */
   instances: InstanceProfile[];
 
   /** Whole-frame class labels applied to the current frame. */
@@ -124,7 +124,7 @@ type VideoSessionCtx = {
   imageNatural: { w: number; h: number } | null;
   setImageNatural: (n: { w: number; h: number } | null) => void;
 
-  /** Popup helpers so view components don't need direct access to the Annotorious API. */
+  /** Annotorious operations for components, so they never call its API directly. */
   createPointAnnotation: (point: { x: number; y: number }) => void;
   deleteAnnotation: (id: string) => void;
   closePopup: () => void;
@@ -142,16 +142,13 @@ type VideoSessionCtx = {
   clearAllFrames: () => void;
 
   // instance ops
-  /** Allocate/select the next track id for a class (used by "new instance" flows). */
+  /** Selects the next numeric track ID for a class. Nothing calls this: new tracks use readable IDs. */
   createNewInstanceForClass: (className: string) => {
     className: string;
     trackId: string;
   };
 
-  /**
-   * Delete a specific instance across all frames (does NOT rely on selection state).
-   * This avoids "needs two clicks" bugs when callers first set selection then delete.
-   */
+  /** Deletes an instance on every frame. Takes the instance directly rather than reading the selection. */
   deleteInstanceAcrossFrames: (className: string, trackId: string) => void;
 
   /** Delete a specific instance on the current frame only, leaving its other frames intact. */
@@ -212,6 +209,7 @@ function videoAnnotationDedupeKey(annotation: Annotation): string | null {
   return `${item.frame}::${label}::${trackId}`;
 }
 
+/** Drops repeated video annotations for the same frame and instance, keeping the last one. */
 function dedupeVideoAnnotations(annotations: Annotation[]): {
   annotations: Annotation[];
   duplicates: number;
@@ -249,6 +247,7 @@ function dedupeVideoAnnotations(annotations: Annotation[]): {
   };
 }
 
+/** A content fingerprint of the video annotations, used to tell our own writes apart from outside changes. */
 function videoAnnotationSignature(annotations: Annotation[]): string {
   const entries: string[] = [];
 
@@ -309,6 +308,7 @@ function videoAnnotationSignature(annotations: Annotation[]): string {
   return entries.sort().join("\n");
 }
 
+/** Builds the byFrame cache (Annotorious format) from the backend-format annotations. */
 function videoAnnotationsToByFrame(args: {
   dbAnnotations: Annotation[];
   projectId: string;
@@ -348,7 +348,7 @@ function videoAnnotationsToByFrame(args: {
   return byFrame;
 }
 
-// Excludes video_frame_label on purpose: it lives in context annotations, not byFrame, and must survive overlay commits.
+// Leaves out video_frame_label on purpose: frame labels live only in SampleContext, never in byFrame.
 function isVideoAnnotationType(annotation: Annotation): boolean {
   return (
     annotation.type === "video_bounding_box" ||
@@ -407,6 +407,7 @@ function videoAnnotationsFromByFrame(byFrame: ByFrameMap): Annotation[] {
   return out;
 }
 
+/** Swaps the video shapes in `annotations` for those in byFrame, keeping everything else. */
 function replaceVideoAnnotations(
   annotations: Annotation[],
   byFrame: ByFrameMap,
@@ -428,11 +429,7 @@ export function useVideoSession(): VideoSessionCtx {
   return v;
 }
 
-/**
- * Provides shared session state for the video annotation UI.
- * This provider mirrors SampleContext annotations into Annotorious-friendly
- * per-frame state and writes video edits back to SampleContext.
- */
+/** Holds the session state and keeps SampleContext, byFrame and Annotorious in step. */
 export function VideoSessionProvider(props: {
   projectId: string;
   sampleId: string;
@@ -457,21 +454,18 @@ export function VideoSessionProvider(props: {
 
   const api = useAnnotator<AnnotoriousOpenSeadragonAnnotator>();
 
-  /**
-   * Annotorious emits create/update/delete events even when annotations are set
-   * programmatically (e.g. when we sync the overlay on frame change).
-   *
-   * This ref guards against re-entrant feedback loops during those programmatic writes.
-   * SampleContext annotations remain the source of truth; `byFrame` is the editor cache.
-   */
+  // True while we push annotations into Annotorious, so the events this triggers are not treated as user edits
   const isProgrammaticAnnoSyncRef = useRef(false);
+  // Always the latest commitFromAnnotorious, for callbacks created before it last changed
   const commitFromAnnotoriousRef = useRef<
     (rawOverride?: ImageAnnotation[]) => void
   >(() => {});
+  // An instance waiting to be selected once its frame's annotations are in Annotorious
   const pendingFocusRef = useRef<FocusRequest | null>(null);
   const nextTrackNumsRef = useRef<Map<string, number>>(
     buildNextTrackIdState(annotations),
   );
+  // The last outside change and our own last write, so the sync effect can tell them apart
   const lastExternalAnnotationSignatureRef = useRef<string | null>(null);
   const lastLocalAnnotationSignatureRef = useRef<string | null>(null);
 
@@ -490,6 +484,7 @@ export function VideoSessionProvider(props: {
     return maybe?.frame ?? 0;
   }, [data]);
 
+  // Only move to a new frame once the backend has returned the image for the requested one
   useLayoutEffect(() => {
     if (!data) return;
 
@@ -512,6 +507,7 @@ export function VideoSessionProvider(props: {
   }, []);
 
   const [byFrame, setByFrame] = useState<ByFrameMap>(() => new Map());
+  // Refs mirror state so event handlers registered earlier still read the latest value
   const byFrameRef = useRef<ByFrameMap>(new Map());
   const annotationsRef = useRef<Annotation[]>(annotations);
   const [dirty, setDirty] = useState(false);
@@ -535,6 +531,7 @@ export function VideoSessionProvider(props: {
     Number.isFinite(dataParams.frame) &&
     dataParams.frame !== frame;
 
+  // Drawing needs edit mode with Ctrl held. The can* flags also need a tool and a class picked.
   const drawIntent = editMode && ctrlHeld && !hideAnnotations;
   const canCreate =
     drawIntent &&
@@ -646,7 +643,7 @@ export function VideoSessionProvider(props: {
     [frame, setSampleAnnotations],
   );
 
-  // Frame Label tool click: toggles the armed instance's label, or starts a new one.
+  // Frame Label tool click: removes this class's label from the frame if it has one, otherwise adds one
   const toggleFrameLabel = useCallback(() => {
     const cls = (selection.className ?? "").trim();
     if (!cls) return;
@@ -698,17 +695,19 @@ export function VideoSessionProvider(props: {
     annotationsRef.current = annotations;
   }, [annotations]);
 
-  // Keep the editor cache synchronized with SampleContext.annotations.
+  // Rebuilds byFrame when SampleContext changes from outside the session, e.g. an import
   useEffect(() => {
     const { annotations: dbAnnotations, duplicates } =
       dedupeVideoAnnotations(annotations);
     const signature = videoAnnotationSignature(dbAnnotations);
 
+    // Write the de-duplicated list back so the duplicates are never saved
     if (duplicates > 0) {
       setSampleAnnotations(() => dbAnnotations);
     }
 
     if (signature === lastExternalAnnotationSignatureRef.current) return;
+    // This change is our own write from commitByFrame, so byFrame is already up to date
     if (signature === lastLocalAnnotationSignatureRef.current) {
       nextTrackNumsRef.current = buildNextTrackIdState(dbAnnotations);
       lastExternalAnnotationSignatureRef.current = signature;
@@ -729,6 +728,7 @@ export function VideoSessionProvider(props: {
     lastLocalAnnotationSignatureRef.current = null;
   }, [annotations, projectId, sampleId, setSampleAnnotations]);
 
+  /** Writes byFrame and the matching video annotations in SampleContext. */
   const commitByFrame = useCallback(
     (next: ByFrameMap, opts?: { markDirty?: boolean }) => {
       byFrameRef.current = next;
@@ -763,6 +763,7 @@ export function VideoSessionProvider(props: {
     setSelectionState(next);
   }, []);
 
+  // Cleared on the next animation frame, so events Annotorious fires during the sync are still ignored
   const finishProgrammaticAnnotationSync = useCallback(() => {
     requestAnimationFrame(() => {
       isProgrammaticAnnoSyncRef.current = false;
@@ -778,6 +779,7 @@ export function VideoSessionProvider(props: {
   }, [api]);
 
   const flushCurrentFrameOverlay = useCallback(() => {
+    // Deselecting first ends any edit in progress before we read the shapes
     api?.setSelected?.();
     flushPendingOverlay();
   }, [api, flushPendingOverlay]);
@@ -806,6 +808,7 @@ export function VideoSessionProvider(props: {
     [api, flushPendingOverlay, setVideoEditMode],
   );
 
+  // e toggles edit mode and holding Ctrl draws. Ctrl is released on blur so drawing never sticks.
   useEffect(() => {
     const releaseCtrl = () => {
       setCtrlHeld(false);
@@ -910,6 +913,7 @@ export function VideoSessionProvider(props: {
     updateByFrame,
   ]);
 
+  /** Tells Annotorious what clicks do (select, edit or nothing) and whether drawing is on. */
   const applyAnnotatorInteractionMode = useCallback(() => {
     if (!api) return;
 
@@ -935,6 +939,7 @@ export function VideoSessionProvider(props: {
       api.cancelDrawing?.();
     }
 
+    // Stop OpenSeadragon panning on click while placing points or frame labels
     if (api.viewer && (canDrawPoint || canTagFrame)) {
       api.viewer.setMouseNavEnabled(false);
     } else if (api.viewer && !canDrawShape) {
@@ -959,10 +964,6 @@ export function VideoSessionProvider(props: {
     return { className: cname, trackId };
   }, []);
 
-  /**
-   * Delete a specific (className, trackId) across all frames.
-   * IMPORTANT: does not depend on selection being updated first.
-   */
   const deleteInstanceAcrossFrames = useCallback(
     (className: string, trackId: string) => {
       const cls = (className || "").trim();
@@ -1023,10 +1024,7 @@ export function VideoSessionProvider(props: {
     [frame, removeFrameLabel, updateByFrame],
   );
 
-  /**
-   * Backwards-compatible helper: delete the currently selected instance.
-   * Now implemented via deleteInstanceAcrossFrames to avoid stale selection issues.
-   */
+  /** Deletes the selected instance on every frame. */
   const deleteSelectedInstanceAcrossFrames = useCallback(() => {
     if (!selection.className || !selection.trackId) return;
     deleteInstanceAcrossFrames(selection.className, selection.trackId);
@@ -1069,6 +1067,7 @@ export function VideoSessionProvider(props: {
     ],
   );
 
+  // Annotorious has no point tool, so points are built here and pushed in directly
   const createPointAnnotation = useCallback(
     (point: { x: number; y: number }) => {
       if (!api?.getAnnotations) return;
@@ -1148,21 +1147,17 @@ export function VideoSessionProvider(props: {
     ],
   );
 
-  /**
-   * Single commit point for all Annotorious mutations (create/update/delete).
-   * This normalizes bodies, clamps geometry to image bounds, and syncs the session store.
-   */
+  /** Saves the frame's shapes from Annotorious: clamps them, fills in labels and track IDs, then writes byFrame. */
   const commitFromAnnotorious = useCallback(
     (rawOverride?: ImageAnnotation[]) => {
       if (!api?.getAnnotations) return;
       if (isProgrammaticAnnoSyncRef.current) return;
       if (hideAnnotationsRef.current) return;
 
-      // Some Annotorious events pass a single annotation (not an array).
+      // Use the caller's list when given, e.g. one with a newly created shape already patched
       const raw = rawOverride ?? api.getAnnotations();
 
-      // Enforce image bounds so shapes can't persist outside the frame.
-      // In OSD mode, imageNatural can occasionally lag; fall back to viewer content size.
+      // Keep shapes inside the image. imageNatural can lag behind a new frame, so fall back to the viewer.
       const viewerNatural = (() => {
         const item = api.viewer?.world?.getItemAt?.(0);
         if (!item) return null;
@@ -1189,8 +1184,7 @@ export function VideoSessionProvider(props: {
 
       const fallbackTrackId = selection.trackId ?? null;
 
-      // Allocator is only needed within THIS normalization pass.
-      // It allocates unique ids per-class for annotations missing trackId.
+      // With no track selected, shapes missing a track ID each get a new readable one
       const allocTrackId = fallbackTrackId
         ? undefined
         : (() => {
@@ -1220,7 +1214,7 @@ export function VideoSessionProvider(props: {
         dedupeByInstance: true,
       });
 
-      // Push corrected overlay back into Annotorious when it diverges.
+      // If clamping or labelling changed anything, show the corrected shapes in Annotorious too
       if (!sameOverlay(raw, normalized)) {
         isProgrammaticAnnoSyncRef.current = true;
         try {
@@ -1236,6 +1230,7 @@ export function VideoSessionProvider(props: {
               annotation.id ? rawById.has(String(annotation.id)) : false,
             );
 
+          // Patch shapes in place when possible, as replacing the whole overlay can disrupt drawing
           if (canPatchInPlace) {
             for (const annotation of normalized) {
               const prev = rawById.get(String(annotation.id));
@@ -1281,18 +1276,7 @@ export function VideoSessionProvider(props: {
     commitFromAnnotoriousRef.current = commitFromAnnotorious;
   }, [commitFromAnnotorious]);
 
-  /**
-   * Keep the Annotorious overlay in sync with the per-frame editor cache.
-   *
-   * Annotorious maintains its own internal annotation state and does not automatically
-   * swap overlays when our notion of "current frame" changes (or when session state
-   * changes due to context sync, forward-prop, clear/delete actions).
-   *
-   * So when either:
-   *  - the active frame changes, OR
-   *  - the session overlay for the active frame changes,
-   * we push the session overlay into Annotorious.
-   */
+  // What Annotorious should show: the current frame's shapes, or nothing while annotations are hidden
   const desiredOverlay = useMemo(() => {
     if (hideAnnotations) return [];
     return byFrame.get(frame) ?? [];
@@ -1326,6 +1310,7 @@ export function VideoSessionProvider(props: {
     [api, editMode],
   );
 
+  /** Selects the pending instance once it is in Annotorious, or drops the request if it never will be. */
   const tryFocusPending = useCallback(
     (rawOverride?: ImageAnnotation[]) => {
       if (!api) return false;
@@ -1370,6 +1355,7 @@ export function VideoSessionProvider(props: {
     [api, desiredOverlay, frame, overlayHasInstance, selectAnnotationById],
   );
 
+  /** Asks for an instance to be selected. This happens later, once its frame's shapes are in Annotorious. */
   const requestFocusInstance = useCallback(
     (
       className: string,
@@ -1399,8 +1385,7 @@ export function VideoSessionProvider(props: {
     [],
   );
 
-  // Required integration boundary: Annotorious keeps its own internal overlay
-  // state, so we must push session state on frame/overlay changes.
+  // Annotorious keeps its own copy of the shapes, so push the frame's list in whenever it changes
   useEffect(() => {
     if (!api) return;
 
@@ -1439,11 +1424,7 @@ export function VideoSessionProvider(props: {
     tryFocusPending,
   ]);
 
-  /**
-   * Event wiring:
-   * - create/update/delete all funnel through commitFromAnnotorious
-   * - selectionChanged kept only for the "deselect commits" behavior
-   */
+  // Annotorious events: create, update, delete and deselect all save through commitFromAnnotorious
   useEffect(() => {
     if (!api?.on || !api?.off || !api?.getAnnotations) return;
 
@@ -1537,8 +1518,7 @@ export function VideoSessionProvider(props: {
         trackId = uniqueReadableTrackId(used);
       }
 
-      // Important: patch only the newly created annotation via updateAnnotation.
-      // Avoid full clear/set rewrite during create, which can break OSD draw state.
+      // Patch only the new shape: replacing the whole overlay mid-create can break OpenSeadragon's drawing
       const createdForTool =
         drawingTool === "point" ? stampPoint(created) : created;
       const patched = normalizeOverlayForSession({
@@ -1613,6 +1593,7 @@ export function VideoSessionProvider(props: {
     [api],
   );
 
+  // Retry a pending focus after each new request and frame change, a frame later so Annotorious has the shapes
   useEffect(() => {
     if (focusNonce === 0) return;
 
