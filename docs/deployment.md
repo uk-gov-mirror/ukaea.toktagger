@@ -113,3 +113,22 @@ Set `TOKTAGGER_HOST=localhost` and `KEYCLOAK_HOST=keycloak.localhost`. Caddy the
 
 !!! warning
     The test names are for tests only. Use real DNS names and valid certificates for a shared server.
+
+## Add test data
+
+To make sure that the stack works, add test data with the setup scripts. First, sign in to TokTagger and make an API token (read [User management](user_management.md)). Then send the HTTPS address of TokTagger with `--url`.
+
+On a server with a valid certificate:
+
+```sh
+TOKTAGGER_API_TOKEN=<API token> python scripts/create_mock_data.py --url https://<TOKTAGGER_HOST>
+```
+
+On one machine, Caddy signs the certificate with its own authority, and Python does not trust that authority. Copy the root certificate of Caddy from the container, and give it to Python with `REQUESTS_CA_BUNDLE`:
+
+```sh
+docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt caddy-root.crt
+REQUESTS_CA_BUNDLE=caddy-root.crt TOKTAGGER_API_TOKEN=<API token> python scripts/create_mock_data.py --url https://localhost
+```
+
+`scripts/setup.py` uses the same options.
