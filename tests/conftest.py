@@ -128,8 +128,8 @@ async def db_client(settings):
     await db_client.delete_filtered_documents("models")
     await db_client.delete_filtered_documents("users")
     await db_client.delete_filtered_documents("project_members")
-    await db_client.db["sessions"].delete_many({})
-    await db_client.db["api_tokens"].delete_many({})
+    await db_client.delete_filtered_documents("sessions")
+    await db_client.delete_filtered_documents("api_tokens")
     await db_client.client.close()
 
 
