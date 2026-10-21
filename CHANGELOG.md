@@ -4,7 +4,8 @@
 * Replaced the built-in password login with OpenID Connect. TokTagger no longer stores passwords. `auth.provider` is `canaille` (default, TokTagger runs a local Canaille identity provider) or `oidc` (Keycloak or any other provider). See `docs/user_management.md`.
 * Global roles come from the identity provider group `auth.admin_group`. Users are created at their first sign-in.
 * TokTagger does not connect identity provider accounts to users from the old password login. A user with the same name gets a new record.
-* Added `auth.session_max_age_seconds`. A browser session ends after this time (default 12 hours), and the user signs in again. Access tokens from scripts do not change the global role.
+* Added `auth.session_idle_timeout_seconds`. A browser session with no requests ends after this time (default 24 hours). The identity provider can end the session earlier.
+* Added `auth.session_refresh_seconds`. A browser session reads the account from the identity provider again after this time (default 5 minutes). A change to the global role or a disabled account takes effect within this time. Access tokens from scripts do not change the global role.
 * Removed `POST /auth/token`. Scripts send an identity provider access token and read it from `TOKTAGGER_API_TOKEN`.
 * Added personal API tokens. A user creates and revokes them on the Profile page, or with `/users/me/tokens`. A script sends one as a Bearer token. Added `auth.api_token_max_lifetime_days` (default 365).
 * Added `server.forwarded_allow_ips`, `server.gunicorn_timeout` and `server.cors_origins`.
