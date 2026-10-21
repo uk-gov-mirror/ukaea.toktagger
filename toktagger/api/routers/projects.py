@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
 from toktagger.api.auth.dependencies import (
     get_current_user,
+    get_project_membership,
     require_global_admin,
     require_project_viewer,
     require_project_admin_role,
@@ -14,6 +15,7 @@ from toktagger.api.crud.db import MongoDBClient
 from toktagger.api.schemas.projects import (
     Project,
     ProjectIn,
+    ProjectMember,
     ProjectMemberOut,
     ProjectMemberCreate,
     ProjectMemberUpdate,
@@ -157,16 +159,9 @@ async def delete_all_projects(
 async def list_project_members(
     request: Request,
     project_id: str = Path(...),
-    current_user: UserOut = Depends(get_current_user),
+    _: UserOut = Depends(require_project_viewer),
 ):
-    db_client = request.app.state.db_client
-    if current_user.global_role != "admin":
-        membership = await utils.get_project_membership(
-            db_client, project_id, current_user.id
-        )
-        if not membership:
-            raise HTTPException(status_code=403, detail="Not a member of this project")
-    return await utils.get_project_members(db_client, project_id)
+    return await utils.get_project_members(request.app.state.db_client, project_id)
 
 
 @router.post("/{project_id}/members", response_model=dict)
@@ -193,6 +188,7 @@ async def update_project_member(
     project_id: str = Path(...),
     user_id: str = Path(...),
     current_user: UserOut = Depends(get_current_user),
+    membership: ProjectMember | None = Depends(get_project_membership),
 ):
     db_client = request.app.state.db_client
 
@@ -202,10 +198,7 @@ async def update_project_member(
     # {"role": "admin"} and self-promote (mirrors the field-level guard in update_user).
     is_self = current_user.id == user_id
     if (not is_self or body.role is not None) and current_user.global_role != "admin":
-        membership = await utils.get_project_membership(
-            db_client, project_id, current_user.id
-        )
-        if not membership or membership.role != "admin":
+        if membership is None or membership.role != "admin":
             raise HTTPException(status_code=403, detail="Project admin access required")
 
     # A global admin has no membership row on a project they never explicitly joined
