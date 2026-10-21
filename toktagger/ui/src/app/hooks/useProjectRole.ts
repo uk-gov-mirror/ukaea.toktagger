@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { BACKEND_API_URL, apiFetch, getMyMemberships } from "@/app/core";
+import { getMyMemberships } from "@/app/core";
 import { useAuth } from "@/app/contexts/AuthContext";
 
 type ProjectRole = "admin" | "annotator" | "viewer" | null;
@@ -38,10 +38,11 @@ export function useProjectRole(
     // against this one while the request is in flight.
     setRole(null);
     setLoading(true);
-    apiFetch(`${BACKEND_API_URL}/projects/${project_id}/members`)
-      .then((r) => r.json())
-      .then((members: Array<{ user_id: string; role: ProjectRole }>) => {
-        setRole(members.find((m) => m.user_id === user._id)?.role ?? null);
+    getMyMemberships()
+      .then((memberships) => {
+        setRole(
+          memberships.find((m) => m.project_id === project_id)?.role ?? null,
+        );
       })
       .catch(() => setRole(null)) // fail closed on a real error
       .finally(() => setLoading(false));
