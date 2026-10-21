@@ -242,9 +242,7 @@ async def test_sign_in_stores_the_provider_tokens_in_a_session(
     payload, _ = decode_token_with_age(
         unauthenticated_api_client.cookies[config.settings.auth.cookie_name]
     )
-    session = await db_client.db[sessions.SESSIONS_COLLECTION].find_one(
-        {"_id": payload["sid"]}
-    )
+    session = await db_client.db["sessions"].find_one({"_id": payload["sid"]})
     assert session["username"] == "admin"
     assert session["refresh_token"] != "refresh-1"
     assert decrypt_secret(session["refresh_token"]) == "refresh-1"
@@ -339,7 +337,7 @@ async def test_undecryptable_refresh_token_ends_the_session(
 ):
     """A changed signing secret leaves stored refresh tokens unreadable."""
     await login(unauthenticated_api_client)
-    await db_client.db[sessions.SESSIONS_COLLECTION].update_many(
+    await db_client.db["sessions"].update_many(
         {}, {"$set": {"refresh_token": "refresh-1"}}
     )
 
@@ -378,7 +376,7 @@ async def test_concurrent_refreshes_use_the_refresh_token_once(
     session_id = await sessions.start_session(
         db_client, "admin", ISSUER, "admin-sub", {"refresh_token": "refresh-1"}
     )
-    await db_client.db[sessions.SESSIONS_COLLECTION].update_one(
+    await db_client.db["sessions"].update_one(
         {"_id": session_id}, {"$set": {"refreshed_at": 0}}
     )
     idp.fake_userinfo = {"sub": "admin-sub", "preferred_username": "admin"}

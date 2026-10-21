@@ -550,7 +550,7 @@ async def test_list_my_memberships_is_self_scoped(
 
 
 async def _session_usernames(db_client) -> set[str]:
-    documents = await db_client.db[sessions.SESSIONS_COLLECTION].find({}).to_list()
+    documents = await db_client.db["sessions"].find({}).to_list()
     return {document["username"] for document in documents}
 
 
