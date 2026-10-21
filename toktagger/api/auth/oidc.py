@@ -76,11 +76,12 @@ class IdentityProvider:
                 await self.metadata()
                 return
             except IDP_ERRORS as error:
-                if time.monotonic() + delay > deadline:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
                     raise RuntimeError(
                         f"Could not reach the identity provider at {self._auth_settings.issuer_url}: {error}"
                     ) from error
-                await asyncio.sleep(delay)
+                await asyncio.sleep(min(delay, remaining))
                 delay = min(delay * 2, 4)
 
     async def fetch_jwks(self, force: bool = False) -> KeySet:
