@@ -245,7 +245,7 @@ async def test_member_can_see_project_in_list(
 
 
 @pytest.mark.asyncio
-async def test_save_preserves_model_created_by(
+async def test_save_preserves_machine_created_by(
     setup_db_auth, unauthenticated_api_client
 ):
     """A freshly-predicted annotation's synthetic created_by survives a save."""
@@ -264,7 +264,7 @@ async def test_save_preserves_model_created_by(
             "time_max": 0.6,
             "type": "time_region",
             "validated": False,
-            "created_by": "model::changepoint_detection",
+            "created_by": "annotators::change_point_detection",
         }
     ]
     resp = await client.put(
@@ -276,7 +276,7 @@ async def test_save_preserves_model_created_by(
 
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     assert len(annotations) == 1
-    assert annotations[0]["created_by"] == "model::changepoint_detection"
+    assert annotations[0]["created_by"] == "annotators::change_point_detection"
 
 
 @pytest.mark.asyncio
@@ -312,13 +312,13 @@ async def test_save_returns_every_updated_annotation_id(
 
 
 @pytest.mark.asyncio
-async def test_edit_to_model_prediction_is_persisted(
+async def test_edit_to_machine_suggestion_is_persisted(
     setup_db_auth, unauthenticated_api_client
 ):
-    """Correcting a model's prediction and saving must keep the correction.
+    """Correcting an annotator's suggestion and saving must keep the correction.
 
     Reviewing machine output is the point of the tool, so the edit is stored against
-    the prediction, keeping its "model::" author so provenance is not rewritten.
+    the prediction, keeping its machine author so provenance is not rewritten.
     """
     client = unauthenticated_api_client
     admin_token = get_auth_token("admin")
@@ -337,7 +337,7 @@ async def test_edit_to_model_prediction_is_persisted(
                 "time_max": 0.6,
                 "type": "time_region",
                 "validated": False,
-                "created_by": "model::changepoint_detection",
+                "created_by": "annotators::change_point_detection",
             }
         ],
         headers=session_headers(alice_token),
@@ -364,7 +364,7 @@ async def test_edit_to_model_prediction_is_persisted(
     assert annotations[0]["time_min"] == 1.25
     assert annotations[0]["time_max"] == 1.75
     assert annotations[0]["validated"] is True
-    assert annotations[0]["created_by"] == "model::changepoint_detection"
+    assert annotations[0]["created_by"] == "annotators::change_point_detection"
 
 
 @pytest.mark.asyncio
@@ -443,7 +443,7 @@ async def test_annotator_can_edit_another_users_annotation(
                 "time_max": 0.9,
                 "type": "time_region",
                 "validated": False,
-                "created_by": "model::changepoint_detection",
+                "created_by": "annotators::change_point_detection",
             },
         ],
         headers=session_headers(bob_token),
@@ -475,7 +475,9 @@ async def test_annotator_can_edit_another_users_annotation(
     assert edited["time_max"] == 3.5
 
     prediction = next(
-        a for a in annotations if a["created_by"] == "model::changepoint_detection"
+        a
+        for a in annotations
+        if a["created_by"] == "annotators::change_point_detection"
     )
     assert prediction["time_min"] == 0.8
     assert prediction["label"] == "predicted"
@@ -801,7 +803,11 @@ def machine_payload(label: str, created_by: str):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "created_by", ["annotators::peak_detection", "model::disruption_cnn"]
+    "created_by",
+    [
+        "annotators::peak_detection",
+        pytest.param("model::disruption_cnn", marks=pytest.mark.models_enabled),
+    ],
 )
 async def test_repeated_saves_do_not_duplicate_machine_annotations(
     setup_db_auth, unauthenticated_api_client, created_by
@@ -830,6 +836,33 @@ async def test_repeated_saves_do_not_duplicate_machine_annotations(
     annotations = await get_annotations(client, project_id, sample_id, admin_token)
     assert len(annotations) == 1, f"three saves left {len(annotations)} rows"
     assert annotations[0]["created_by"] == created_by
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "created_by", ["model::spoof", "annotators::spoof", "annotators::manual"]
+)
+async def test_unregistered_machine_author_is_replaced_by_caller(
+    setup_db_auth, unauthenticated_api_client, created_by
+):
+    """A reserved prefix only keeps its author when it names a real model or annotator."""
+    client = unauthenticated_api_client
+    admin_token = get_auth_token("admin")
+    project_id = setup_db_auth["project_id"]
+    sample_id = setup_db_auth["sample_id"]
+
+    await add_member(client, admin_token, project_id, "alice", "annotator")
+    alice_token = get_auth_token("alice")
+
+    resp = await client.put(
+        f"/projects/{project_id}/samples/{sample_id}/annotations",
+        json=machine_payload("spoofed", created_by),
+        headers=session_headers(alice_token),
+    )
+    assert resp.status_code == 200, resp.text
+
+    annotations = await get_annotations(client, project_id, sample_id, admin_token)
+    assert [a["created_by"] for a in annotations] == [setup_db_auth["alice_id"]]
 
 
 @pytest.mark.asyncio
@@ -939,7 +972,7 @@ async def test_annotation_authors_are_named_on_read(
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=annotation_payload("alice_ann")
-        + machine_payload("predicted", "model::disruption_cnn"),
+        + machine_payload("predicted", "annotators::peak_detection"),
         headers=session_headers(alice_token),
     )
     assert resp.status_code == 200, resp.text
@@ -948,7 +981,7 @@ async def test_annotation_authors_are_named_on_read(
     authors = {(a["created_by"], a["created_by_name"]) for a in annotations}
     assert authors == {
         (setup_db_auth["alice_id"], "alice"),
-        ("model::disruption_cnn", "disruption_cnn"),
+        ("annotators::peak_detection", "peak_detection"),
     }
 
 

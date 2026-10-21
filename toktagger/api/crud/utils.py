@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from pydantic import TypeAdapter
 
 from toktagger.api.crud.db import MongoDBClient
+from toktagger.api.models.base import ModelRegistry
 from toktagger.api.schemas import convert_to_objectid
 from toktagger.api.schemas.annotations import (
     RESERVED_CREATED_BY_PREFIXES,
@@ -16,6 +17,7 @@ from toktagger.api.schemas.annotations import (
     AnnotationOutTypeAdapter,
     AnnotationOutTypes,
 )
+from toktagger.api.schemas.annotators import AnnotatorTypes
 from toktagger.api.schemas.auth import ApiTokenOut
 from toktagger.api.schemas.models import Model, ModelIn, ModelUpdate
 from toktagger.api.schemas.projects import (
@@ -378,6 +380,19 @@ async def get_annotations(
     )
 
     return [AnnotationOutTypeAdapter.validate_python(a) for a in annotations]
+
+
+def is_machine_author(created_by: str | None) -> bool:
+    """Whether created_by names a registered model or a built-in annotator."""
+    prefix, _, name = (created_by or "").partition("::")
+    if prefix == "model":
+        return name in ModelRegistry.names()
+    if prefix == "annotators":
+        return (
+            name in {annotator.value for annotator in AnnotatorTypes}
+            and name != AnnotatorTypes.MANUAL_ANNOTATION.value
+        )
+    return False
 
 
 async def add_author_names(
