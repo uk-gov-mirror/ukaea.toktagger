@@ -94,9 +94,15 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="h-full">
-      <div className="w-full min-h-full flex items-start justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 dark:from-gray-700 dark:via-gray-800 dark:to-gray-900 py-6">
-        <div className="w-full md:w-4/5 p-6 bg-white/60 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg backdrop-blur-sm">
+    <View height="100%">
+      <View minHeight="100%" backgroundColor="gray-200" paddingY="size-300">
+        <View
+          width={{ base: "100%", M: "80%" }}
+          marginX="auto"
+          padding="size-300"
+          backgroundColor="gray-50"
+          borderRadius="medium"
+        >
           <Flex
             justifyContent="space-between"
             alignItems="center"
@@ -179,8 +185,8 @@ export default function AdminUsersPage() {
               )}
             </TableBody>
           </TableView>
-        </div>
-      </div>
-    </div>
+        </View>
+      </View>
+    </View>
   );
 }
