@@ -1018,6 +1018,7 @@ export function VideoSessionProvider(props: {
 
   const deleteInstanceOnCurrentFrame = useCallback(
     (className: string, trackId: string) => {
+      if (!canAnnotate) return;
       const cls = (className || "").trim();
       const tid = canonicalizeTrackId(trackId || "");
       if (!cls || !tid) return;
@@ -1039,7 +1040,7 @@ export function VideoSessionProvider(props: {
       );
       removeFrameLabel(cls, tid);
     },
-    [frame, removeFrameLabel, updateByFrame],
+    [frame, removeFrameLabel, updateByFrame, canAnnotate],
   );
 
   /** Deletes the selected instance on every frame. */
