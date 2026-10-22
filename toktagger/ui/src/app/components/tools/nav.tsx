@@ -26,7 +26,6 @@ import {
   BACKEND_API_URL,
   apiFetch,
   getAnnotationsForSample,
-  getMyMemberships,
   ApiError,
   AnnotationConflictError,
   othersHaveUnsavedEdits,
@@ -557,6 +556,8 @@ export function NavigationBar({ project_id, sample_id }: NavigationBarInfo) {
     syncAnnotationsFromServer,
     mergeOthersFromServer,
     canAnnotate,
+    showOthers,
+    setShowOthers,
   } = useSample();
   const { user } = useAuth();
   const navAdapter = useNavAdapter();
@@ -581,28 +582,6 @@ export function NavigationBar({ project_id, sample_id }: NavigationBarInfo) {
       (raw_direction as SortDirection) || "ascending";
     return { column, direction };
   });
-
-  const [showOthers, setShowOthers] = useState(true);
-
-  // Read the preference back from the membership record so the checkbox agrees with the server's filter; no membership row means no filter, same as having it on.
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    getMyMemberships()
-      .then((members) => {
-        if (cancelled) return;
-        const membership = members.find(
-          (candidate) => candidate.project_id === project_id,
-        );
-        setShowOthers(membership?.show_others_annotations ?? true);
-      })
-      .catch(() => {
-        // Leave the default in place - the server is the authority on the filter.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [project_id, user]);
 
   const applyShowOthers = useCallback(
     async (next: boolean) => {
@@ -636,7 +615,7 @@ export function NavigationBar({ project_id, sample_id }: NavigationBarInfo) {
         user?._id,
       );
     },
-    [project_id, sample_id, user, mergeOthersFromServer],
+    [project_id, sample_id, user, mergeOthersFromServer, setShowOthers],
   );
 
   const toggleShowOthers = useCallback(

@@ -583,7 +583,7 @@ def test_viewer_role_survives_sample_navigation(server_setup, admin_token, brows
         "request",
         lambda request: (
             members_requests.append(request.url)
-            if f"/projects/{project_id}/members" in request.url
+            if "/users/me/memberships" in request.url
             else None
         ),
     )

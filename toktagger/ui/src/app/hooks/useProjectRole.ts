@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { getMyMemberships } from "@/app/core";
 import { useAuth } from "@/app/contexts/AuthContext";
 
@@ -16,6 +16,9 @@ export type ProjectRoleInfo = {
   // Global admin, or a project-level admin/annotator - can create, edit and delete
   // annotations and samples. Mirrors the backend's require_project_annotator.
   canAnnotate: boolean;
+  // The membership's show_others_annotations preference; true when there is no membership row, as the server then applies no filter.
+  showOthers: boolean;
+  setShowOthers: Dispatch<SetStateAction<boolean>>;
   loading: boolean;
 };
 
@@ -24,13 +27,15 @@ export function useProjectRole(
 ): ProjectRoleInfo {
   const { user } = useAuth();
   const [role, setRole] = useState<ProjectRole>(null);
+  const [showOthers, setShowOthers] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const isGlobalAdmin = user?.global_role === "admin";
   const unrestricted = !project_id || isGlobalAdmin;
 
+  // Fetched for global admins too, since they still hold a membership row with a show-others preference.
   useEffect(() => {
-    if (unrestricted || !user || !project_id) {
+    if (!user || !project_id) {
       setLoading(false);
       return;
     }
@@ -40,13 +45,15 @@ export function useProjectRole(
     setLoading(true);
     getMyMemberships()
       .then((memberships) => {
-        setRole(
-          memberships.find((m) => m.project_id === project_id)?.role ?? null,
+        const membership = memberships.find(
+          (candidate) => candidate.project_id === project_id,
         );
+        setRole(membership?.role ?? null);
+        setShowOthers(membership?.show_others_annotations ?? true);
       })
       .catch(() => setRole(null)) // fail closed on a real error
       .finally(() => setLoading(false));
-  }, [project_id, user, unrestricted]);
+  }, [project_id, user]);
 
   // No role means no permission, so an unresolved membership is closed rather than
   // open - a viewer would otherwise get a window of enabled Save and Clear controls
@@ -55,6 +62,8 @@ export function useProjectRole(
     role: isGlobalAdmin ? "admin" : role,
     isAdmin: unrestricted || role === "admin",
     canAnnotate: unrestricted || role === "admin" || role === "annotator",
+    showOthers,
+    setShowOthers,
     loading: unrestricted ? false : loading,
   };
 }

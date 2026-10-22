@@ -90,6 +90,9 @@ interface SampleContextType {
   errorStatus: number | null;
   // Sourced here, not per-consumer, so remounts on sample change (see page.tsx) don't reset a local role hook and re-enable gated controls.
   canAnnotate: boolean;
+  // Held here for the same reason as canAnnotate, so the nav bar does not re-fetch the preference on every sample.
+  showOthers: boolean;
+  setShowOthers: React.Dispatch<React.SetStateAction<boolean>>;
   setAnnotations: React.Dispatch<React.SetStateAction<Annotation[]>>;
   setServerAnnotations: React.Dispatch<React.SetStateAction<Annotation[]>>;
   // Replaces the working set with a freshly fetched one, so `serverAnnotations` stays the baseline a save diffs against.
@@ -191,7 +194,7 @@ export function SampleProvider({
   const [data, setData] = useState<Data | null>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [serverAnnotations, setServerAnnotations] = useState<Annotation[]>([]);
-  const { canAnnotate } = useProjectRole(projectId);
+  const { canAnnotate, showOthers, setShowOthers } = useProjectRole(projectId);
 
   const [viewParams, setViewParams] = useState<
     ViewParams | Profile2DViewParams
@@ -536,6 +539,8 @@ export function SampleProvider({
     error,
     errorStatus,
     canAnnotate,
+    showOthers,
+    setShowOthers,
     setAnnotations,
     setServerAnnotations,
     syncAnnotationsFromServer,
