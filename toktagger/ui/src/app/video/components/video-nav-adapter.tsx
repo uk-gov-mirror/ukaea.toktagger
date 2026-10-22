@@ -1,3 +1,7 @@
+/**
+ * Plugs the video view into the shared Save and Clear buttons in the left toolbox.
+ * Clear only clears the current frame.
+ */
 "use client";
 
 import React from "react";

@@ -1,8 +1,33 @@
+from typing import Any
+
+import requests
+
 try:
     from playwright.sync_api import Page, expect
 except ImportError:
     Page = None  # type: ignore[assignment,misc]
     expect = None  # type: ignore[assignment]
+
+
+def save_annotations(
+    page: Page, project_id: str, sample_id: str
+) -> list[dict[str, Any]]:
+    """Click Save and return the annotations the backend now holds for the sample."""
+    # Edits reach the sample's annotations after a 100ms debounce, which Save reads from
+    page.wait_for_timeout(500)
+    with page.expect_response(
+        lambda r: (
+            f"samples/{sample_id}/annotations" in r.url and r.request.method == "PUT"
+        )
+    ) as put_response:
+        page.get_by_role("button", name="Save").click(force=True)
+    assert put_response.value.ok
+
+    response = requests.get(
+        f"http://localhost:8002/projects/{project_id}/samples/{sample_id}/annotations"
+    )
+    assert response.status_code == 200
+    return response.json()
 
 
 def form_check(page: Page, submit_button_name):

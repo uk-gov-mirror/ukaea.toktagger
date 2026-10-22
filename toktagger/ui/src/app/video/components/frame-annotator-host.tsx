@@ -1,6 +1,10 @@
+/**
+ * The canvas: shows the current frame in OpenSeadragon with the Annotorious layer on top.
+ * It handles points and frame labels itself, since Annotorious has no tools for them.
+ */
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import OpenSeadragon from "openseadragon";
 import {
   OpenSeadragonAnnotator,
@@ -38,6 +42,7 @@ import { annotationContainsPoint, setViewerCursor } from "./overlay-sync-utils";
 
 const VIDEO_CANVAS_MENU_ID = "video-canvas-menu";
 
+// Drag pans and scroll zooms, but clicks never zoom, since clicks select and draw
 function setGestureNavigation(
   viewer: OpenSeadragon.Viewer,
   navEnabled: boolean,
@@ -67,6 +72,7 @@ function setGestureNavigation(
   unknown.dblClickToZoom = false;
 }
 
+// The Annotorious drawing layer, found by its class name since Annotorious does not expose it
 function findAnnotationOverlay(viewerElement: HTMLElement | null) {
   if (!viewerElement) return null;
 
@@ -105,12 +111,14 @@ function isAnnotationPopupEventTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('[aria-label="Annotation actions"]'));
 }
 
+// OpenSeadragon's built-in shortcuts: r rotates and f flips the image
 function isBlockedViewModeKey(event: Event | undefined) {
   if (!(event instanceof KeyboardEvent)) return false;
   const key = event.key.toLowerCase();
   return key === "r" || key === "f";
 }
 
+// The topmost shape under the pointer, checking the most recently drawn first
 function findAnnotationAtPointer(
   api: AnnotoriousOpenSeadragonAnnotator,
   event: MouseEvent,
@@ -135,23 +143,12 @@ function findAnnotationAtPointer(
   );
 }
 
-/**
- * Top-level host that provides the Annotorious context and renders the annotator.
- */
+/** Renders the canvas for one frame's base64 image. */
 export function FrameAnnotatorHost(props: { imageBase64: string }) {
   return <Inner imageBase64={props.imageBase64} />;
 }
 
-/**
- * View-only annotator host:
- * - renders the Annotorious OpenSeadragon annotator + popup UI for the current frame
- * - reports the image’s natural size to the session (used for bounds clamping)
- *
- * Note: all Annotorious integration (create/update/delete/selectionChanged),
- * overlay normalization/clamping, and session persistence now live in
- * VideoSessionProvider. This component should not sync overlays or write back
- * to the session store directly.
- */
+/** Syncing with Annotorious lives in the session, so this only renders and passes clicks to the session. */
 function Inner({ imageBase64 }: { imageBase64: string }) {
   const { annotationLabels } = useSample();
   const { setVideoLastClassName } = useVideoUiState();
@@ -235,7 +232,12 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     [imageBase64],
   );
   const viewer = api?.viewer;
+  const savedViewRef = useRef<{
+    bounds: OpenSeadragon.Rect;
+    size: OpenSeadragon.Point;
+  } | null>(null);
 
+  // Report the image size to the session, which uses it to keep shapes inside the image
   useEffect(() => {
     if (!api?.viewer) return;
 
@@ -260,6 +262,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [api, dataUrl, frame, setImageNatural]);
 
+  // Points are fixed-size dots so they stay visible at any zoom. The dot hides while its point is being edited.
   useEffect(() => {
     if (!viewer) return;
 
@@ -313,6 +316,36 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [viewer, byFrame, frame, hideAnnotations, editMode, selectedPointId]);
 
+  // Keep the zoom and pan when moving between frames of the same size
+  useEffect(() => {
+    if (!viewer) return;
+
+    const saveView = (event: OpenSeadragon.RemoveItemWorldEvent) => {
+      savedViewRef.current = {
+        bounds: viewer.viewport.getBounds(),
+        size: event.item.getContentSize(),
+      };
+    };
+
+    const restoreView = (event: OpenSeadragon.AddItemWorldEvent) => {
+      const saved = savedViewRef.current;
+      if (!saved || !saved.size.equals(event.item.getContentSize())) return;
+
+      // Deferred so it lands after the Annotorious wrapper's goHome() in addTiledImage's success callback.
+      queueMicrotask(() =>
+        viewer.viewport.fitBoundsWithConstraints(saved.bounds, true),
+      );
+    };
+
+    viewer.world.addHandler("remove-item", saveView);
+    viewer.world.addHandler("add-item", restoreView);
+
+    return () => {
+      viewer.world.removeHandler("remove-item", saveView);
+      viewer.world.removeHandler("add-item", restoreView);
+    };
+  }, [viewer]);
+
   useEffect(() => {
     if (!api?.viewer) return;
 
@@ -329,6 +362,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [api]);
 
+  // Hide annotations by making the Annotorious layer invisible and letting clicks pass through it
   useEffect(() => {
     if (!api) return;
 
@@ -358,6 +392,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [api, hideAnnotations]);
 
+  // Right-click on empty image space opens the class label menu. Other right and middle clicks are swallowed.
   useEffect(() => {
     if (!api?.viewer) return;
 
@@ -418,6 +453,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [api, classItems.length, hideAnnotations, showCanvasMenu, canAnnotate]);
 
+  // Explain why nothing was drawn when someone Ctrl + clicks without edit mode or a tool
   useEffect(() => {
     if (!api?.viewer || hideAnnotations) return;
 
@@ -449,6 +485,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [api, drawingTool, editMode, hideAnnotations, canAnnotate]);
 
+  // Annotorious always needs a tool set. Drawing itself stays off unless canDrawShape is true.
   const annotoriousDrawingTool = drawingTool
     ? toAnnotoriousDrawingTool(drawingTool)
     : "rectangle";
@@ -462,6 +499,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     setSelection({ className: cls, trackId: null, source: "explicit" });
   };
 
+  // Point tool: Ctrl + click places a point. Listening in the capture phase gets the click before Annotorious.
   useEffect(() => {
     if (!api?.viewer || !canDrawPoint) return;
 
@@ -501,6 +539,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [api, canDrawPoint, createPointAnnotation]);
 
+  // Frame Label tool: Ctrl + click anywhere toggles the selected class's label on this frame
   useEffect(() => {
     if (!api?.viewer || !canTagFrame) return;
 
@@ -534,6 +573,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
     };
   }, [api, canTagFrame, selection.className, toggleFrameLabel]);
 
+  // Cursor: a crosshair while placing points or frame labels, and a pointer over shapes in edit mode
   useEffect(() => {
     if (
       !api?.viewer ||
@@ -594,12 +634,13 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
         url: dataUrl,
       },
       minZoomImageRatio: 0.8,
-      maxZoomPixelRatio: 10,
+      maxZoomPixelRatio: 100,
       visibilityRatio: 0.5,
       constrainDuringPan: true,
       animationTime: 0.3,
       showNavigationControl: false,
       mouseNavEnabled: false,
+      imageSmoothingEnabled: false,
     }),
     [dataUrl],
   );
@@ -609,7 +650,7 @@ function Inner({ imageBase64 }: { imageBase64: string }) {
       ? readPointGeometry(annotation)
       : null;
     if (point) {
-      return `x=${Math.round(point.x)}, y=${Math.round(point.y)}`;
+      return `x=${Math.floor(point.x)}, y=${Math.floor(point.y)}`;
     }
 
     const rect = isRectangleAnno(annotation)
