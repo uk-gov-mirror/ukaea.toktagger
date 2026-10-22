@@ -13,6 +13,7 @@ from playwright.sync_api import Page, expect
 from tests.end_to_end.conftest import login_as
 from tests.endpoints import (
     add_project_member,
+    create_image_samples,
     create_local_samples,
     create_project,
     create_query_strategy_samples,
@@ -20,7 +21,7 @@ from tests.endpoints import (
     create_user,
     session,
 )
-from toktagger.api.schemas.annotations import TimePoint, TimeRegion
+from toktagger.api.schemas.annotations import TimePoint, TimeRegion, VideoBoundingBox
 from toktagger.api.schemas.annotators import AnnotatorTypes
 
 
@@ -222,6 +223,36 @@ def test_timeseries_navigation(data_loader, request, server_setup, page: Page):
 
 #     # Check image displayed
 #     expect(page.get_by_role("img")).to_be_visible()
+
+
+def test_video_annotations_table_shows_author_name(server_setup, page: Page):
+    project_id = create_project("Test Project", "video", "image")
+    sample_id = create_image_samples(
+        project_id,
+        10000,
+        pathlib.Path(__file__).parents[1].joinpath("mast_images"),
+        "png",
+    )[0]
+    box = VideoBoundingBox(
+        label="UFO",
+        created_by="manual",
+        frame=0,
+        track_id="1",
+        x_min=1,
+        y_min=1,
+        width=5,
+        height=5,
+    )
+    response = session.put(
+        f"http://localhost:8002/projects/{project_id}/samples/{sample_id}/annotations",
+        json=[box.model_dump(mode="json")],
+    )
+    assert response.status_code == 200
+
+    page.goto(f"http://localhost:8002/ui/projects/{project_id}/samples/{sample_id}")
+
+    row = page.get_by_role("row").filter(has=page.get_by_role("gridcell", name="UFO"))
+    expect(row.get_by_role("gridcell", name="admin", exact=True)).to_be_visible()
 
 
 @pytest.mark.parametrize("data_loader", ["tabular", "uda"])
