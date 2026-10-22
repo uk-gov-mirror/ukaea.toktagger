@@ -64,7 +64,7 @@ To start a local single-user instance:
 toktagger
 ```
 
-This starts a single-process instance at `http://localhost:8002`. On first launch an `admin` account is created automatically and the credentials are printed to the terminal.
+This starts a single-process instance at `http://localhost:8002`. On the first start, TokTagger creates a local identity provider and prints the user name and the password of the first administrator to the terminal. See [User Management](docs/user_management.md).
 
 ### Options
 
@@ -89,8 +89,13 @@ toktagger --workers 1 --reload
 For server deployments, run with multiple workers and disable the automatic browser launch:
 
 ```sh
-toktagger --workers 4 --host 0.0.0.0 --port 8002 --no-browser
+toktagger --workers 4 --no-browser
 ```
+
+The default host is `localhost`. Only the local machine can connect to it. To let other users on the network connect, add `--host 0.0.0.0`.
+
+> [!WARNING]
+> `--host 0.0.0.0` makes TokTagger available to all devices that can reach the machine on port 8002. The traffic is not encrypted. Use it only on a trusted network. For other deployments, use the `docker-compose.yml` stack, which puts TokTagger behind a TLS proxy.
 
 Or directly via Gunicorn (use `python -m gunicorn` to ensure the correct virtual environment is used):
 
@@ -101,10 +106,6 @@ python -m gunicorn toktagger.api.asgi:app \
     --bind 0.0.0.0:8002
 ```
 
-With Docker Compose, the production stack defaults to 4 workers. Override with the `SERVER_WORKERS` environment variable:
-
-```sh
-SERVER_WORKERS=8 docker compose up
-```
+`docker-compose.yml` is the production stack. It runs TokTagger with Keycloak, MongoDB and a Caddy proxy that handles TLS. See the [Deployment](docs/deployment.md) guide.
 
 See the [User Management](docs/user_management.md) guide for creating accounts, assigning roles, and managing project membership.

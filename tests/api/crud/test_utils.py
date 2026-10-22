@@ -578,17 +578,101 @@ async def test_get_user_by_username_found(db_client, setup_db_auth):
 
 
 @pytest.mark.asyncio
-async def test_get_user_doc_by_username_not_found(db_client):
-    doc = await utils.get_user_doc_by_username(db_client, "nonexistent")
-    assert doc is None
+async def test_get_user_by_oidc_identity_found(db_client, setup_db_auth):
+    user = await utils.get_user_by_oidc_identity(
+        db_client, USER_ADMIN.oidc_issuer, "alice-sub"
+    )
+    assert user is not None
+    assert user.username == "alice"
 
 
 @pytest.mark.asyncio
-async def test_get_user_doc_by_username_found(db_client, setup_db_auth):
-    doc = await utils.get_user_doc_by_username(db_client, "admin")
-    assert doc is not None
-    assert doc["username"] == "admin"
-    assert "hashed_password" in doc
+async def test_get_user_by_oidc_identity_wrong_issuer(db_client, setup_db_auth):
+    user = await utils.get_user_by_oidc_identity(
+        db_client, "https://other.example", "alice-sub"
+    )
+    assert user is None
+
+
+@pytest.mark.asyncio
+async def test_get_user_by_oidc_identity_unknown_sub(db_client, setup_db_auth):
+    user = await utils.get_user_by_oidc_identity(
+        db_client, USER_ADMIN.oidc_issuer, "nobody"
+    )
+    assert user is None
+
+
+@pytest.mark.asyncio
+async def test_create_user(db_client):
+    new_user = UserIn(
+        username="charlie",
+        oidc_issuer="https://idp.example",
+        oidc_sub="charlie-sub",
+        global_role="user",
+    )
+    user_id = await utils.create_user(db_client, new_user)
+    assert user_id is not None
+
+    user = await utils.get_user_by_username(db_client, "charlie")
+    assert user is not None
+    assert user.id == user_id
+
+
+@pytest.mark.asyncio
+async def test_create_user_duplicate_username(db_client):
+    await db_client.insert("users", USER_ADMIN)
+    duplicate = UserIn(
+        username="admin",
+        oidc_issuer="https://idp.example",
+        oidc_sub="someone-else",
+        global_role="user",
+    )
+    with pytest.raises(HTTPException, match="Username already exists"):
+        await utils.create_user(db_client, duplicate)
+
+
+@pytest.mark.asyncio
+async def test_update_user(db_client, setup_db_auth):
+    await utils.update_user(
+        db_client, setup_db_auth["alice_id"], UserUpdate(is_active=False)
+    )
+
+    user = await utils.get_user_by_id(db_client, setup_db_auth["alice_id"])
+    assert user.is_active is False
+    assert user.global_role == "user"
+
+
+@pytest.mark.asyncio
+async def test_update_user_with_no_changes_is_a_no_op(db_client, setup_db_auth):
+    await utils.update_user(db_client, setup_db_auth["alice_id"], UserUpdate())
+
+    user = await utils.get_user_by_id(db_client, setup_db_auth["alice_id"])
+    assert user.is_active is True
+
+
+@pytest.mark.asyncio
+async def test_update_user_not_found(db_client):
+    updates = UserUpdate(is_active=False)
+    with pytest.raises(HTTPException, match="User not found"):
+        await utils.update_user(db_client, str(ObjectId()), updates)
+
+
+@pytest.mark.asyncio
+async def test_sync_user_from_idp_updates_role_and_profile(db_client, setup_db_auth):
+    user = await utils.sync_user_from_idp(
+        db_client, setup_db_auth["alice_id"], "admin", "a@example.com", "Alice A"
+    )
+
+    assert user.global_role == "admin"
+    assert user.email == "a@example.com"
+    assert user.display_name == "Alice A"
+    assert user.username == "alice"
+
+
+@pytest.mark.asyncio
+async def test_sync_user_from_idp_not_found(db_client):
+    with pytest.raises(HTTPException, match="User not found"):
+        await utils.sync_user_from_idp(db_client, str(ObjectId()), "user", None, None)
 
 
 @pytest.mark.asyncio
@@ -611,60 +695,6 @@ async def test_get_all_users(db_client, setup_db_auth):
     assert len(users) == 3
     usernames = {u.username for u in users}
     assert usernames == {"admin", "alice", "bob"}
-
-
-@pytest.mark.asyncio
-async def test_create_user(db_client):
-    new_user = UserIn(
-        username="charlie",
-        hashed_password="charlie_pass",
-        global_role="user",
-    )
-    user_id = await utils.create_user(db_client, new_user)
-    assert user_id is not None
-
-    user = await utils.get_user_by_username(db_client, "charlie")
-    assert user is not None
-    assert user.id == user_id
-
-
-@pytest.mark.asyncio
-async def test_create_user_duplicate_username(db_client):
-    await db_client.insert("users", USER_ADMIN)
-    duplicate = UserIn(
-        username="admin",
-        hashed_password="other_pass",
-        global_role="user",
-    )
-    with pytest.raises(HTTPException, match="Username already exists"):
-        await utils.create_user(db_client, duplicate)
-
-
-@pytest.mark.asyncio
-async def test_update_user(db_client, setup_db_auth):
-    # Record the original hashed password
-    original_doc = await utils.get_user_doc_by_username(db_client, "alice")
-    original_hash = original_doc["hashed_password"]
-
-    # Update both role and password at once
-    updates = UserUpdate(global_role="admin", password="newpassword")
-    await utils.update_user(db_client, setup_db_auth["alice_id"], updates)
-
-    # Check role updated
-    user = await utils.get_user_by_id(db_client, setup_db_auth["alice_id"])
-    assert user.global_role == "admin"
-
-    # Check password was hashed (hash differs from plaintext and from original)
-    new_doc = await utils.get_user_doc_by_username(db_client, "alice")
-    assert new_doc["hashed_password"] != "newpassword"
-    assert new_doc["hashed_password"] != original_hash
-
-
-@pytest.mark.asyncio
-async def test_update_user_not_found(db_client):
-    updates = UserUpdate(global_role="admin")
-    with pytest.raises(HTTPException, match="User not found"):
-        await utils.update_user(db_client, str(ObjectId()), updates)
 
 
 @pytest.mark.asyncio
@@ -833,3 +863,29 @@ async def test_get_user_projects_as_admin(db_client, setup_db_auth, setup_db):
     )
     # setup_db adds 3 projects + setup_db_auth adds 2 more = 5 total
     assert len(projects) == 5
+
+
+@pytest.mark.asyncio
+async def test_store_predictions_trusts_only_server_values(db_client, setup_db):
+    """A worker cannot choose the author, or write outside the samples it was sent."""
+    project_id = setup_db["project_id_1"]
+    sample = await utils.get_sample(db_client, project_id, setup_db["sample_id_1"])
+    predictions = [
+        ANNOTATION_1.model_copy(update={"shot_id": 1, "created_by": "someone-else"}),
+        ANNOTATION_2.model_copy(update={"shot_id": 2}),
+    ]
+
+    await utils.store_predictions(
+        db_client, project_id, "disruption_cnn", [sample], predictions
+    )
+
+    stored = await db_client.get_filtered_documents(
+        "annotations", filters={"created_by": "model::disruption_cnn"}
+    )
+    assert [annotation["shot_id"] for annotation in stored] == [1]
+    assert all(
+        annotation["created_by"] != "someone-else"
+        for annotation in await db_client.get_filtered_documents("annotations")
+    )
+    updated = await utils.get_sample(db_client, project_id, setup_db["sample_id_1"])
+    assert updated.validated_annotations is False

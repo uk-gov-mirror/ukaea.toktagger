@@ -9,7 +9,8 @@ from httpx import ASGITransport, AsyncClient
 
 from tests import db_definitions
 from toktagger.api import config
-from toktagger.api.auth.core import create_access_token, get_internal_token
+from tests.identity import get_auth_token, session_headers
+from toktagger.api.auth.core import get_internal_token
 from toktagger.api.main import RAY_NAMESPACE, Server
 from toktagger.api.schemas.annotations import TimePointBatch
 from toktagger.api.schemas.samples import SampleIn, TimeSeriesFileData
@@ -50,9 +51,8 @@ async def models_api_client(monkeypatch, settings, db_client, ray_session):
     monkeypatch.setenv("API_URL", "http://test")
     monkeypatch.setenv("MAX_GPU_ACTORS", 1)
     monkeypatch.setenv("FORCE_NUM_GPUS", True)
-    # So send_batch_annotations/send_batch_samples (replayed from the test process
-    # in collect_predict_results) authenticate as the internal worker user, matching
-    # what main.py._setup_ray does for real Ray workers in production.
+    # So send_model_updates (replayed from the test process in collect_train_results)
+    # authenticates as the internal worker user, as real Ray workers do in production.
     monkeypatch.setenv("API_TOKEN", get_internal_token())
 
     server._setup_app()
@@ -60,6 +60,7 @@ async def models_api_client(monkeypatch, settings, db_client, ray_session):
     app = server.app
     app.state.db_client = db_client
     app.state.project = None
+    app.state.idp = None
     # This task ID is associated with a model in the db, so that cancelling training test works.
     # Registered as a real (long-running) task ref, since ray.cancel() runs for
     # real inside the TaskRegistry actor - it can't be mocked from this process.
@@ -72,12 +73,11 @@ async def models_api_client(monkeypatch, settings, db_client, ray_session):
     # Auth is always required now — seed the admin user and authenticate as them
     # by default, so existing tests keep behaving as an implicit admin.
     await db_client.insert("users", db_definitions.USER_ADMIN)
-    admin_token = create_access_token({"sub": "admin"})
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers=session_headers(get_auth_token("admin")),
     ) as client:
         client.app = app
         yield client

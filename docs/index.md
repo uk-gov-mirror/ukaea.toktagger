@@ -57,7 +57,7 @@ To start a local single-user instance:
 toktagger
 ```
 
-This starts the application at `http://localhost:8002`. On first launch an `admin` account is created automatically with username `admin` and password `admin1234`, and the credentials are printed to the terminal.
+This starts the application at `http://localhost:8002`. On the first start, TokTagger creates a local identity provider and prints the user name and the password of the first administrator to the terminal, which will only be shown once. Open the application and click **Sign in**.
 
 !!! warning
     **This is an insecure default password.** Change it immediately after first login from the **Profile** page.
@@ -67,8 +67,13 @@ This starts the application at `http://localhost:8002`. On first launch an `admi
 For concurrent multi-user access, run with multiple Gunicorn workers:
 
 ```sh
-toktagger --workers 4 --host 0.0.0.0 --port 8002 --no-browser
+toktagger --workers 4 --no-browser
 ```
+
+The default host is `localhost`. Only the local machine can connect to it. To let other users on the network connect, add `--host 0.0.0.0`.
+
+!!! warning
+    `--host 0.0.0.0` makes TokTagger available to all devices that can reach the machine on port 8002. The traffic is not encrypted. Use it only on a trusted network. For other deployments, use the `docker-compose.yml` stack, which puts TokTagger behind a TLS proxy.
 
 Or directly via Gunicorn:
 

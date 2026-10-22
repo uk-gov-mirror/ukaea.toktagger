@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
 
 from toktagger.api.auth.dependencies import (
-    require_password_changed,
+    get_current_user,
     require_project_admin_role,
     require_project_annotator,
     require_project_viewer,
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/projects/{project_id}/samples",
     tags=["Samples"],
-    dependencies=[Depends(require_password_changed)],
+    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -120,13 +120,12 @@ async def add_samples(
     # Attribute to the caller, as on the import/save routes in routers/annotations.py:
     # the incoming created_by is a client-side placeholder ("manual"), not a real user.
     # Synthetic authorship (model predictions) is preserved so seeding still works.
-    is_internal = current_user.username == "__internal__"
     for annotation_list in all_annotations:
         for annotation in annotation_list or []:
-            if not is_internal and not (annotation.created_by or "").startswith(
+            if not (annotation.created_by or "").startswith(
                 RESERVED_CREATED_BY_PREFIXES
             ):
-                annotation.created_by = current_user.username
+                annotation.created_by = current_user.id
 
     # Insert new samples
     ids = await request.app.state.db_client.insert_many(

@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
 
 from toktagger.api.auth.dependencies import (
-    require_password_changed,
+    get_current_user,
     require_project_admin_role,
     require_project_annotator,
     require_project_viewer,
@@ -21,7 +21,7 @@ from toktagger.api.schemas.users import UserOut
 router = APIRouter(
     prefix="/projects/{project_id}",
     tags=["Annotations"],
-    dependencies=[Depends(require_password_changed)],
+    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -83,7 +83,7 @@ async def get_all_annotations(
 
     created_by = None
     if membership and not membership.show_others_annotations:
-        created_by = current_user.username
+        created_by = current_user.id
 
     annotations = await utils.get_annotations(
         db_client=db_client,
@@ -95,7 +95,7 @@ async def get_all_annotations(
         start=start,
         count=count,
     )
-    return annotations
+    return await utils.add_author_names(db_client, annotations)
 
 
 @router.put(
@@ -120,12 +120,9 @@ async def import_annotations(
     # annotations they import, so authorship is always auditable. Machine authorship
     # is kept as-is, matching the sample-level save, so re-importing an export does
     # not reassign every prediction to whoever imported it.
-    if current_user.username != "__internal__":
-        for annotation in annotations:
-            if not (annotation.created_by or "").startswith(
-                RESERVED_CREATED_BY_PREFIXES
-            ):
-                annotation.created_by = current_user.username
+    for annotation in annotations:
+        if not (annotation.created_by or "").startswith(RESERVED_CREATED_BY_PREFIXES):
+            annotation.created_by = current_user.id
     await utils.import_annotations(db_client, project_id, annotations)
 
 
@@ -183,7 +180,7 @@ async def get_annotations(
     ),
     created_by: str = Query(
         None,
-        description="Whether to only return annotations created by a specific model or by a human.",
+        description="Only return annotations by this author: a user ID, or a model:: or annotators:: value.",
     ),
     current_user: UserOut = Depends(require_project_viewer),
 ) -> list[AnnotationOutTypes]:
@@ -203,7 +200,7 @@ async def get_annotations(
     effective_created_by = created_by
     if membership and not membership.show_others_annotations:
         # Only show the current user's own annotations
-        effective_created_by = current_user.username
+        effective_created_by = current_user.id
 
     annotations = await utils.get_annotations(
         db_client=db_client,
@@ -216,7 +213,7 @@ async def get_annotations(
         start=start,
         count=count,
     )
-    return annotations
+    return await utils.add_author_names(db_client, annotations)
 
 
 @router.put(
@@ -255,7 +252,6 @@ async def update_annotations(
         db_client=db_client, project_id=project_id, sample_id=sample_id
     )
 
-    is_internal = current_user.username == "__internal__"
     # Whose an existing annotation is comes from the database, never from the body -
     # a client claiming someone else's row as its own would otherwise route it into
     # the replace step below and have it re-inserted as a second copy.
@@ -268,9 +264,8 @@ async def update_annotations(
     for annotation in annotations:
         is_other_authors = (
             annotation.id is not None
-            and not is_internal
             and stored_authors.get(annotation.id, annotation.created_by)
-            != current_user.username
+            != current_user.id
         )
         if is_other_authors:
             # The replace step below is scoped to the caller's own created_by, so
@@ -279,15 +274,12 @@ async def update_annotations(
             others_annotations.append(annotation)
             continue
 
-        if not is_internal:
-            # A just-run model prediction or annotator suggestion keeps its synthetic
-            # author; otherwise the server is authoritative for identity.
-            if annotation.id is None and (annotation.created_by or "").startswith(
-                RESERVED_CREATED_BY_PREFIXES
-            ):
-                machine_authors.add(annotation.created_by)
-            else:
-                annotation.created_by = current_user.username
+        # A just-run model prediction or annotator suggestion keeps its synthetic
+        # author; otherwise the server is authoritative for identity.
+        if annotation.id is None and utils.is_machine_author(annotation.created_by):
+            machine_authors.add(annotation.created_by)
+        else:
+            annotation.created_by = current_user.id
 
         annotation.shot_id = sample.shot_id
         owned_annotations.append(annotation)
@@ -319,7 +311,7 @@ async def update_annotations(
         project_id,
         sample_id,
         owned_annotations,
-        created_by={current_user.username, *machine_authors},
+        created_by={current_user.id, *machine_authors},
     )
     result.extend(edited_ids)
 

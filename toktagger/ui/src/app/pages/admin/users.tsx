@@ -15,22 +15,15 @@ import {
   Divider,
   Content,
   ButtonGroup,
-  TextField,
-  Picker,
-  Item,
+  Text,
   ToastQueue,
+  View,
 } from "@adobe/react-spectrum";
-import Edit from "@spectrum-icons/workflow/Edit";
 import Delete from "@spectrum-icons/workflow/Delete";
 import { BACKEND_API_URL, apiFetch, formatApiDetail } from "@/app/core";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useBreadcrumbs } from "@/app/contexts/BreadcrumbContext";
-import {
-  NewPasswordFields,
-  PasswordChangeDialog,
-  validateNewPassword,
-} from "@/app/components/ui/password";
-import { CurrentUserSchema, type CurrentUser } from "@/types";
+import { type CurrentUser } from "@/types";
 
 type UserRow = CurrentUser & { id: string };
 
@@ -101,9 +94,15 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="h-full">
-      <div className="w-full min-h-full flex items-start justify-center bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 dark:from-gray-700 dark:via-gray-800 dark:to-gray-900 py-6">
-        <div className="w-full md:w-4/5 p-6 bg-white/60 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg backdrop-blur-sm">
+    <View height="100%">
+      <View minHeight="100%" backgroundColor="gray-200" paddingY="size-300">
+        <View
+          width={{ base: "100%", M: "80%" }}
+          marginX="auto"
+          padding="size-300"
+          backgroundColor="gray-50"
+          borderRadius="medium"
+        >
           <Flex
             justifyContent="space-between"
             alignItems="center"
@@ -112,9 +111,12 @@ export default function AdminUsersPage() {
             <Heading level={2}>User Management</Heading>
           </Flex>
 
-          <Flex marginBottom="size-200">
-            <CreateUserDialog onCreated={refresh} />
-          </Flex>
+          <View marginBottom="size-150">
+            <Text>
+              Users appear here after their first sign-in. Accounts, passwords
+              and roles are managed in the identity provider.
+            </Text>
+          </View>
 
           <TableView aria-label="Users" selectionMode="none">
             <TableHeader>
@@ -125,7 +127,7 @@ export default function AdminUsersPage() {
               <Column key="is_active" width={100}>
                 Active
               </Column>
-              <Column key="actions" minWidth={380}>
+              <Column key="actions" minWidth={240}>
                 Actions
               </Column>
             </TableHeader>
@@ -137,11 +139,6 @@ export default function AdminUsersPage() {
                   <Cell>{item.is_active ? "Yes" : "No"}</Cell>
                   <Cell>
                     <Flex gap="size-100">
-                      <ChangeRoleDialog
-                        user={item}
-                        onChanged={refresh}
-                        isSelf={item.id === currentUser?._id}
-                      />
                       <DialogTrigger>
                         <Button
                           aria-label="Delete"
@@ -172,15 +169,6 @@ export default function AdminUsersPage() {
                           </Dialog>
                         )}
                       </DialogTrigger>
-                      <PasswordChangeDialog
-                        userId={item.id}
-                        triggerLabel="Reset Password"
-                        confirmLabel="Reset"
-                        heading={`Reset password for ${item.username}`}
-                        forceChangeOnNextLogin
-                        successMessage={`Password reset for ${item.username}`}
-                        helperText={`${item.username} will be required to change this password on their next login. Communicate it to them securely.`}
-                      />
                       <Button
                         variant="secondary"
                         isDisabled={item.id === currentUser?._id}
@@ -197,171 +185,8 @@ export default function AdminUsersPage() {
               )}
             </TableBody>
           </TableView>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "user">("user");
-
-  const submit = async (close: () => void) => {
-    const validationError = validateNewPassword(password, confirmPassword);
-    if (validationError) {
-      ToastQueue.negative(validationError, { timeout: 2000 });
-      return;
-    }
-    try {
-      const res = await apiFetch(`${BACKEND_API_URL}/users`, {
-        method: "POST",
-        body: JSON.stringify({ username, password, global_role: role }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(formatApiDetail(d, "Failed to create user"));
-      }
-      setUsername("");
-      setPassword("");
-      setConfirmPassword("");
-      setRole("user");
-      close();
-      onCreated();
-      ToastQueue.positive("User created", { timeout: 2000 });
-    } catch (e) {
-      ToastQueue.negative(e instanceof Error ? e.message : "Error", {
-        timeout: 2000,
-      });
-    }
-  };
-
-  return (
-    <DialogTrigger>
-      <Button variant="cta">Add User</Button>
-      {(close) => (
-        <Dialog>
-          <Heading>Create User</Heading>
-          <Divider />
-          <Content>
-            <Flex direction="column" gap="size-100">
-              <TextField
-                label="Username"
-                value={username}
-                onChange={setUsername}
-                isRequired
-                width="100%"
-              />
-              <NewPasswordFields
-                password={password}
-                confirmPassword={confirmPassword}
-                onPasswordChange={setPassword}
-                onConfirmPasswordChange={setConfirmPassword}
-                passwordLabel="Password"
-                confirmLabel="Confirm password"
-              />
-              <Picker
-                label="Role"
-                width="100%"
-                selectedKey={role}
-                onSelectionChange={(k) => {
-                  const parsed =
-                    CurrentUserSchema.shape.global_role.safeParse(k);
-                  if (parsed.success) {
-                    setRole(parsed.data);
-                  }
-                }}
-              >
-                <Item key="user">User</Item>
-                <Item key="admin">Admin</Item>
-              </Picker>
-            </Flex>
-          </Content>
-          <ButtonGroup>
-            <Button variant="secondary" onPress={close}>
-              Cancel
-            </Button>
-            <Button
-              variant="cta"
-              isDisabled={!username || !password || !confirmPassword}
-              onPress={() => submit(close)}
-            >
-              Create
-            </Button>
-          </ButtonGroup>
-        </Dialog>
-      )}
-    </DialogTrigger>
-  );
-}
-
-function ChangeRoleDialog({
-  user,
-  onChanged,
-  isSelf,
-}: {
-  user: UserRow;
-  onChanged: () => void;
-  isSelf: boolean;
-}) {
-  const [role, setRole] = useState<"admin" | "user">(user.global_role);
-
-  const save = async (close: () => void) => {
-    try {
-      const res = await apiFetch(`${BACKEND_API_URL}/users/${user.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ global_role: role }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(formatApiDetail(d, "Failed to update role"));
-      }
-      close();
-      onChanged();
-      ToastQueue.positive("Role updated", { timeout: 2000 });
-    } catch (e) {
-      ToastQueue.negative(e instanceof Error ? e.message : "Error", {
-        timeout: 2000,
-      });
-    }
-  };
-
-  return (
-    <DialogTrigger>
-      <Button aria-label="Edit" variant="accent" isDisabled={isSelf}>
-        <Edit />
-      </Button>
-      {(close) => (
-        <Dialog>
-          <Heading>Edit {user.username}</Heading>
-          <Divider />
-          <Content>
-            <Picker
-              label="Global Role"
-              selectedKey={role}
-              onSelectionChange={(k) => {
-                const parsed = CurrentUserSchema.shape.global_role.safeParse(k);
-                if (parsed.success) {
-                  setRole(parsed.data);
-                }
-              }}
-            >
-              <Item key="user">User</Item>
-              <Item key="admin">Admin</Item>
-            </Picker>
-          </Content>
-          <ButtonGroup>
-            <Button variant="secondary" onPress={close}>
-              Cancel
-            </Button>
-            <Button variant="cta" onPress={() => save(close)}>
-              Save
-            </Button>
-          </ButtonGroup>
-        </Dialog>
-      )}
-    </DialogTrigger>
+        </View>
+      </View>
+    </View>
   );
 }
