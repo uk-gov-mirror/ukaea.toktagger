@@ -22,6 +22,7 @@ import pytest
 from httpx import AsyncClient
 
 from tests.api.auth.conftest import add_member
+from tests.db_definitions import USER_ADMIN_ID, USER_ALICE_ID, USER_BOB_ID
 from tests.identity import get_auth_token, session_headers
 
 Role = typing.Literal[
@@ -55,12 +56,12 @@ async def _get_role_token(
     if role == "global_admin":
         return admin_token
     if role == "non_member":
-        return get_auth_token("bob")
+        return get_auth_token(USER_BOB_ID)
     if role in ("viewer", "annotator"):
         await add_member(client, admin_token, project_id, "alice", role)
     else:
         await add_member(client, admin_token, project_id, "alice", "admin")
-    return get_auth_token("alice")
+    return get_auth_token(USER_ALICE_ID)
 
 
 def _status(expected):
@@ -330,7 +331,7 @@ async def test_permission_matrix(
     setup_db_auth, unauthenticated_api_client, action_name, role
 ):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
     action = ACTIONS[action_name]

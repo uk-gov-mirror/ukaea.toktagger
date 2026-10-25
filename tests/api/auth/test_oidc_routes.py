@@ -17,6 +17,7 @@ from tests.api.auth.conftest import (
 )
 from toktagger.api import config
 from toktagger.api.auth import oidc
+from tests.db_definitions import USER_ADMIN_ID
 from tests.identity import get_auth_token
 from toktagger.api.auth.core import get_internal_token
 from toktagger.api.auth.cookies import CSRF_COOKIE_NAME
@@ -463,7 +464,7 @@ async def test_toktagger_session_token_is_401_as_a_bearer_with_an_idp(
     unauthenticated_api_client, setup_db_auth, oidc_settings, jwks_route
 ):
     resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {get_auth_token('admin')}"}
+        "/auth/me", headers={"Authorization": f"Bearer {get_auth_token(USER_ADMIN_ID)}"}
     )
 
     assert resp.status_code == 401

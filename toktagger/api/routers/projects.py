@@ -219,4 +219,8 @@ async def remove_project_member(
     user_id: str = Path(...),
     current_user: UserOut = Depends(require_project_admin_role),
 ):
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=422, detail="You cannot remove yourself from a project"
+        )
     await utils.remove_project_member(request.app.state.db_client, project_id, user_id)

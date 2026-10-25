@@ -26,6 +26,7 @@ import UserGroup from "@spectrum-icons/workflow/UserGroup";
 import Delete from "@spectrum-icons/workflow/Delete";
 import { z } from "zod/v4";
 import { BACKEND_API_URL, apiFetch } from "@/app/core";
+import { useAuth } from "@/app/contexts/AuthContext";
 import {
   ProjectMemberSchema,
   ProjectMemberOutSchema,
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export function ProjectMembersDialog({ projectId, isProjectAdmin }: Props) {
+  const { user: currentUser } = useAuth();
   const [members, setMembers] = useState<ProjectMemberOut[]>([]);
 
   const refresh = useCallback(async () => {
@@ -154,6 +156,7 @@ export function ProjectMembersDialog({ projectId, isProjectAdmin }: Props) {
                         <Button
                           variant="negative"
                           aria-label="Remove member"
+                          isDisabled={item.user_id === currentUser?._id}
                           onPress={() => removeMember(item.user_id)}
                         >
                           <Delete />

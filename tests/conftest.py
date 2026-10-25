@@ -13,6 +13,7 @@ from bson.objectid import ObjectId
 from httpx import ASGITransport, AsyncClient
 
 from tests import db_definitions, endpoints
+from tests.db_definitions import USER_ADMIN_ID
 from tests.identity import get_auth_token, session_cookies, session_headers
 from toktagger.api import config
 from toktagger.api.auth.canaille import ManagedCanaille, managed_idp
@@ -159,8 +160,14 @@ async def unauthenticated_api_client(tmp_path, monkeypatch, db_client):
 @pytest_asyncio.fixture(scope="function")
 async def api_client(unauthenticated_api_client, db_client):
     # Auth is always required now — seed the admin user and authenticate as them
-    await db_client.insert("users", db_definitions.USER_ADMIN)
-    unauthenticated_api_client.headers.update(session_headers(get_auth_token("admin")))
+    await db_client.insert(
+        "users",
+        db_definitions.USER_ADMIN,
+        ids={"_id": ObjectId(db_definitions.USER_ADMIN_ID)},
+    )
+    unauthenticated_api_client.headers.update(
+        session_headers(get_auth_token(USER_ADMIN_ID))
+    )
     yield unauthenticated_api_client
 
 
@@ -262,9 +269,21 @@ async def setup_db_small(db_client):
 
 @pytest_asyncio.fixture(scope="function")
 async def setup_db_auth(db_client):
-    admin_id = await db_client.insert("users", db_definitions.USER_ADMIN)
-    alice_id = await db_client.insert("users", db_definitions.USER_ALICE)
-    bob_id = await db_client.insert("users", db_definitions.USER_BOB)
+    admin_id = await db_client.insert(
+        "users",
+        db_definitions.USER_ADMIN,
+        ids={"_id": ObjectId(db_definitions.USER_ADMIN_ID)},
+    )
+    alice_id = await db_client.insert(
+        "users",
+        db_definitions.USER_ALICE,
+        ids={"_id": ObjectId(db_definitions.USER_ALICE_ID)},
+    )
+    bob_id = await db_client.insert(
+        "users",
+        db_definitions.USER_BOB,
+        ids={"_id": ObjectId(db_definitions.USER_BOB_ID)},
+    )
 
     # Create two projects and add admin as user
     project_ids = []

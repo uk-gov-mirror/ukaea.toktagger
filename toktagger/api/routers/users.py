@@ -130,7 +130,7 @@ async def update_user(
             )
         await utils.update_user(db_client, user_id, body)
     target = next(u for u in all_users if u.id == user_id)
-    await sessions.end_user_sessions(db_client, target.username)
+    await sessions.end_user_sessions(db_client, target.id)
 
 
 @router.delete("/{user_id}")
@@ -162,4 +162,4 @@ async def delete_user(
             "api_tokens", {"user_id": convert_to_objectid(user_id, "users")}
         )
     if target:
-        await sessions.end_user_sessions(db_client, target.username)
+        await sessions.end_user_sessions(db_client, target.id)

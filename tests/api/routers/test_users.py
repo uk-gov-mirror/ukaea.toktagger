@@ -6,13 +6,14 @@ import pytest
 
 from toktagger.api.auth import sessions
 from tests.api.auth.conftest import add_member
+from tests.db_definitions import USER_ADMIN_ID, USER_ALICE_ID, USER_BOB_ID
 from tests.identity import get_auth_token, session_headers
 
 
 @pytest.mark.asyncio
 async def test_list_users_as_admin(unauthenticated_api_client, setup_db_auth):
     client = unauthenticated_api_client
-    token = get_auth_token("admin")
+    token = get_auth_token(USER_ADMIN_ID)
     response = await client.get("/users", headers=session_headers(token))
     assert response.status_code == 200
     users = response.json()
@@ -27,7 +28,7 @@ async def test_list_users_non_admin_forbidden(
     unauthenticated_api_client, setup_db_auth
 ):
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     response = await client.get("/users", headers=session_headers(token))
     assert response.status_code == 403
 
@@ -35,7 +36,7 @@ async def test_list_users_non_admin_forbidden(
 @pytest.mark.asyncio
 async def test_get_user_by_id_self(unauthenticated_api_client, setup_db_auth):
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     alice_id = setup_db_auth["alice_id"]
     response = await client.get(
         f"/users/{alice_id}",
@@ -50,7 +51,7 @@ async def test_get_other_user_as_non_admin_forbidden(
     unauthenticated_api_client, setup_db_auth
 ):
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     bob_id = setup_db_auth["bob_id"]
     response = await client.get(
         f"/users/{bob_id}",
@@ -67,7 +68,7 @@ async def test_user_cannot_self_promote_global_role(
     global_role — self-edit bypasses the "editing someone else" check, so
     this has to be enforced separately or any user could self-promote."""
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     alice_id = setup_db_auth["alice_id"]
     response = await client.put(
         f"/users/{alice_id}",
@@ -87,7 +88,7 @@ async def test_user_cannot_self_reactivate_via_is_active(
     """Same guard, is_active side: a non-admin must not be able to flip their
     own is_active flag either."""
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     alice_id = setup_db_auth["alice_id"]
     response = await client.put(
         f"/users/{alice_id}",
@@ -102,7 +103,7 @@ async def test_delete_user_as_non_admin_forbidden(
     unauthenticated_api_client, setup_db_auth
 ):
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     bob_id = setup_db_auth["bob_id"]
     response = await client.delete(
         f"/users/{bob_id}",
@@ -118,7 +119,7 @@ async def test_delete_own_user_as_non_admin_forbidden(
     """Delete requires global admin unconditionally — there's no self-service
     exception the way update_user has (current_user.id == user_id)."""
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     alice_id = setup_db_auth["alice_id"]
     response = await client.delete(
         f"/users/{alice_id}",
@@ -134,8 +135,8 @@ async def _make_admin(db_client, username: str) -> None:
     )
 
 
-def _as_user(username: str) -> dict[str, str]:
-    return session_headers(get_auth_token(username))
+def _as_user(user_id: str) -> dict[str, str]:
+    return session_headers(get_auth_token(user_id))
 
 
 @pytest.mark.asyncio
@@ -146,7 +147,7 @@ async def test_users_cannot_be_created_through_the_api(
     response = await unauthenticated_api_client.post(
         "/users",
         json={"username": "newuser", "global_role": "admin"},
-        headers=_as_user("admin"),
+        headers=_as_user(USER_ADMIN_ID),
     )
 
     assert not response.is_success
@@ -163,7 +164,7 @@ async def test_update_other_user_as_non_admin_forbidden(
     response = await unauthenticated_api_client.put(
         f"/users/{setup_db_auth['bob_id']}",
         json={"is_active": False},
-        headers=_as_user("alice"),
+        headers=_as_user(USER_ALICE_ID),
     )
     assert response.status_code == 403
 
@@ -177,11 +178,13 @@ async def test_update_user_ignores_global_role(
     bob_id = setup_db_auth["bob_id"]
 
     response = await client.put(
-        f"/users/{bob_id}", json={"global_role": "admin"}, headers=_as_user("admin")
+        f"/users/{bob_id}",
+        json={"global_role": "admin"},
+        headers=_as_user(USER_ADMIN_ID),
     )
 
     assert response.status_code == 200
-    get_resp = await client.get(f"/users/{bob_id}", headers=_as_user("admin"))
+    get_resp = await client.get(f"/users/{bob_id}", headers=_as_user(USER_ADMIN_ID))
     assert get_resp.json()["global_role"] == "user"
 
 
@@ -193,19 +196,19 @@ async def test_admin_can_deactivate_and_reactivate_another_user(
     bob_id = setup_db_auth["bob_id"]
 
     response = await client.put(
-        f"/users/{bob_id}", json={"is_active": False}, headers=_as_user("admin")
+        f"/users/{bob_id}", json={"is_active": False}, headers=_as_user(USER_ADMIN_ID)
     )
     assert response.status_code == 200
-    get_resp = await client.get(f"/users/{bob_id}", headers=_as_user("admin"))
+    get_resp = await client.get(f"/users/{bob_id}", headers=_as_user(USER_ADMIN_ID))
     assert get_resp.json()["is_active"] is False
-    me_resp = await client.get("/auth/me", headers=_as_user("bob"))
+    me_resp = await client.get("/auth/me", headers=_as_user(USER_BOB_ID))
     assert me_resp.status_code == 401
 
     response = await client.put(
-        f"/users/{bob_id}", json={"is_active": True}, headers=_as_user("admin")
+        f"/users/{bob_id}", json={"is_active": True}, headers=_as_user(USER_ADMIN_ID)
     )
     assert response.status_code == 200
-    me_resp = await client.get("/auth/me", headers=_as_user("bob"))
+    me_resp = await client.get("/auth/me", headers=_as_user(USER_BOB_ID))
     assert me_resp.status_code == 200
 
 
@@ -216,7 +219,7 @@ async def test_update_user_with_an_empty_body_changes_nothing(
     bob_id = setup_db_auth["bob_id"]
 
     response = await unauthenticated_api_client.put(
-        f"/users/{bob_id}", json={}, headers=_as_user("admin")
+        f"/users/{bob_id}", json={}, headers=_as_user(USER_ADMIN_ID)
     )
 
     assert response.status_code == 200
@@ -227,7 +230,7 @@ async def test_update_unknown_user_is_404(unauthenticated_api_client, setup_db_a
     response = await unauthenticated_api_client.put(
         "/users/000000000000000000000099",
         json={"is_active": False},
-        headers=_as_user("admin"),
+        headers=_as_user(USER_ADMIN_ID),
     )
     assert response.status_code == 404
 
@@ -237,11 +240,11 @@ async def test_delete_user_as_admin(unauthenticated_api_client, setup_db_auth):
     client = unauthenticated_api_client
 
     response = await client.delete(
-        f"/users/{setup_db_auth['bob_id']}", headers=_as_user("admin")
+        f"/users/{setup_db_auth['bob_id']}", headers=_as_user(USER_ADMIN_ID)
     )
 
     assert response.status_code == 200
-    me_resp = await client.get("/auth/me", headers=_as_user("bob"))
+    me_resp = await client.get("/auth/me", headers=_as_user(USER_BOB_ID))
     assert me_resp.status_code == 401
 
 
@@ -258,11 +261,11 @@ async def test_admin_cannot_deactivate_self_even_with_another_admin(
     await _make_admin(db_client, "alice")
 
     response = await client.put(
-        f"/users/{admin_id}", json={"is_active": False}, headers=_as_user("admin")
+        f"/users/{admin_id}", json={"is_active": False}, headers=_as_user(USER_ADMIN_ID)
     )
 
     assert response.status_code == 422
-    get_resp = await client.get(f"/users/{admin_id}", headers=_as_user("admin"))
+    get_resp = await client.get(f"/users/{admin_id}", headers=_as_user(USER_ADMIN_ID))
     assert get_resp.json()["is_active"] is True
 
 
@@ -275,11 +278,11 @@ async def test_admin_can_be_deactivated_by_a_different_admin(
     await _make_admin(db_client, "alice")
 
     response = await client.put(
-        f"/users/{admin_id}", json={"is_active": False}, headers=_as_user("alice")
+        f"/users/{admin_id}", json={"is_active": False}, headers=_as_user(USER_ALICE_ID)
     )
 
     assert response.status_code == 200
-    get_resp = await client.get(f"/users/{admin_id}", headers=_as_user("alice"))
+    get_resp = await client.get(f"/users/{admin_id}", headers=_as_user(USER_ALICE_ID))
     assert get_resp.json()["is_active"] is False
 
 
@@ -291,11 +294,13 @@ async def test_admin_cannot_delete_own_user_as_last_admin(
     client = unauthenticated_api_client
 
     response = await client.delete(
-        f"/users/{setup_db_auth['admin_id']}", headers=_as_user("admin")
+        f"/users/{setup_db_auth['admin_id']}", headers=_as_user(USER_ADMIN_ID)
     )
 
     assert response.status_code == 422
-    assert (await client.get("/auth/me", headers=_as_user("admin"))).status_code == 200
+    assert (
+        await client.get("/auth/me", headers=_as_user(USER_ADMIN_ID))
+    ).status_code == 200
 
 
 @pytest.mark.asyncio
@@ -306,11 +311,13 @@ async def test_admin_can_delete_own_user_when_another_admin_remains(
     await _make_admin(db_client, "alice")
 
     response = await client.delete(
-        f"/users/{setup_db_auth['admin_id']}", headers=_as_user("admin")
+        f"/users/{setup_db_auth['admin_id']}", headers=_as_user(USER_ADMIN_ID)
     )
 
     assert response.status_code == 200
-    assert (await client.get("/auth/me", headers=_as_user("admin"))).status_code == 401
+    assert (
+        await client.get("/auth/me", headers=_as_user(USER_ADMIN_ID))
+    ).status_code == 401
 
 
 @pytest.mark.asyncio
@@ -324,12 +331,12 @@ async def test_concurrent_mutual_deactivation_keeps_an_admin(
         client.put(
             f"/users/{setup_db_auth['alice_id']}",
             json={"is_active": False},
-            headers=_as_user("admin"),
+            headers=_as_user(USER_ADMIN_ID),
         ),
         client.put(
             f"/users/{setup_db_auth['admin_id']}",
             json={"is_active": False},
-            headers=_as_user("alice"),
+            headers=_as_user(USER_ALICE_ID),
         ),
     )
 
@@ -344,7 +351,7 @@ async def test_concurrent_mutual_deactivation_keeps_an_admin(
 @pytest.mark.asyncio
 async def test_add_and_list_project_members(setup_db_auth, unauthenticated_api_client):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     # Add alice as annotator (uses username, not user_id)
@@ -372,7 +379,7 @@ async def test_add_member_non_admin_forbidden(
 ):
     client = unauthenticated_api_client
     project_id = setup_db_auth["project_id"]
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await client.post(
         f"/projects/{project_id}/members",
@@ -387,9 +394,9 @@ async def test_update_member_show_others_annotations(
     setup_db_auth, unauthenticated_api_client
 ):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     # Add alice as annotator (uses username, not user_id)
     await client.post(
@@ -418,7 +425,7 @@ async def test_update_member_show_others_annotations(
 @pytest.mark.asyncio
 async def test_remove_project_member(setup_db_auth, unauthenticated_api_client):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     await client.post(
@@ -442,6 +449,20 @@ async def test_remove_project_member(setup_db_auth, unauthenticated_api_client):
 
 
 @pytest.mark.asyncio
+async def test_project_admin_cannot_remove_themselves(
+    setup_db_auth, unauthenticated_api_client
+):
+    project_id = setup_db_auth["project_id"]
+
+    resp = await unauthenticated_api_client.delete(
+        f"/projects/{project_id}/members/{USER_ADMIN_ID}",
+        headers=_as_user(USER_ADMIN_ID),
+    )
+
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["viewer", "annotator"])
 async def test_member_cannot_self_promote_project_role(
     setup_db_auth, unauthenticated_api_client, role
@@ -453,12 +474,12 @@ async def test_member_cannot_self_promote_project_role(
     own membership and becomes a project admin.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     alice_id = setup_db_auth["alice_id"]
 
     await add_member(client, admin_token, project_id, "alice", role)
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await client.put(
         f"/projects/{project_id}/members/{alice_id}",
@@ -482,11 +503,11 @@ async def test_project_admin_can_manage_members_without_global_admin(
 ):
     """A project admin whose global_role is only "user" can still manage members."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     await add_member(client, admin_token, project_id, "alice", "admin")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     # alice is a project admin but a plain global user
     me_resp = await client.get("/auth/me", headers=session_headers(alice_token))
@@ -521,12 +542,12 @@ async def test_list_my_memberships_is_self_scoped(
 ):
     """/users/me/memberships reports only the caller's own memberships."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     await add_member(client, admin_token, project_id, "alice", "viewer")
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     alice_resp = await client.get(
         "/users/me/memberships", headers=session_headers(alice_token)
@@ -549,9 +570,9 @@ async def test_list_my_memberships_is_self_scoped(
     assert (await client.get("/users/me/memberships")).status_code == 401
 
 
-async def _session_usernames(db_client) -> set[str]:
+async def _session_user_ids(db_client) -> set[str]:
     documents = await db_client.db["sessions"].find({}).to_list()
-    return {document["username"] for document in documents}
+    return {document["user_id"] for document in documents}
 
 
 @pytest.mark.asyncio
@@ -564,15 +585,19 @@ async def test_deactivating_or_deleting_a_user_ends_their_sessions(
 ):
     for username in ("alice", "bob"):
         await sessions.start_session(
-            db_client, username, "issuer", f"{username}-sub", {"refresh_token": "r"}
+            db_client,
+            setup_db_auth[f"{username}_id"],
+            "issuer",
+            f"{username}-sub",
+            {"refresh_token": "r"},
         )
 
     response = await unauthenticated_api_client.request(
         method,
         f"/users/{setup_db_auth['bob_id']}",
         json=body,
-        headers=_as_user("admin"),
+        headers=_as_user(USER_ADMIN_ID),
     )
 
     assert response.status_code == 200
-    assert await _session_usernames(db_client) == {"alice"}
+    assert await _session_user_ids(db_client) == {USER_ALICE_ID}

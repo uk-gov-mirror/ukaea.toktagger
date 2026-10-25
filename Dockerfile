@@ -24,6 +24,13 @@ RUN pip install --no-cache-dir uv && \
 CMD ["bash"]
 
 FROM python:3.12-slim AS production
+ARG EXTRAS=""
+# OpenCV, pulled in by ultralytics, needs these shared libraries at import time.
+RUN if [ "$EXTRAS" = "models" ]; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
     SERVER_HOST=0.0.0.0 \

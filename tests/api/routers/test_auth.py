@@ -2,6 +2,7 @@
 
 import pytest
 
+from tests.db_definitions import USER_ADMIN_ID, USER_ALICE_ID
 from tests.identity import get_auth_token, session_headers
 
 
@@ -11,8 +12,8 @@ async def test_inactive_user_session_is_rejected(
 ):
     """Deactivated users lose access even with a valid token."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
-    alice_token = get_auth_token("alice")
+    admin_token = get_auth_token(USER_ADMIN_ID)
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     await client.put(
         f"/users/{setup_db_auth['alice_id']}",
@@ -27,7 +28,7 @@ async def test_inactive_user_session_is_rejected(
 @pytest.mark.asyncio
 async def test_get_me_returns_current_user(unauthenticated_api_client, setup_db_auth):
     client = unauthenticated_api_client
-    token = get_auth_token("alice")
+    token = get_auth_token(USER_ALICE_ID)
     response = await client.get(
         "/auth/me",
         headers=session_headers(token),
@@ -44,7 +45,7 @@ async def test_get_me_returns_current_user(unauthenticated_api_client, setup_db_
 @pytest.mark.asyncio
 async def test_get_me_admin_role(unauthenticated_api_client, setup_db_auth):
     client = unauthenticated_api_client
-    token = get_auth_token("admin")
+    token = get_auth_token(USER_ADMIN_ID)
     response = await client.get(
         "/auth/me",
         headers=session_headers(token),

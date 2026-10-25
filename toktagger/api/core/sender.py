@@ -8,29 +8,6 @@ from toktagger.api.schemas.models import ModelUpdate
 REQUEST_TIMEOUT_SECONDS = 60
 
 
-def send_updates(url: str, updates: ModelUpdate) -> requests.Response:
-    """Send a model update from a worker node to a provided URL.
-
-    Parameters
-    ----------
-    url : str
-        The URL to send the update to
-    updates : ModelUpdate
-        Updates to be sent to the server - parameters which are unset or None will be ignored
-    """
-    headers = {}
-    # Internal token injected by the server; only the model status route accepts it.
-    if api_token := os.environ.get("API_TOKEN"):
-        headers["Authorization"] = f"Bearer {api_token}"
-
-    return requests.put(
-        url=url,
-        json=updates.model_dump(mode="json"),
-        headers=headers,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
-
-
 def send_model_updates(
     project_id: str, model_id: str, updates: ModelUpdate
 ) -> requests.Response | None:
@@ -45,7 +22,18 @@ def send_model_updates(
     updates : ModelUpdate
         Updates about the model to be sent - parameters which are unset or None will be ignored
     """
-    if api_url := os.environ.get("API_URL"):
-        url = f"{api_url}/projects/{project_id}/models/{model_id}"
+    api_url = os.environ.get("API_URL")
+    if not api_url:
+        return None
 
-        return send_updates(url, updates)
+    headers = {}
+    # Internal token injected by the server; only the model status route accepts it.
+    if api_token := os.environ.get("API_TOKEN"):
+        headers["Authorization"] = f"Bearer {api_token}"
+
+    return requests.put(
+        url=f"{api_url}/projects/{project_id}/models/{model_id}",
+        json=updates.model_dump(mode="json"),
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )

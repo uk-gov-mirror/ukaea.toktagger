@@ -13,6 +13,7 @@ Tests for model × auth interactions:
 import pytest
 
 from tests.api.auth.conftest import ISSUER
+from tests.db_definitions import USER_ADMIN_ID, USER_ALICE_ID
 from tests.identity import get_auth_token, session_headers
 from toktagger.api.auth import oidc
 from toktagger.api.auth.core import get_internal_token
@@ -88,7 +89,7 @@ async def test_non_member_cannot_update_model_status(
     resp = await unauthenticated_api_client.put(
         model_status_url,
         json={"progress": 50},
-        headers=session_headers(get_auth_token("alice")),
+        headers=session_headers(get_auth_token(USER_ALICE_ID)),
     )
 
     assert resp.status_code == 403, resp.text
@@ -116,7 +117,7 @@ async def test_import_non_admin_created_by_overwritten(
 ):
     """An annotator importing with a spoofed created_by should have it replaced."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     await client.post(
@@ -124,7 +125,7 @@ async def test_import_non_admin_created_by_overwritten(
         json={"username": "alice", "role": "annotator"},
         headers=session_headers(admin_token),
     )
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await client.put(
         f"/projects/{project_id}/annotations",
@@ -151,7 +152,7 @@ async def test_import_admin_is_attributed_as_self(
     """A global admin importing annotations is recorded as the author; a
     supplied created_by is ignored so authorship stays auditable."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     resp = await client.put(
@@ -221,7 +222,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
     """
     prefixed_created_by = f"{prefix}{matching_name}"
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
@@ -248,7 +249,7 @@ async def test_user_save_does_not_corrupt_prefixed_predictions(
         json={"username": matching_name, "role": "annotator"},
         headers=session_headers(admin_token),
     )
-    human_token = get_auth_token(matching_name)
+    human_token = get_auth_token(human_id)
     save_resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=[
@@ -286,7 +287,7 @@ async def test_import_preserves_machine_created_by(
     Matches the sample-level save, which already exempts the reserved prefixes.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     await client.post(
@@ -294,7 +295,7 @@ async def test_import_preserves_machine_created_by(
         json={"username": "alice", "role": "annotator"},
         headers=session_headers(admin_token),
     )
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await client.put(
         f"/projects/{project_id}/annotations",

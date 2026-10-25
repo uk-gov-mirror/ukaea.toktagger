@@ -160,6 +160,9 @@ class MongoDBClient:
     ) -> AsyncIterator[None]:
         """Hold a lock shared by every API worker using this database.
 
+        Use it around a read, a check and a write that another worker must not
+        interleave, such as a uniqueness or last-admin check. A single write needs none.
+
         A lock left behind by a crashed worker is taken over once `ttl` seconds pass.
         Raises LockTimeoutError if the lock is not free within `timeout` seconds.
         """

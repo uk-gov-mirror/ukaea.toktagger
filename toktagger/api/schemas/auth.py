@@ -1,7 +1,16 @@
 from datetime import datetime
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+EncryptedStr = Annotated[
+    str,
+    Field(
+        pattern=r"^gAAAAA[A-Za-z0-9_-]+=*$",
+        description="Fernet ciphertext from encrypt_secret, never the plain value.",
+    ),
+]
 
 
 class LogoutResponse(BaseModel):
@@ -14,17 +23,17 @@ class ApiTokenCreate(BaseModel):
 
 
 class Session(BaseModel):
-    username: str
+    user_id: str
     issuer: str
     sub: str
-    refresh_token: str
-    id_token: str | None = None
+    refresh_token: EncryptedStr
+    id_token: EncryptedStr | None = None
     refreshed_at: float
 
 
 class SessionUpdate(BaseModel):
-    refresh_token: str | None = None
-    id_token: str | None = None
+    refresh_token: EncryptedStr | None = None
+    id_token: EncryptedStr | None = None
     refreshed_at: float | None = None
 
 

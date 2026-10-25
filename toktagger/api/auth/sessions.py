@@ -19,7 +19,7 @@ class SessionEndedError(Exception):
 
 async def start_session(
     db_client: MongoDBClient,
-    username: str,
+    user_id: str,
     issuer: str,
     sub: str,
     token: dict[str, Any],
@@ -41,7 +41,7 @@ async def start_session(
     await db_client.insert(
         "sessions",
         Session(
-            username=username,
+            user_id=user_id,
             issuer=issuer,
             sub=sub,
             refresh_token=encrypt_secret(refresh_token),
@@ -109,7 +109,7 @@ async def refresh_session(
                 "The identity provider returned a different account. Sign in again."
             )
         user = await oidc.provision_user(db_client, session.issuer, claims)
-        if user.username != session.username:
+        if user.id != session.user_id:
             await db_client.delete_document_by_id("sessions", session_id)
             raise SessionEndedError("Session ended. Sign in again.")
         await db_client.update(
@@ -132,6 +132,6 @@ async def end_session(db_client: MongoDBClient, session_id: str) -> str | None:
         return None
 
 
-async def end_user_sessions(db_client: MongoDBClient, username: str) -> None:
+async def end_user_sessions(db_client: MongoDBClient, user_id: str) -> None:
     """Remove every session of a user, so a deleted or inactive account cannot refresh."""
-    await db_client.delete_filtered_documents("sessions", {"username": username})
+    await db_client.delete_filtered_documents("sessions", {"user_id": user_id})

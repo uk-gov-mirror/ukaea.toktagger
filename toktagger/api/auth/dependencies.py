@@ -1,5 +1,6 @@
 import secrets
 
+from bson import ObjectId
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -138,9 +139,9 @@ async def _get_user_from_cookie(request: Request, response: Response) -> UserOut
         payload, token_age = decode_token_with_age(token)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
-    username = payload.get("sub")
-    if not username or not isinstance(username, str):
-        raise HTTPException(status_code=401, detail="Token is missing a subject claim")
+    user_id = payload.get("sub")
+    if not isinstance(user_id, str) or not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=401, detail="Token has no valid subject claim")
 
     # Check the session copy; the CSRF cookie only exposes the token to React.
     _require_csrf(request, payload)
@@ -148,7 +149,7 @@ async def _get_user_from_cookie(request: Request, response: Response) -> UserOut
     if token_age >= config.settings.auth.session_refresh_seconds:
         await _refresh_session(request, response, payload)
 
-    user = await utils.get_user_by_username(request.app.state.db_client, username)
+    user = await utils.get_user_by_id(request.app.state.db_client, user_id)
     # 401 rather than 404/403: the signature is good but the credential no longer
     # identifies a usable account, and 401 is what the frontend signs out on.
     if not user:

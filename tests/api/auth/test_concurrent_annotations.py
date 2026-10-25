@@ -15,6 +15,7 @@ import pytest
 
 from tests import db_definitions
 from tests.api.auth.conftest import add_member
+from tests.db_definitions import USER_ADMIN_ID, USER_ALICE_ID, USER_BOB_ID
 from tests.identity import get_auth_token, session_headers
 
 
@@ -54,15 +55,15 @@ async def test_user_save_does_not_overwrite_other_users_annotations(
     setup_db_auth, unauthenticated_api_client
 ):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     resp_a = await put_annotations(
         client, project_id, sample_id, alice_token, "alice_label"
@@ -86,15 +87,15 @@ async def test_user_save_replaces_only_own_previous_annotations(
 ):
     """Saving twice as the same user replaces only that user's annotations."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, alice_token, "alice_v1")
     await put_annotations(client, project_id, sample_id, bob_token, "bob_v1")
@@ -113,13 +114,13 @@ async def test_server_overwrites_created_by_from_jwt(
     setup_db_auth, unauthenticated_api_client
 ):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
 
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     spoofed = [
         {
@@ -152,15 +153,15 @@ async def test_show_others_annotations_filter(
 ):
     """When show_others_annotations is toggled, alice's view changes accordingly."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, alice_token, "alice_ann")
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
@@ -180,13 +181,13 @@ async def test_show_others_annotations_filter(
 @pytest.mark.asyncio
 async def test_viewer_cannot_put_annotations(setup_db_auth, unauthenticated_api_client):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     await add_member(client, admin_token, project_id, "alice", "viewer")
 
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
     resp = await put_annotations(
         client, project_id, sample_id, alice_token, "viewer_attempt"
     )
@@ -201,7 +202,7 @@ async def test_non_member_cannot_get_annotations(
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
-    bob_token = get_auth_token("bob")
+    bob_token = get_auth_token(USER_BOB_ID)
     resp = await client.get(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         headers=session_headers(bob_token),
@@ -215,7 +216,7 @@ async def test_non_member_cannot_see_project_in_list(
 ):
     client = unauthenticated_api_client
 
-    bob_token = get_auth_token("bob")
+    bob_token = get_auth_token(USER_BOB_ID)
     resp = await client.get(
         "/projects",
         headers=session_headers(bob_token),
@@ -229,12 +230,12 @@ async def test_member_can_see_project_in_list(
     setup_db_auth, unauthenticated_api_client
 ):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
 
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
     resp = await client.get(
         "/projects",
         headers=session_headers(alice_token),
@@ -250,12 +251,12 @@ async def test_save_preserves_machine_created_by(
 ):
     """A freshly-predicted annotation's synthetic created_by survives a save."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     prediction = [
         {
@@ -285,15 +286,15 @@ async def test_save_returns_every_updated_annotation_id(
 ):
     """The response lists in-place edits as well as the caller's own annotations."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
 
@@ -321,12 +322,12 @@ async def test_edit_to_machine_suggestion_is_persisted(
     the prediction, keeping its machine author so provenance is not rewritten.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
@@ -374,15 +375,15 @@ async def test_save_does_not_duplicate_or_reattribute_others_annotation(
     """Resending an already-saved annotation owned by someone else (as loaded via
     GET) must not duplicate it or reassign it to the saving user."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
 
@@ -414,15 +415,15 @@ async def test_annotator_can_edit_another_users_annotation(
     geometry while leaving the original author, and the model's prediction, alone.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     # Bob saves his own annotation plus a model prediction in one go — a second save
     # would replace his own, since his save is scoped to his user ID.
@@ -489,15 +490,15 @@ async def test_edit_survives_owner_resave_between_load_and_save(
 ):
     """Alice's edit lands on bob's annotation even though bob re-saved after she loaded."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
@@ -534,15 +535,15 @@ async def test_edit_to_deleted_annotation_is_rejected(
 ):
     """Editing an annotation its owner has since removed is a 409 and writes nothing."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
@@ -572,15 +573,15 @@ async def test_editing_others_annotation_does_not_delete_their_other_annotations
 ):
     """Editing one of bob's annotations must leave his others in place."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
@@ -623,15 +624,15 @@ async def test_annotator_can_delete_another_users_annotation(
 ):
     """The single-annotation delete works regardless of who created the annotation."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
 
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
     await put_annotations(client, project_id, sample_id, alice_token, "alice_ann")
@@ -668,14 +669,14 @@ async def test_cross_project_annotation_edit_is_scoped_out(
     as the annotation ID, so passing a foreign ID must be a no-op rather than an edit.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
     other_project_id = setup_db_auth["other_project_id"]
     other_sample_id = setup_db_auth["other_sample_id"]
 
     await add_member(client, admin_token, other_project_id, "bob", "annotator")
-    bob_token = get_auth_token("bob")
+    bob_token = get_auth_token(USER_BOB_ID)
     await put_annotations(
         client, other_project_id, other_sample_id, bob_token, "other_project_ann"
     )
@@ -684,7 +685,7 @@ async def test_cross_project_annotation_edit_is_scoped_out(
     )[0]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     # Alice tries to edit it through her own project's save endpoint.
     resp = await client.put(
@@ -721,14 +722,14 @@ async def test_claiming_another_users_annotation_does_not_copy_it(
     the caller.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
@@ -759,12 +760,12 @@ async def test_resaving_own_annotation_cannot_change_its_author(
 ):
     """Re-sending one's own saved annotation under another author keeps the stored one."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     await put_annotations(client, project_id, sample_id, alice_token, "alice_ann")
     loaded = await get_annotations(client, project_id, sample_id, alice_token)
@@ -818,12 +819,12 @@ async def test_repeated_saves_do_not_duplicate_machine_annotations(
     so each save resubmits them. Replacing by author keeps that idempotent.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     for _ in range(3):
         resp = await client.put(
@@ -847,12 +848,12 @@ async def test_unregistered_machine_author_is_replaced_by_caller(
 ):
     """A reserved prefix only keeps its author when it names a real model or annotator."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
@@ -871,14 +872,14 @@ async def test_replacing_machine_annotations_leaves_human_work_alone(
 ):
     """The by-author replace must not reach anybody's own annotations."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     await put_annotations(client, project_id, sample_id, bob_token, "bob_ann")
 
@@ -908,14 +909,14 @@ async def test_a_save_without_machine_rows_leaves_them_untouched(
     what the client loaded and so are absent from what it sends back.
     """
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
 
     for username in ("alice", "bob"):
         await add_member(client, admin_token, project_id, username, "annotator")
-    alice_token = get_auth_token("alice")
-    bob_token = get_auth_token("bob")
+    alice_token = get_auth_token(USER_ALICE_ID)
+    bob_token = get_auth_token(USER_BOB_ID)
 
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
@@ -937,11 +938,11 @@ async def test_concurrent_saves_by_same_user_do_not_duplicate(
     setup_db_auth, unauthenticated_api_client
 ):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     responses = await asyncio.gather(
         *(
@@ -963,11 +964,11 @@ async def test_annotation_authors_are_named_on_read(
     setup_db_auth, unauthenticated_api_client
 ):
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
     await add_member(client, admin_token, project_id, "alice", "annotator")
-    alice_token = get_auth_token("alice")
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
@@ -991,13 +992,13 @@ async def test_new_user_with_a_deleted_users_name_does_not_own_their_annotations
 ):
     """A freed username must not hand the old account's annotations to its next holder."""
     client = unauthenticated_api_client
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
     project_id = setup_db_auth["project_id"]
     sample_id = setup_db_auth["sample_id"]
     old_alice_id = setup_db_auth["alice_id"]
     await add_member(client, admin_token, project_id, "alice", "annotator")
     await put_annotations(
-        client, project_id, sample_id, get_auth_token("alice"), "old_alice_ann"
+        client, project_id, sample_id, get_auth_token(USER_ALICE_ID), "old_alice_ann"
     )
 
     resp = await client.delete(
@@ -1010,7 +1011,7 @@ async def test_new_user_with_a_deleted_users_name_does_not_own_their_annotations
     )
     await add_member(client, admin_token, project_id, "alice", "annotator")
     resp = await put_annotations(
-        client, project_id, sample_id, get_auth_token("alice"), "new_alice_ann"
+        client, project_id, sample_id, get_auth_token(new_alice_id), "new_alice_ann"
     )
     assert resp.status_code == 200, resp.text
 

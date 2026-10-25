@@ -12,7 +12,7 @@ import ray
 from bson import ObjectId
 
 from tests.identity import get_auth_token, session_headers
-from tests.db_definitions import TEST_ISSUER
+from tests.db_definitions import TEST_ISSUER, USER_ADMIN_ID
 from toktagger.api import config
 from toktagger.api.core.sender import send_model_updates
 from toktagger.api.routers import models as models_router
@@ -255,7 +255,7 @@ async def test_predict_endpoint_survives_same_named_human_save(
     project_id = setup_model_db["project_id"]
     sample_id = setup_model_db["sample_ids"][-1]
 
-    admin_token = get_auth_token("admin")
+    admin_token = get_auth_token(USER_ADMIN_ID)
 
     # A human user whose name matches the model type (the collision scenario).
     human_id = await db_client.insert(
@@ -292,7 +292,7 @@ async def test_predict_endpoint_survives_same_named_human_save(
 
     # The human user (same name as the model) saves their own annotation for the
     # same sample. update_annotations only replaces the CALLER's own annotations.
-    human_token = get_auth_token("mock_disruption_cnn")
+    human_token = get_auth_token(human_id)
     save_resp = await client.put(
         f"/projects/{project_id}/samples/{sample_id}/annotations",
         json=[

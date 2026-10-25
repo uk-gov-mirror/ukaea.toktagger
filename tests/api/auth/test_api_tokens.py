@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+from tests.db_definitions import USER_ADMIN_ID, USER_ALICE_ID, USER_BOB_ID
 from tests.identity import get_auth_token, session_headers
 from toktagger.api import config
 
@@ -13,11 +14,11 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _create(client, username: str = "alice", **body) -> dict:
+async def _create(client, user_id: str = USER_ALICE_ID, **body) -> dict:
     response = await client.post(
         "/users/me/tokens",
         json={"name": "laptop", **body},
-        headers=session_headers(get_auth_token(username)),
+        headers=session_headers(get_auth_token(user_id)),
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -43,10 +44,10 @@ async def test_list_hides_the_token_and_other_users_tokens(
 ):
     client = unauthenticated_api_client
     created = await _create(client)
-    await _create(client, username="bob")
+    await _create(client, user_id=USER_BOB_ID)
 
     response = await client.get(
-        "/users/me/tokens", headers=session_headers(get_auth_token("alice"))
+        "/users/me/tokens", headers=session_headers(get_auth_token(USER_ALICE_ID))
     )
     assert response.status_code == 200
     tokens = response.json()
@@ -77,7 +78,7 @@ async def test_revoked_token_is_rejected(unauthenticated_api_client, setup_db_au
 
     response = await client.delete(
         f"/users/me/tokens/{created['_id']}",
-        headers=session_headers(get_auth_token("alice")),
+        headers=session_headers(get_auth_token(USER_ALICE_ID)),
     )
     assert response.status_code == 204
 
@@ -94,7 +95,7 @@ async def test_cannot_revoke_another_users_token(
 
     response = await client.delete(
         f"/users/me/tokens/{created['_id']}",
-        headers=session_headers(get_auth_token("bob")),
+        headers=session_headers(get_auth_token(USER_BOB_ID)),
     )
     assert response.status_code == 404
 
@@ -135,7 +136,7 @@ async def test_token_of_deactivated_user_is_rejected(
     response = await client.put(
         f"/users/{setup_db_auth['alice_id']}",
         json={"is_active": False},
-        headers=session_headers(get_auth_token("admin")),
+        headers=session_headers(get_auth_token(USER_ADMIN_ID)),
     )
     assert response.status_code == 200
 
@@ -153,7 +154,7 @@ async def test_deleting_a_user_removes_their_tokens(
 
     response = await client.delete(
         f"/users/{setup_db_auth['alice_id']}",
-        headers=session_headers(get_auth_token("admin")),
+        headers=session_headers(get_auth_token(USER_ADMIN_ID)),
     )
     assert response.status_code == 200
     assert await db_client.db["api_tokens"].count_documents({}) == 0
@@ -182,7 +183,7 @@ async def test_lifetime_above_maximum_is_rejected(
     response = await unauthenticated_api_client.post(
         "/users/me/tokens",
         json={"name": "laptop", "expires_in_days": max_days + 1},
-        headers=session_headers(get_auth_token("alice")),
+        headers=session_headers(get_auth_token(USER_ALICE_ID)),
     )
     assert response.status_code == 422
 

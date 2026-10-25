@@ -36,15 +36,22 @@ jobs:
         run: uv run ruff check toktagger tests --ignore=C901 && uv run ruff format --check toktagger tests
 
   compose:
-    name: Compose Smoke Test
+    name: Compose Smoke Test (${{ matrix.extras || 'no extras' }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        extras: ["", "models"]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Smoke test the production stack
+        env:
+          TOKTAGGER_EXTRAS: ${{ matrix.extras }}
         run: ./scripts/compose_smoke_test.sh
 
   eslint:

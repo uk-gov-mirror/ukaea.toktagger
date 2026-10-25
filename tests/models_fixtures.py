@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from tests import db_definitions
 from toktagger.api import config
+from tests.db_definitions import USER_ADMIN_ID
 from tests.identity import get_auth_token, session_headers
 from toktagger.api.auth.core import get_internal_token
 from toktagger.api.main import RAY_NAMESPACE, Server
@@ -72,12 +73,16 @@ async def models_api_client(monkeypatch, settings, db_client, ray_session):
 
     # Auth is always required now — seed the admin user and authenticate as them
     # by default, so existing tests keep behaving as an implicit admin.
-    await db_client.insert("users", db_definitions.USER_ADMIN)
+    await db_client.insert(
+        "users",
+        db_definitions.USER_ADMIN,
+        ids={"_id": ObjectId(db_definitions.USER_ADMIN_ID)},
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
-        headers=session_headers(get_auth_token("admin")),
+        headers=session_headers(get_auth_token(USER_ADMIN_ID)),
     ) as client:
         client.app = app
         yield client

@@ -6,35 +6,27 @@ from toktagger.api.schemas.annotations import (
     TimeRegionBatch,
 )
 from toktagger.api.schemas.annotators import AnnotatorTypes
-from toktagger.api.schemas.projects import ProjectIn, QueryStrategyType, Task
+from toktagger.api.schemas.projects import (
+    ProjectIn,
+    ProjectMember,
+    QueryStrategyType,
+    Task,
+)
 from toktagger.api.schemas.samples import (
     SampleIn,
     ShotData,
     TimeSeriesFileData,
 )
-from toktagger.api.schemas.projects import ProjectMember
 from toktagger.api.schemas.users import UserIn
 
 if importlib.util.find_spec("ray") is not None:
     from tests.models_definitions import (
         MODEL_1 as MODEL_1,
-    )
-    from tests.models_definitions import (
         MODEL_2 as MODEL_2,
-    )
-    from tests.models_definitions import (
         MODEL_3 as MODEL_3,
-    )
-    from tests.models_definitions import (
         MODEL_4 as MODEL_4,
-    )
-    from tests.models_definitions import (
         MockDisruptionCNN as MockDisruptionCNN,
-    )
-    from tests.models_definitions import (
         MockParamsTimeSeriesCNN as MockParamsTimeSeriesCNN,
-    )
-    from tests.models_definitions import (
         MockTimeSeriesCNN as MockTimeSeriesCNN,
     )
 
@@ -136,6 +128,11 @@ ANNOTATION_5 = TimePointBatch(
 
 
 TEST_ISSUER = "https://idp.example.com/realms/toktagger"
+
+# Fixed, so session tokens can be minted before the users are inserted.
+USER_ADMIN_ID = "100000000000000000000001"
+USER_ALICE_ID = "100000000000000000000002"
+USER_BOB_ID = "100000000000000000000003"
 
 USER_ADMIN = UserIn(
     username="admin",

@@ -74,7 +74,7 @@ async def callback(
             request.session[FORCE_LOGIN_KEY] = True
             return _login_error("inactive")
         session_id = await sessions.start_session(
-            db_client, user.username, issuer, claims["sub"], token
+            db_client, user.id, issuer, claims["sub"], token
         )
     except oidc.OAuthError as error:
         code = error.error or ""
@@ -91,7 +91,7 @@ async def callback(
     request.session.clear()
     csrf = secrets.token_urlsafe(32)
     session_token = create_access_token(
-        {"sub": user.username, "csrf": csrf, "sid": session_id}
+        {"sub": user.id, "csrf": csrf, "sid": session_id}
     )
     response = RedirectResponse(return_to, status_code=303)
     set_session_cookies(request, response, session_token, csrf)

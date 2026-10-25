@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from tests.api.auth.conftest import END_SESSION_URL, ISSUER, sign_in
+from tests.db_definitions import USER_ADMIN_ID, USER_ALICE, USER_ALICE_ID
 from tests.identity import get_auth_token, session_headers
 from toktagger.api import config
 from toktagger.api.auth import oidc, sessions
@@ -243,7 +244,8 @@ async def test_sign_in_stores_the_provider_tokens_in_a_session(
         unauthenticated_api_client.cookies[config.settings.auth.cookie_name]
     )
     session = await db_client.db["sessions"].find_one({"_id": payload["sid"]})
-    assert session["username"] == "admin"
+    assert session["user_id"] == setup_db_auth["admin_id"]
+    assert payload["sub"] == setup_db_auth["admin_id"]
     assert session["refresh_token"] != "refresh-1"
     assert decrypt_secret(session["refresh_token"]) == "refresh-1"
     assert session["id_token"] != "id-1"
@@ -374,7 +376,7 @@ async def test_concurrent_refreshes_use_the_refresh_token_once(
 ):
     """The provider revokes a used refresh token, so a second use would end the session."""
     session_id = await sessions.start_session(
-        db_client, "admin", ISSUER, "admin-sub", {"refresh_token": "refresh-1"}
+        db_client, USER_ADMIN_ID, ISSUER, "admin-sub", {"refresh_token": "refresh-1"}
     )
     await db_client.db["sessions"].update_one(
         {"_id": session_id}, {"$set": {"refreshed_at": 0}}
@@ -464,8 +466,8 @@ async def test_session_of_a_deleted_user_is_401(
 
     On anything else the browser keeps a logged-in UI in which every request fails.
     """
-    admin_token = get_auth_token("admin")
-    alice_token = get_auth_token("alice")
+    admin_token = get_auth_token(USER_ADMIN_ID)
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await unauthenticated_api_client.delete(
         f"/users/{setup_db_auth['alice_id']}",
@@ -480,12 +482,33 @@ async def test_session_of_a_deleted_user_is_401(
 
 
 @pytest.mark.asyncio
+async def test_session_does_not_pass_to_a_new_user_with_the_same_username(
+    setup_db_auth, unauthenticated_api_client, db_client
+):
+    admin_token = get_auth_token(USER_ADMIN_ID)
+    alice_token = get_auth_token(USER_ALICE_ID)
+    resp = await unauthenticated_api_client.delete(
+        f"/users/{setup_db_auth['alice_id']}",
+        headers=session_headers(admin_token),
+    )
+    assert resp.status_code == 200, resp.text
+    await db_client.insert(
+        "users", USER_ALICE.model_copy(update={"oidc_sub": "new-alice-sub"})
+    )
+
+    resp = await unauthenticated_api_client.get(
+        "/auth/me", headers=session_headers(alice_token)
+    )
+    assert resp.status_code == 401, resp.text
+
+
+@pytest.mark.asyncio
 async def test_session_of_a_deactivated_user_is_401(
     setup_db_auth, unauthenticated_api_client
 ):
     """Same reasoning as a deleted user: the credential no longer authenticates."""
-    admin_token = get_auth_token("admin")
-    alice_token = get_auth_token("alice")
+    admin_token = get_auth_token(USER_ADMIN_ID)
+    alice_token = get_auth_token(USER_ALICE_ID)
 
     resp = await unauthenticated_api_client.put(
         f"/users/{setup_db_auth['alice_id']}",
@@ -506,7 +529,7 @@ async def test_session_token_is_not_accepted_as_a_bearer(
 ):
     """As a bearer, a session token would skip the CSRF check and the provider refresh."""
     resp = await unauthenticated_api_client.get(
-        "/auth/me", headers={"Authorization": f"Bearer {get_auth_token('admin')}"}
+        "/auth/me", headers={"Authorization": f"Bearer {get_auth_token(USER_ADMIN_ID)}"}
     )
 
     assert resp.status_code == 401
