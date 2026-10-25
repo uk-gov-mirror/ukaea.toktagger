@@ -32,6 +32,7 @@ services:
     environment:
       DATABASE_MONGO_URL: mongodb://${MONGO_USERNAME:-toktagger}:${MONGO_PASSWORD:?}@mongo:27017
       SERVER_WORKERS: ${SERVER_WORKERS:-4}
+      MODELS_MAX_ACTORS: ${MODELS_MAX_ACTORS:-5}
       SERVER_FORWARDED_ALLOW_IPS: "*"
       AUTH_PROVIDER: oidc
       AUTH_ISSUER_URL: http://keycloak:8080/realms/toktagger
