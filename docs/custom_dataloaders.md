@@ -98,6 +98,8 @@ server = Server()
 server.run()
 ```
 
+To run your data loader in the Docker Compose stack, read [Add custom data loaders and models](deployment.md#add-custom-data-loaders-and-models).
+
 ## Data Types and Schemas
 
 ### Sample Data Types
@@ -399,65 +401,3 @@ config.settings = UpdatedSettings()
 server = Server()
 server.run()
 ```
-
-## Using Docker
-
-The production stack in `docker-compose.yml` runs the `api` service from the image `toktagger:latest`. That image does not contain your data loader. To add it, make a new image from `toktagger:latest`, and use a Compose override file to run your script in the `api` service. For the stack itself, read the [Deployment](deployment.md) guide.
-
-### Step 1: Put your files in one folder
-
-Make a folder `custom` next to `docker-compose.yml`. Put the files from the example above in it:
-
-```
-custom/
-├── Dockerfile
-├── loader.py
-├── run.py
-└── settings.py
-```
-
-You do not need to set the host or the port in `run.py`. The image sets `SERVER_HOST=0.0.0.0` and `SERVER_PORT=8002`.
-
-### Step 2: Write the Dockerfile
-
-```dockerfile title="custom/Dockerfile"
-FROM toktagger:latest
-
-USER root
-# Install the packages that your data loader needs
-RUN pip --python /opt/venv/bin/python install --no-cache-dir sqlalchemy
-COPY . /opt/custom
-USER toktagger
-
-CMD ["python", "/opt/custom/run.py"]
-```
-
-If your data loader needs no other packages, remove the `RUN` line.
-
-### Step 3: Write the Compose override file
-
-```yaml title="docker-compose.custom.yml"
-services:
-  api:
-    build: !override
-      context: ./custom
-    image: toktagger-custom:latest
-    environment:
-      SQL_URL: ${SQL_URL:?}
-```
-
-Add the settings of your data loader to `environment`, and add their values to `.env`. For example, add `SQL_URL=<Your URL>` to `.env`.
-
-### Step 4: Start the stack
-
-Build the TokTagger image first. Your image starts from it:
-
-```sh
-docker compose build api
-docker compose -f docker-compose.yml -f docker-compose.custom.yml up -d --build
-```
-
-Do these two steps again after each update of TokTagger.
-
-!!! warning
-    `run.py` starts the server with `server.run()`, which uses one Uvicorn process. The stack ignores `SERVER_WORKERS` for this server. Gunicorn workers import `toktagger.api.asgi:app` and do not import your script, so they do not know your data loader.

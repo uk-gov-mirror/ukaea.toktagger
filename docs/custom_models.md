@@ -148,6 +148,8 @@ server = Server()
 server.run()
 ```
 
+To run your model in the Docker Compose stack, read [Add custom data loaders and models](deployment.md#add-custom-data-loaders-and-models).
+
 ## Data Handling
 
 ### Train/Validation/Test Split

@@ -88,14 +88,15 @@ class AsyncMongitaClient:
     async def _run(self, fn: Callable, *, mutates: bool = False) -> Any:
         """Run fn in a thread, holding the cross-process FileLock.
 
-        asyncio.Lock prevents multiple coroutines in this worker from
-        queuing up threads; FileLock prevents concurrent access from
-        other gunicorn workers.
+        asyncio.Lock limits this worker to one queued thread at a time; FileLock
+        prevents concurrent access from other gunicorn workers. If the awaiting
+        coroutine is cancelled, the thread continues and fn can still complete.
 
-        The staleness check and the version bump happen under the same lock as fn, so
-        another worker cannot interleave with a read-modify-write cycle. Callers that
-        change the store must pass mutates=True, otherwise other workers will keep
-        serving from caches this write has invalidated.
+        Each wrapped operation is serialised: the staleness check, fn and the version
+        bump all happen under one lock. Two separate calls (e.g. find_one then
+        update_one) are not atomic, so another worker can act between them. Callers
+        that change the store must pass mutates=True, otherwise other workers will
+        keep serving from caches this write has invalidated.
         """
         async with self._mutex:
 

@@ -51,7 +51,6 @@ async def revoke_api_token(
     db_client: MongoDBClient, user_id: str, token_id: str
 ) -> bool:
     """Delete a token of the user. Return False when the user has no such token."""
-    # delete_many, because Mongita's delete_one ignores every other field when _id is set.
     result = await db_client.delete_filtered_documents(
         "api_tokens",
         {

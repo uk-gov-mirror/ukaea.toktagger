@@ -50,8 +50,8 @@ You need:
 The realm has no users. Make the first user in Keycloak:
 
 1. Open `https://<KEYCLOAK_HOST>`. Sign in with the user `admin` and the password `KEYCLOAK_ADMIN_PASSWORD`.
-2. Select the realm `toktagger`.
-3. Open **Users** and click **Add user**. Enter the user name and the email address.
+2. Click **Manage Realms**, then select the realm `toktagger`.
+3. Open **Users** and click **Create new user**. Enter the user name and the email address.
 4. Open the **Credentials** tab and set a password.
 5. Open the **Groups** tab and add the user to `toktagger-admins`.
 
@@ -86,6 +86,68 @@ Code runs in a worker when a weights file uses `pickle`. This code can read the 
 3. Keep the Ray workers on the same host as the `api` service. If a worker is on a different host, use TLS between the worker and the API. The token goes in each request.
 
 For the model settings, read [Configuration](configuration.md).
+
+## Add custom data loaders and models
+
+The production stack in `docker-compose.yml` runs the `api` service from the image `toktagger:latest`. That image does not contain your [custom data loaders](custom_dataloaders.md) or [custom models](custom_models.md). To add them, make a new image from `toktagger:latest`, and use a Compose override file to run your script in the `api` service.
+
+### Step 1: Put your files in one folder
+
+Make a folder `custom` next to `docker-compose.yml`. Put your modules and the script that starts the server in it. For example, for the database loader in [Custom Data Loaders](custom_dataloaders.md#example-database-loader):
+
+```
+custom/
+├── Dockerfile
+├── loader.py
+├── run.py
+└── settings.py
+```
+
+You do not need to set the host or the port in `run.py`. The image sets `SERVER_HOST=0.0.0.0` and `SERVER_PORT=8002`.
+
+### Step 2: Write the Dockerfile
+
+```dockerfile title="custom/Dockerfile"
+FROM toktagger:latest
+
+USER root
+# Install the packages that your code needs
+RUN pip --python /opt/venv/bin/python install --no-cache-dir sqlalchemy
+COPY . /opt/custom
+USER toktagger
+
+CMD ["python", "/opt/custom/run.py"]
+```
+
+If your code needs no other packages, remove the `RUN` line.
+
+### Step 3: Write the Compose override file
+
+```yaml title="docker-compose.custom.yml"
+services:
+  api:
+    build: !override
+      context: ./custom
+    image: toktagger-custom:latest
+    environment:
+      SQL_URL: ${SQL_URL:?}
+```
+
+Add the settings of your code to `environment`, and add their values to `.env`. For example, add `SQL_URL=<Your URL>` to `.env`.
+
+### Step 4: Start the stack
+
+Build the TokTagger image first. Your image starts from it. For custom models, set `TOKTAGGER_EXTRAS=models` in `.env` before you build:
+
+```sh
+docker compose build api
+docker compose -f docker-compose.yml -f docker-compose.custom.yml up -d --build
+```
+
+Do these two steps again after each update of TokTagger.
+
+!!! warning
+    `run.py` starts the server with `server.run()`, which uses one Uvicorn process. The stack ignores `SERVER_WORKERS` for this server. Gunicorn workers import `toktagger.api.asgi:app` and do not import your script, so they do not know your data loaders or models.
 
 ## Data and backups
 

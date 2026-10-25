@@ -60,7 +60,7 @@ toktagger
 This starts the application at `http://localhost:8002`. On the first start, TokTagger creates a local identity provider and prints the user name and the password of the first administrator to the terminal, which will only be shown once. Open the application and click **Sign in**.
 
 !!! warning
-    **This is an insecure default password.** Change it immediately after first login from the **Profile** page.
+    **This is an insecure default password.** Change it immediately after first login from within Canaille at `http://localhost:8003/profile/admin/auth/password`.
 
 ### Multi-User / Team Deployment
 
@@ -75,22 +75,11 @@ The default host is `localhost`. Only the local machine can connect to it. To le
 !!! warning
     `--host 0.0.0.0` makes TokTagger available to all devices that can reach the machine on port 8002. The traffic is not encrypted. Use it only on a trusted network. For other deployments, use the `docker-compose.yml` stack, which puts TokTagger behind a TLS proxy.
 
-Or directly via Gunicorn:
-
-```sh
-gunicorn toktagger.api.asgi:app \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --workers 4 \
-    --bind 0.0.0.0:8002
-```
-
-With Docker Compose, the production stack defaults to 4 workers. Override with the `SERVER_WORKERS` environment variable:
-
-```sh
-SERVER_WORKERS=8 docker compose up
-```
-
 See [User Management](user_management.md) for creating accounts, assigning roles, and managing project membership.
+
+### Deploy with Docker
+
+To run TokTagger on a shared server, use the Docker Compose stack. The stack adds TLS, Keycloak and MongoDB. Read the [Deployment](deployment.md) guide.
 
 ## Configuration
 There are a series of additional options which you can configure to customise the functionality of TokTagger - [find details about these here.](./configuration.md)

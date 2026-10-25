@@ -142,6 +142,7 @@ async def _get_user_from_cookie(request: Request, response: Response) -> UserOut
     if not username or not isinstance(username, str):
         raise HTTPException(status_code=401, detail="Token is missing a subject claim")
 
+    # Check the session copy; the CSRF cookie only exposes the token to React.
     _require_csrf(request, payload)
     request.state.session_id = payload.get("sid")
     if token_age >= config.settings.auth.session_refresh_seconds:
