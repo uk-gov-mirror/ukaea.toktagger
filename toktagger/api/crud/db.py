@@ -167,28 +167,32 @@ class MongoDBClient:
         owner = uuid.uuid4().hex
         deadline = time.monotonic() + timeout
         delay = 0.02
-        while True:
-            now = time.time()
-            try:
-                await locks.insert_one(
-                    {"_id": name, "owner": owner, "expires_at": now + ttl}
-                )
-                break
-            except (pymongo.errors.DuplicateKeyError, mongita.errors.DuplicateKeyError):
-                result = await locks.update_one(
-                    {"_id": name, "expires_at": {"$lt": now}},
-                    {"$set": {"owner": owner, "expires_at": now + ttl}},
-                )
-                if result.modified_count == 1:
-                    break
-            if time.monotonic() >= deadline:
-                raise LockTimeoutError(f"Timed out waiting for lock {name!r}")
-            await asyncio.sleep(delay * random.uniform(0.5, 1.5))
-            delay = min(delay * 2, 0.5)
+        # Acquisition sits inside the try: a cancelled acquire may still have taken the lock.
         try:
+            while True:
+                now = time.time()
+                try:
+                    await locks.insert_one(
+                        {"_id": name, "owner": owner, "expires_at": now + ttl}
+                    )
+                    break
+                except (
+                    pymongo.errors.DuplicateKeyError,
+                    mongita.errors.DuplicateKeyError,
+                ):
+                    result = await locks.update_one(
+                        {"_id": name, "expires_at": {"$lt": now}},
+                        {"$set": {"owner": owner, "expires_at": now + ttl}},
+                    )
+                    if result.modified_count == 1:
+                        break
+                if time.monotonic() >= deadline:
+                    raise LockTimeoutError(f"Timed out waiting for lock {name!r}")
+                await asyncio.sleep(delay * random.uniform(0.5, 1.5))
+                delay = min(delay * 2, 0.5)
             yield
         finally:
-            await locks.delete_one({"_id": name, "owner": owner})
+            await asyncio.shield(locks.delete_one({"_id": name, "owner": owner}))
 
 
 # Notes to self

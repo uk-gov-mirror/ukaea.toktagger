@@ -282,6 +282,25 @@ async def test_lock_takes_over_expired_lock(db_client):
 
 
 @pytest.mark.asyncio
+async def test_cancelled_lock_acquire_releases_lock(tmp_path):
+    mongita_client = MongoDBClient(str(tmp_path), "annotate_db", str(tmp_path))
+
+    async def _hold() -> None:
+        async with mongita_client.lock("cancelled-lock"):
+            await asyncio.sleep(10)
+
+    holder = asyncio.create_task(_hold())
+    await asyncio.sleep(0)
+    holder.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await holder
+
+    async with mongita_client.lock("cancelled-lock", timeout=0.2):
+        pass
+    await mongita_client.client.close()
+
+
+@pytest.mark.asyncio
 async def test_update_writes_only_given_fields(db_client):
     inserted = await db_client.db["models"].insert_one(
         {"type": "cnn", "version": 1, "status": "training", "progress": 0, "score": 0}
