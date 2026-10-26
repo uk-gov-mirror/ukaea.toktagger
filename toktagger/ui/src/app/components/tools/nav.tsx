@@ -370,7 +370,7 @@ function SaveButton({
 }: SaveButtonInfo) {
   const handleClick = async () => {
     try {
-      const { saved, discarded } = await persistAnnotations(
+      const { saved } = await persistAnnotations(
         project_id,
         sample_id,
         navAdapter,
@@ -378,12 +378,10 @@ function SaveButton({
         userId,
       );
       navAdapter.afterSave?.();
-      // Staying on the sample, so drop the deleted annotations from view as well.
-      if (discarded > 0) {
-        syncAnnotationsFromServer(
-          await getAnnotationsForSample(project_id, sample_id),
-        );
-      }
+      // Staying on the sample, so pick up stored _ids (annotator output has none) and drop discarded rows.
+      syncAnnotationsFromServer(
+        await getAnnotationsForSample(project_id, sample_id),
+      );
       ToastQueue.positive(`Saved ${saved.length} annotations!`, {
         timeout: TOAST_TIMEOUT,
       });
