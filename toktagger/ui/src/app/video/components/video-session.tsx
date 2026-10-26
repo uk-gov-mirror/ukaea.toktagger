@@ -382,7 +382,10 @@ function frameLabelMatchesInstance(
   );
 }
 
-function videoAnnotationsFromByFrame(byFrame: ByFrameMap): Annotation[] {
+function videoAnnotationsFromByFrame(
+  byFrame: ByFrameMap,
+  previousById: Map<string, Annotation>,
+): Annotation[] {
   const out: Annotation[] = [];
 
   for (const [frame, list] of byFrame.entries()) {
@@ -403,7 +406,21 @@ function videoAnnotationsFromByFrame(byFrame: ByFrameMap): Annotation[] {
         parsed = VideoPointSchema.safeParse(shape);
       }
 
-      if (parsed?.success) out.push(parsed.data);
+      if (!parsed?.success) continue;
+
+      // Annotorious keeps only geometry and identity, so a saved shape's review state comes from its previous copy.
+      const previous = parsed.data._id
+        ? previousById.get(parsed.data._id)
+        : undefined;
+      out.push(
+        previous
+          ? {
+              ...parsed.data,
+              validated: previous.validated,
+              uncertainty: previous.uncertainty,
+            }
+          : parsed.data,
+      );
     }
   }
 
@@ -415,11 +432,16 @@ function replaceVideoAnnotations(
   annotations: Annotation[],
   byFrame: ByFrameMap,
 ): Annotation[] {
+  const previousById = new Map(
+    (annotations ?? []).flatMap((annotation): [string, Annotation][] =>
+      annotation._id ? [[annotation._id, annotation]] : [],
+    ),
+  );
   return [
     ...(annotations ?? []).filter(
       (annotation) => !isVideoAnnotationType(annotation),
     ),
-    ...videoAnnotationsFromByFrame(byFrame),
+    ...videoAnnotationsFromByFrame(byFrame, previousById),
   ];
 }
 
