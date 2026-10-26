@@ -71,19 +71,14 @@ function SamplePageContent(props: { sampleId: string }) {
           [{ key: "projects", label: "Projects", href: "/ui/projects" }],
   );
 
-  // Early returns AFTER all hooks
-  if (error)
-    return errorStatus === 403 ? (
-      <ForbiddenView message={error} />
-    ) : (
-      <ErrorView message={error} />
-    );
+  // Data errors are shown in place of the view by SampleView so the toolbar stays usable.
+  if (error && errorStatus === 403) return <ForbiddenView message={error} />;
 
   if (!project) {
     return isLoading ? (
       <LoadingView />
     ) : (
-      <ErrorView message="Project not found." />
+      <ErrorView message={error ?? "Project not found."} />
     );
   }
 
@@ -91,13 +86,13 @@ function SamplePageContent(props: { sampleId: string }) {
     return isLoading ? (
       <LoadingView />
     ) : (
-      <ErrorView message="Sample not found." />
+      <ErrorView message={error ?? "Sample not found."} />
     );
   }
 
   //  Prevent a stale render during route param transitions
   if (sample._id !== props.sampleId) {
-    return <LoadingView />;
+    return error ? <ErrorView message={error} /> : <LoadingView />;
   }
 
   // h-full/min-h-0 hand the height of the area below the top bar down to the

@@ -156,12 +156,14 @@ export type Annotations = z.infer<typeof AnnotationsSchema>;
 
 export const TimeSeriesDataSchema = z.object({
   time: z.array(z.number()),
-  values: z.array(z.number()),
+  // Nullable: the API serialises NaN samples in a signal as null.
+  values: z.array(z.number().nullable()),
 });
 export type TimeSeriesData = z.infer<typeof TimeSeriesDataSchema>;
 
 export const MultiVariateTimeSeriesDataSchema = z.object({
-  values: z.record(z.string(), TimeSeriesDataSchema),
+  // Null marks a signal the server could not load.
+  values: z.record(z.string(), TimeSeriesDataSchema.nullable()),
 });
 export type MultiVariateTimeSeriesData = z.infer<
   typeof MultiVariateTimeSeriesDataSchema

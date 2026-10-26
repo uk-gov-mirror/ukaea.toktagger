@@ -1,5 +1,6 @@
 import numpy
 import numpy as np
+import pytest
 from scipy.datasets import electrocardiogram
 
 from toktagger.api.core import annotators
@@ -202,3 +203,12 @@ def test_profile_2d_threshold():
         assert len(annotation.segmentation) == 1
         assert len(annotation.segmentation[0]) >= 6
         assert len(annotation.segmentation[0]) % 2 == 0
+
+
+def test_profile_2d_threshold_missing_signal_raises():
+    mv_data = MultiVariateTimeSeriesData(values={"Ip": None})
+    params = Profile2DThresholdParams(signal_name="Ip", percentile=95)
+    annotator = annotators.Profile2DThresholdAnnotator(params)
+
+    with pytest.raises(TypeError, match="does not exist"):
+        annotator.predict(mv_data)

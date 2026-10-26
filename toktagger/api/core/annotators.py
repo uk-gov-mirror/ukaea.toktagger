@@ -607,7 +607,7 @@ class Profile2DThresholdAnnotator:
 
     Raises
     ------
-    RuntimeError
+    TypeError
         If the data for the configured signal name is missing or not a supported type.
 
     Examples
