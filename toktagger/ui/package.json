@@ -21,7 +21,7 @@
     "buffer": "^6.0.3",
     "d3": "^7.9.0",
     "openseadragon": "^5.0.1",
-    "plotly.js": "^3.0.1",
+    "plotly.js": "^4.1.2",
     "plotly.js-dist-min": "^2.27.0",
     "react": "^19.0.0",
     "react-contexify": "^6.0.0",
