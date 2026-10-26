@@ -1,3 +1,7 @@
+/**
+ * Entry point for the video view: the providers it needs and the page layout.
+ * Also owns frame navigation, which works by asking SampleContext for a new frame.
+ */
 "use client";
 
 import React, { useEffect } from "react";
@@ -19,6 +23,7 @@ import {
 import { FrameAnnotatorHost } from "@/app/video/components/frame-annotator-host";
 import { VideoAnnotationToolbar } from "@/app/video/components/video-annotation-toolbar";
 import { FrameJumpField } from "@/app/video/components/ui_elements";
+import { VideoAnnotationsTable } from "@/app/video/components/video-annotations-table";
 import { useSample } from "@/app/contexts/SampleContext";
 import { VideoNavAdapterBridge } from "@/app/video/components/video-nav-adapter";
 import {
@@ -29,6 +34,7 @@ import { useParams } from "react-router-dom";
 
 import { AnnotationPopup } from "@/app/video/components/annotation-popup";
 
+/** Badges for the current frame's frame labels. Clicking one opens its popup. */
 function FrameLabelBadges() {
   const { frame, frameLabels, hideAnnotations, editMode, removeFrameLabel } =
     useVideoSession();
@@ -92,15 +98,7 @@ function FrameLabelBadges() {
   );
 }
 
-/**
- * Frame annotator UI wrapper:
- * - Renders the frame navigation (prev/next + jump)
- * - Shows the latest requested frame index
- * - Flushes the current frame overlay before frame changes
- *
- * Note: this component does not fetch frames. The parent drives frame changes by
- * updating dataParams and passing the new image when the backend responds.
- */
+/** The Prev / Frame / Next controls and the image. Saves the frame's edits before leaving it. */
 function VideoFrameAnnotator(props: {
   imageBase64: string;
   desiredFrame: number;
@@ -132,7 +130,7 @@ function VideoFrameAnnotator(props: {
 
     session.flushCurrentFrameOverlay();
 
-    // Append missing manual instances only in Edit mode.
+    // Propagation: copy manual instances that are missing from the next frame onto it
     if (session.editMode && session.propagate) {
       session.forwardPropMissingManualToNext(next);
     }
@@ -164,7 +162,7 @@ function VideoFrameAnnotator(props: {
         </Button>
       </Flex>
 
-      {/* Frame annotator canvas (image + Annotorious overlay). */}
+      {/* Frame label badges, then the image. The empty spacer column keeps the image centred. */}
       <Grid
         width="100%"
         columns={["size-1600", "1fr", "size-1600"]}
@@ -199,6 +197,7 @@ function VideoFrameAnnotator(props: {
   );
 }
 
+/** Providers for the video view. They also wrap the left toolbox, so it can use the session. */
 export function VideoProviders({ children }: { children: React.ReactNode }) {
   return (
     <VideoUiStateProvider>
@@ -218,6 +217,7 @@ function VideoProvidersInner({ children }: { children: React.ReactNode }) {
 
   return (
     <Annotorious>
+      {/* Keyed by sample so the session starts fresh for each sample. */}
       <VideoSessionProvider
         key={`${project_id}:${sample_id}`}
         projectId={project_id}
@@ -231,12 +231,10 @@ function VideoProvidersInner({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Render the image view and wire "go to frame" through SampleContext.
- * This component assumes it is already inside a VideoSessionProvider.
- */
+/** The video view's layout. Must be rendered inside VideoProviders. */
 export function VideoView() {
   const { data, dataParams, setDataParams } = useSample();
+  // The requested frame, updated straight away so quick repeated clicks step on from it
   const desiredFrameRef = React.useRef<number | null>(null);
 
   useEffect(() => {
@@ -270,11 +268,7 @@ export function VideoView() {
       ? dataParams.frame
       : parsed.data.frame;
 
-  /**
-   * Request a specific frame from the backend by updating dataParams.
-   * The host page owns the fetch and is responsible for updating the session frame
-   * once the backend response arrives.
-   */
+  // SampleContext fetches the frame when dataParams changes, so this only sets the request
   const goToFrame = (n: number): boolean => {
     if (!Number.isFinite(n)) return false;
     const target = Math.max(0, Math.trunc(n));
@@ -340,12 +334,15 @@ export function VideoView() {
     <div className="min-w-0 flex-1">
       <div className="flex w-full justify-between">
         <div className="min-w-0 flex-1 px-4 py-3">
-          <VideoFrameAnnotator
-            imageBase64={imageBase64}
-            desiredFrame={desiredFrame}
-            goToFrame={goToFrame}
-            goToRelativeFrame={goToRelativeFrame}
-          />
+          <Flex direction="column" gap="size-200">
+            <VideoFrameAnnotator
+              imageBase64={imageBase64}
+              desiredFrame={desiredFrame}
+              goToFrame={goToFrame}
+              goToRelativeFrame={goToRelativeFrame}
+            />
+            <VideoAnnotationsTable />
+          </Flex>
         </div>
         <VideoAnnotationToolbar desiredFrame={desiredFrame} />
       </div>
