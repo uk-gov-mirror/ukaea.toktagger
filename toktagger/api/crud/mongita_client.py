@@ -85,7 +85,7 @@ class AsyncMongitaClient:
             self._client = MongitaClientDisk(self._path)
         return self._client
 
-    def _refresh_if_stale(self, mongita: MongitaClientDisk) -> None:
+    def _refresh_if_stale(self, mongita_client: MongitaClientDisk) -> None:
         """Drop cached state if another process has written since our last operation.
 
         `engine.close()` clears the document cache, collection metadata, the document
@@ -101,13 +101,13 @@ class AsyncMongitaClient:
                 "Found %s; a worker stopped during a write, invalidating all caches",
                 self._dirty_path,
             )
-            mongita.engine.close()
+            mongita_client.engine.close()
             self._bump_version()
             self._dirty_path.unlink(missing_ok=True)
             return
         version = self._read_version()
         if version is None or version != self._seen_version:
-            mongita.engine.close()
+            mongita_client.engine.close()
             self._seen_version = version
 
     def _bump_version(self) -> None:
@@ -164,12 +164,12 @@ class AsyncMongitaClient:
 
         def _in_thread():
             with self._file_lock:
-                mongita = self._mongita()
-                self._refresh_if_stale(mongita)
+                mongita_client = self._mongita()
+                self._refresh_if_stale(mongita_client)
                 if mutates:
                     self._dirty_path.touch()
                 try:
-                    result = fn(mongita)
+                    result = fn(mongita_client)
                     changed = mutates if isinstance(mutates, bool) else mutates(result)
                 except clean_errors:
                     self._dirty_path.unlink(missing_ok=True)
@@ -247,8 +247,8 @@ class AsyncCollection:
         """
         client = self._database._client
 
-        def _apply(mongita: MongitaClientDisk) -> tuple[Any, bool]:
-            database = mongita[self._database.name]
+        def _apply(mongita_client: MongitaClientDisk) -> tuple[Any, bool]:
+            database = mongita_client[self._database.name]
             created = self._name not in database.list_collection_names()
             return op(database[self._name]), created
 

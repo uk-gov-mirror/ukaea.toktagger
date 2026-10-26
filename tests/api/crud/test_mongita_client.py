@@ -52,13 +52,15 @@ async def test_cancelled_operation_does_not_overlap_the_next(client):
             release.wait(timeout=10)
         running -= 1
 
-    slow = asyncio.create_task(client._run(lambda mongita: _op(True), mutates=True))
+    slow = asyncio.create_task(
+        client._run(lambda mongita_client: _op(True), mutates=True)
+    )
     await asyncio.to_thread(started.wait, 10)
     slow.cancel()
     with pytest.raises(asyncio.CancelledError):
         await slow
 
-    fast = asyncio.create_task(client._run(lambda mongita: _op(False)))
+    fast = asyncio.create_task(client._run(lambda mongita_client: _op(False)))
     await asyncio.sleep(0.1)
     assert not fast.done()
 
@@ -78,8 +80,8 @@ async def test_failed_write_bumps_version_and_drops_own_cache(client, tmp_path):
     await collection.insert_one({"name": "seed"})
     before = _version(tmp_path)
 
-    def _partial_write(mongita: MongitaClientDisk):
-        mongita["annotate_db"]["projects"].insert_one({"name": "partial"})
+    def _partial_write(mongita_client: MongitaClientDisk):
+        mongita_client["annotate_db"]["projects"].insert_one({"name": "partial"})
         raise ValueError("boom")
 
     with pytest.raises(ValueError):
@@ -190,7 +192,7 @@ async def test_failing_change_check_bumps_version(client, tmp_path):
         raise ZeroDivisionError
 
     with pytest.raises(ZeroDivisionError):
-        await client._run(lambda mongita: None, mutates=_broken_check)
+        await client._run(lambda mongita_client: None, mutates=_broken_check)
 
     assert _version(tmp_path) == before + 1
     assert client._seen_version is None

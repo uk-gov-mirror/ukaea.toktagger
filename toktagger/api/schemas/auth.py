@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from toktagger.api import config
 
 
 EncryptedStr = Annotated[
@@ -20,6 +22,14 @@ class LogoutResponse(BaseModel):
 class ApiTokenCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     expires_in_days: int = Field(30, gt=0)
+
+    @field_validator("expires_in_days")
+    @classmethod
+    def check_max_lifetime(cls, value: int) -> int:
+        max_days = config.settings.auth.api_token_max_lifetime_days
+        if value > max_days:
+            raise ValueError(f"An API token can be valid for at most {max_days} days")
+        return value
 
 
 class Session(BaseModel):

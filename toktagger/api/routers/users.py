@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
-from toktagger.api import config
 from toktagger.api.auth import api_tokens, sessions
 from toktagger.api.auth.dependencies import (
     get_current_user,
@@ -57,12 +56,6 @@ async def create_my_api_token(
     body: ApiTokenCreate,
     current_user: UserOut = Depends(require_session_user),
 ) -> ApiTokenCreated:
-    max_days = config.settings.auth.api_token_max_lifetime_days
-    if body.expires_in_days > max_days:
-        raise HTTPException(
-            status_code=422,
-            detail=f"An API token can be valid for at most {max_days} days",
-        )
     return await api_tokens.create_api_token(
         request.app.state.db_client,
         current_user.id,

@@ -2,12 +2,15 @@
 
 import hashlib
 import time
+from datetime import datetime
 
 import pytest
+from pydantic import ValidationError
 
 from tests.db_definitions import USER_ADMIN_ID, USER_ALICE_ID, USER_BOB_ID
 from tests.identity import get_auth_token, session_headers
 from toktagger.api import config
+from toktagger.api.schemas.auth import ApiTokenCreate
 
 
 def _bearer(token: str) -> dict[str, str]:
@@ -186,6 +189,39 @@ async def test_lifetime_above_maximum_is_rejected(
         headers=session_headers(get_auth_token(USER_ALICE_ID)),
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_lifetime_at_maximum_is_accepted(
+    unauthenticated_api_client, setup_db_auth
+):
+    max_days = config.settings.auth.api_token_max_lifetime_days
+    before = time.time()
+    created = await _create(unauthenticated_api_client, expires_in_days=max_days)
+    expires_at = datetime.fromisoformat(created["expires_at"]).timestamp()
+    assert expires_at == pytest.approx(before + max_days * 24 * 60 * 60, abs=60)
+
+
+def test_default_max_lifetime_is_365_days(monkeypatch):
+    default = type(config.settings.auth).model_fields["api_token_max_lifetime_days"]
+    assert default.default == 365
+    monkeypatch.setattr(config.settings.auth, "api_token_max_lifetime_days", 365)
+    assert ApiTokenCreate(name="laptop", expires_in_days=365).expires_in_days == 365
+    with pytest.raises(ValidationError, match="at most 365 days"):
+        ApiTokenCreate(name="laptop", expires_in_days=366)
+
+
+def test_create_schema_follows_configured_max_lifetime(monkeypatch):
+    monkeypatch.setattr(config.settings.auth, "api_token_max_lifetime_days", 7)
+    assert ApiTokenCreate(name="laptop", expires_in_days=7).expires_in_days == 7
+    with pytest.raises(ValidationError, match="at most 7 days"):
+        ApiTokenCreate(name="laptop", expires_in_days=8)
+
+
+@pytest.mark.parametrize("expires_in_days", [0, -1])
+def test_create_schema_rejects_non_positive_lifetime(expires_in_days: int):
+    with pytest.raises(ValidationError):
+        ApiTokenCreate(name="laptop", expires_in_days=expires_in_days)
 
 
 @pytest.mark.asyncio
