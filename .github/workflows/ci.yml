@@ -122,9 +122,9 @@ jobs:
         run: pip install uv
 
       - name: Install playwright
-        # Duration swings with GitHub's apt/CDN throughput - seen between 1m and 17m.
+        # Chromium only (the e2e suite never runs another browser) keeps the apt download small; duration still swings with GitHub's apt/CDN throughput.
         timeout-minutes: 20
-        run: uv run --group dev python -m playwright install --with-deps
+        run: uv run --group dev python -m playwright install --with-deps chromium
 
       - name: Run unit tests
         timeout-minutes: 15
@@ -154,9 +154,9 @@ jobs:
         run: pip install uv
 
       - name: Install playwright
-        # Duration swings with GitHub's apt/CDN throughput - seen between 1m and 17m.
+        # Chromium only (the e2e suite never runs another browser) keeps the apt download small; duration still swings with GitHub's apt/CDN throughput.
         timeout-minutes: 20
-        run: uv run --all-extras python -m playwright install --with-deps
+        run: uv run --all-extras python -m playwright install --with-deps chromium
 
       - name: Run unit tests
         timeout-minutes: 15
