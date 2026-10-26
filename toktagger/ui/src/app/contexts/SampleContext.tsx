@@ -93,9 +93,28 @@ interface SampleProviderProps {
   children: ReactNode;
 }
 
+function extractDetail(payload: unknown): string {
+  if (!payload) return "Unknown error";
+  if (typeof payload === "string") return payload;
+  if (typeof payload === "object") {
+    const d = (payload as { detail?: unknown }).detail;
+    if (typeof d === "string" && d.trim()) return d;
+    if (Array.isArray(d)) {
+      const first = d.find((x) => typeof x === "string" && x.trim());
+      if (typeof first === "string") return first;
+    }
+  }
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return "Unknown error";
+  }
+}
+
 async function getData<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
-  const payload = await response.json();
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(extractDetail(payload));
   return payload as T;
 }
 
@@ -131,6 +150,9 @@ async function getAnnotations(
   );
 }
 
+const NO_SIGNALS_MESSAGE =
+  "No signals could be loaded for this sample. Check that the signal names are correct and that the data source is available.";
+
 async function parseData(
   data: Data,
   task: TaskType,
@@ -139,6 +161,11 @@ async function parseData(
     const result = MultiVariateTimeSeriesDataSchema.safeParse(data);
     if (!result.success) {
       throw new Error("Invalid data for time series view");
+    }
+    if (
+      Object.values(result.data.values).every((signal) => !signal?.time.length)
+    ) {
+      throw new Error(NO_SIGNALS_MESSAGE);
     }
     return result.data;
   } else if (task == TaskType.Profile2D) {
@@ -225,24 +252,6 @@ export function SampleProvider({
     setVideoFrameBounds({ min: null, max: null });
     lastGoodVideoFrameRef.current = null;
   }, [sampleId]);
-
-  function extractDetail(payload: unknown): string {
-    if (!payload) return "Unknown error";
-    if (typeof payload === "string") return payload;
-    if (typeof payload === "object") {
-      const d = (payload as { detail?: unknown }).detail;
-      if (typeof d === "string" && d.trim()) return d;
-      if (Array.isArray(d)) {
-        const first = d.find((x) => typeof x === "string" && x.trim());
-        if (typeof first === "string") return first;
-      }
-    }
-    try {
-      return JSON.stringify(payload);
-    } catch {
-      return "Unknown error";
-    }
-  }
 
   function isMissingFrameError(status: number, detail: string): boolean {
     // Treat 404 + common "missing frame" phrasing as "navigation boundary" rather than fatal.
@@ -381,7 +390,7 @@ export function SampleProvider({
             }
           }
 
-          setError(detail);
+          setError(`Could not load the data for this sample. ${detail}`);
           setData(null);
           return;
         }
@@ -446,6 +455,7 @@ export function SampleProvider({
           return;
         }
         setError(err instanceof Error ? err.message : "An error occurred");
+        setData(null);
       } finally {
         if (isCurrentRequest()) {
           setIsLoading(false);
