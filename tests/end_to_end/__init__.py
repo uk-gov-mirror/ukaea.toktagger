@@ -15,13 +15,24 @@ def save_annotations(
     """Click Save and return the annotations the backend now holds for the sample."""
     # Edits reach the sample's annotations after a 100ms debounce, which Save reads from
     page.wait_for_timeout(500)
-    with page.expect_response(
-        lambda r: (
-            f"samples/{sample_id}/annotations" in r.url and r.request.method == "PUT"
-        )
-    ) as put_response:
+    # Save re-fetches the annotations after the PUT and redraws them, so wait for that too.
+    with (
+        page.expect_response(
+            lambda r: (
+                f"samples/{sample_id}/annotations" in r.url
+                and r.request.method == "GET"
+            )
+        ) as get_response,
+        page.expect_response(
+            lambda r: (
+                f"samples/{sample_id}/annotations" in r.url
+                and r.request.method == "PUT"
+            )
+        ) as put_response,
+    ):
         page.get_by_role("button", name="Save").click(force=True)
     assert put_response.value.ok
+    assert get_response.value.ok
 
     response = session.get(
         f"http://localhost:8002/projects/{project_id}/samples/{sample_id}/annotations"
