@@ -1041,7 +1041,11 @@ def test_model_train_predict(server_setup, setup_model_samples, page: Page, mode
         form_check(page, "Train")
 
     # Click train, should get accepted message
-    page.get_by_role("button", name="Train", exact=True).click()
+    with page.expect_response(
+        lambda r: f"models/{model_name}/train" in r.url and r.request.method == "PUT"
+    ) as train_response:
+        page.get_by_role("button", name="Train", exact=True).click()
+    assert train_response.value.ok
     expect(page.get_by_text("Model training added to job queue!")).to_be_visible()
 
     # Close modal, check it disappears
