@@ -17,6 +17,7 @@
 * Fixed race condition during rapid frame navigation in Video view
 * Fixed shot label sticking bug within polygon tooling in Profile2D
 * Improved forward propagation of annotations within Video UI
+* Standardised annotation tables across all UI views & added annotation highlighting and deletion
 * Usability improvements to Add Samples, Time Series & Annotation Toolbar UIs
 
 ## [v0.3.1](https://github.com/ukaea/toktagger/releases/tag/v0.3.1) - 2025-07-03
