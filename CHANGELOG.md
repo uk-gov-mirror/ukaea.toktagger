@@ -8,6 +8,7 @@
 * Added whole-frame label annotation to Video UI
 * Added support for Polygon and Bounding Box tooling using D3 and harmonize with Video tooling
 * Added support for model prediction from within Video UI toolbar
+* Added support for YOLO object detection ML models
 * Added support for loading ML model weights from GitLab and Hugging Face
 * Added support ML models which require more than one file to be saved/loaded
 * Added controls for adding & removing list items in dynamic schema UI forms
