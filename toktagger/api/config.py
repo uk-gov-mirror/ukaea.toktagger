@@ -172,6 +172,11 @@ class Server(pydantic.BaseModel):
         description="Seconds to wait for open requests to complete when the server stops.",
         gt=0,
     )
+    healthcheck_timeout: int = pydantic.Field(
+        60,
+        description="Seconds a worker can be unresponsive before uvicorn restarts it. Slow data loaders (e.g. UDA) can block a worker for longer than the uvicorn default of 5 seconds.",
+        gt=0,
+    )
     cors_origins: list[str] = pydantic.Field(
         ["http://localhost:5173"],
         description="Origins allowed to make cross-origin requests to the API, for example the frontend dev server. Set to an empty list when the frontend is served by TokTagger itself.",

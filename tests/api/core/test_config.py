@@ -241,12 +241,15 @@ def test_proxy_and_timeout_defaults_and_override(monkeypatch, setup_test_setting
     server = TestSettings().server
     assert server.forwarded_allow_ips == "127.0.0.1"
     assert server.shutdown_timeout == 120
+    assert server.healthcheck_timeout == 60
 
     monkeypatch.setenv("SERVER_FORWARDED_ALLOW_IPS", "10.0.0.5")
     monkeypatch.setenv("SERVER_SHUTDOWN_TIMEOUT", "300")
+    monkeypatch.setenv("SERVER_HEALTHCHECK_TIMEOUT", "30")
     server = TestSettings().server
     assert server.forwarded_allow_ips == "10.0.0.5"
     assert server.shutdown_timeout == 300
+    assert server.healthcheck_timeout == 30
 
 
 def test_public_urls_default_from_server_settings(setup_test_settings):

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from toktagger.api.auth.dependencies import (
@@ -36,7 +38,8 @@ async def get_data(
 
     data_loader = LoaderRegistry.get(project.data_loader)()
     try:
-        data = data_loader.get_sample(
+        data = await asyncio.to_thread(
+            data_loader.get_sample,
             sample,
             params=params,
             time_min=project.time_min,

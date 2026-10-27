@@ -182,6 +182,7 @@ def run_server(host: str, port: int, workers: int, reload: bool) -> None:
             reload=reload,
             forwarded_allow_ips=config.settings.server.forwarded_allow_ips,
             timeout_graceful_shutdown=config.settings.server.shutdown_timeout,
+            timeout_worker_healthcheck=config.settings.server.healthcheck_timeout,
         )
     finally:
         if models_dependencies_installed() and ray.is_initialized():

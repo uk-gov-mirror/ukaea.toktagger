@@ -27,6 +27,7 @@ def test_warn_if_insecure(monkeypatch, caplog, public_url, warns):
 def test_run_server_passes_workers_and_proxy_settings(monkeypatch):
     monkeypatch.setattr(config.settings.server, "forwarded_allow_ips", "10.0.0.5")
     monkeypatch.setattr(config.settings.server, "shutdown_timeout", 90)
+    monkeypatch.setattr(config.settings.server, "healthcheck_timeout", 45)
     monkeypatch.setattr(main, "models_dependencies_installed", lambda: False)
     uvicorn_run = MagicMock()
     monkeypatch.setattr(main.uvicorn, "run", uvicorn_run)
@@ -37,6 +38,7 @@ def test_run_server_passes_workers_and_proxy_settings(monkeypatch):
     assert kwargs["workers"] == 2
     assert kwargs["forwarded_allow_ips"] == "10.0.0.5"
     assert kwargs["timeout_graceful_shutdown"] == 90
+    assert kwargs["timeout_worker_healthcheck"] == 45
 
 
 def test_run_server_ignores_reload_with_several_workers(monkeypatch):

@@ -17,6 +17,7 @@ These settings should be defined under the `[server]` heading in the TOML file:
 | cache_dir       | SERVER_CACHE_DIR        | pathlib.Path | ~/.cache/toktagger                      | The directory to use for storing entries in the Mongita database.        |
 | forwarded_allow_ips | SERVER_FORWARDED_ALLOW_IPS | str   | 127.0.0.1                               | Comma-separated addresses of reverse proxies whose X-Forwarded-* headers TokTagger trusts. Use `*` only when the proxy is the only host that can reach TokTagger. |
 | shutdown_timeout | SERVER_SHUTDOWN_TIMEOUT | int         | 120                                     | Seconds to wait for open requests to complete when the server stops.    |
+| healthcheck_timeout | SERVER_HEALTHCHECK_TIMEOUT | int  | 60                                      | Seconds a worker can be unresponsive before uvicorn restarts it. Slow data loaders (e.g. UDA) can block a worker for longer than the uvicorn default of 5 seconds. Applies only when workers is more than 1. |
 | cors_origins    | SERVER_CORS_ORIGINS     | list[str]    | ["http://localhost:5173"]               | Browser origins that can call the API from another site. Use a JSON list in the environment variable. |
 
 ## Database Settings
