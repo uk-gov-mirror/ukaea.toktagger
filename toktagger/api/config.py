@@ -120,6 +120,11 @@ class Auth(pydantic.BaseModel):
         None,
         description="URL at which the browser reaches the managed Canaille server, and the issuer URL. If unset, it is http://<server.host>:<canaille_port>. Only used when provider is canaille.",
     )
+    canaille_ready_timeout: int = pydantic.Field(
+        60,
+        description="Time in seconds to wait for the managed Canaille server to start. Only used when provider is canaille.",
+        gt=0,
+    )
     canaille_bootstrap_password: str | None = pydantic.Field(
         None,
         description="Password for the first Canaille admin user. If unset, a random password is generated and printed at first start. Only used when provider is canaille.",

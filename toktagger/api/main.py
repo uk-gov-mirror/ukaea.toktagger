@@ -12,6 +12,7 @@ os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
 
 import pathlib
 import signal
+import sys
 import tempfile
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
@@ -99,6 +100,8 @@ async def lifespan(app: FastAPI):
 # other workers, even when all workers share the same underlying cluster.
 RAY_NAMESPACE = "toktagger"
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+# On Windows, uvicorn stops workers with SIGBREAK, and ray.init() replaces that handler, not SIGTERM.
+SHUTDOWN_SIGNAL = signal.SIGBREAK if sys.platform == "win32" else signal.SIGTERM
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +203,8 @@ class Server:
         # instead of starting a new one. Ray forbids passing num_cpus/num_gpus
         # when connecting to an existing cluster, so that config only applies
         # to start_ray_head().
-        # ray.init() replaces uvicorn's SIGTERM handler, which breaks graceful worker shutdown
-        uvicorn_sigterm_handler = signal.getsignal(signal.SIGTERM)
+        # ray.init() replaces uvicorn's shutdown handler, which breaks graceful worker shutdown
+        uvicorn_shutdown_handler = signal.getsignal(SHUTDOWN_SIGNAL)
         if "RAY_ADDRESS" in os.environ:
             ray.init(
                 namespace=RAY_NAMESPACE,
@@ -211,7 +214,7 @@ class Server:
             )
         else:
             start_ray_head()
-        signal.signal(signal.SIGTERM, uvicorn_sigterm_handler)
+        signal.signal(SHUTDOWN_SIGNAL, uvicorn_shutdown_handler)
 
         # Detect available resources
         cluster_resources = ray.cluster_resources()

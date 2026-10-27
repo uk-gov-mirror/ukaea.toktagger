@@ -226,6 +226,16 @@ def test_wait_until_ready_reports_a_process_that_exited(canaille_settings, monke
         idp.wait_until_ready()
 
 
+def test_wait_until_ready_gives_up_after_the_configured_timeout(
+    canaille_settings, monkeypatch
+):
+    monkeypatch.setattr(canaille_settings, "canaille_ready_timeout", 1)
+    idp = ManagedCanaille()
+
+    with pytest.raises(RuntimeError, match="did not become ready"):
+        idp.wait_until_ready()
+
+
 def test_stop_is_safe_to_call_twice_and_before_start(canaille_settings):
     idp = ManagedCanaille()
     idp.stop()

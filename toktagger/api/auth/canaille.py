@@ -25,7 +25,6 @@ from toktagger.api.auth.core import write_private_file
 logger = logging.getLogger(__name__)
 
 ADMIN_USERNAME = "admin"
-READY_TIMEOUT_SECONDS = 20
 STOP_TIMEOUT_SECONDS = 5
 CLI_TIMEOUT_SECONDS = 60
 CANAILLE_SCOPES = ("openid", "profile", "email", "groups")
@@ -284,7 +283,7 @@ class ManagedCanaille:
 
     def wait_until_ready(self) -> None:
         url = f"{self.issuer_url}/.well-known/openid-configuration"
-        deadline = time.monotonic() + READY_TIMEOUT_SECONDS
+        deadline = time.monotonic() + config.settings.auth.canaille_ready_timeout
         while time.monotonic() < deadline:
             if self._process is not None and self._process.poll() is not None:
                 raise RuntimeError(
