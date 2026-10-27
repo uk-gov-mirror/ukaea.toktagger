@@ -14,7 +14,11 @@ import {
   useTimeSeriesActions,
   useTimeSeriesState,
 } from "@/app/contexts/TimeSeriesContext";
-import { ExtendedPlotlyHTMLElement, TimeSeriesAnnotationPoint } from "@/types";
+import {
+  ExtendedPlotlyHTMLElement,
+  SelectionRange,
+  TimeSeriesAnnotationPoint,
+} from "@/types";
 import React from "react";
 import { arrayMax, arrayMin } from "@/app/utils";
 import { ToastQueue } from "@adobe/react-spectrum";
@@ -47,6 +51,9 @@ type TimeSeriesPlotProps = {
   plotId?: string;
   plotConfig: PlotConfiguration;
   rescaleOnZoom?: boolean;
+  ariaLabel?: string;
+  // Hides the hover tooltip while drawing (Ctrl held) so it doesn't obscure the shape.
+  muteHoverWhileDrawing?: boolean;
   children:
     | React.ReactElement<InjectedProps>
     | React.ReactElement<InjectedProps>[];
@@ -56,6 +63,8 @@ export const BaseTimeSeriesPlot = ({
   plotId: externalId,
   plotConfig: { data, layout, config = DEFAULT_PLOTLY_CONFIG },
   rescaleOnZoom = true,
+  ariaLabel = "time-series",
+  muteHoverWhileDrawing = false,
   children,
 }: TimeSeriesPlotProps) => {
   const [plotReady, setPlotReady] = useState(false);
@@ -66,12 +75,21 @@ export const BaseTimeSeriesPlot = ({
     triggerUpdate,
     findSelectedAnnotations,
     setOngoingAction,
+    setFocusXRange,
   } = useTimeSeriesActions();
-  const { activeAnnotationTool, toolingCallbacks, isDrawing, editMode } =
-    useTimeSeriesState();
+  const {
+    activeAnnotationTool,
+    toolingCallbacks,
+    isDrawing,
+    ongoingAction,
+    editMode,
+    focusXRange,
+  } = useTimeSeriesState();
 
   const isDraggingRef = useRef(false);
   const allowRelayout = useRef(true);
+  const lastHoverTime = useRef(0);
+  const lockedSubplotElementRef = useRef<HTMLElement | null>(null); // used to track which subplot an annotation was started on
 
   const plotId = externalId || "time-series";
 
@@ -257,10 +275,26 @@ export const BaseTimeSeriesPlot = ({
             { timeout: 5000 },
           );
         }
-        findSelectedAnnotations({
-          low: eventData.range.x[0],
-          high: eventData.range.x[1],
-        });
+        // Range is keyed by axis id (e.g. y2 on a second subplot), not always x/y.
+        const range = eventData.range as unknown as Record<string, number[]>;
+        const xRange =
+          range[Object.keys(range).find((k) => k.startsWith("x")) ?? ""];
+        const yRange =
+          range[Object.keys(range).find((k) => k.startsWith("y")) ?? ""];
+
+        if (xRange && yRange) {
+          const selection: SelectionRange = {
+            x: {
+              low: Math.min(xRange[0], xRange[1]),
+              high: Math.max(xRange[0], xRange[1]),
+            },
+            y: {
+              low: Math.min(yRange[0], yRange[1]),
+              high: Math.max(yRange[0], yRange[1]),
+            },
+          };
+          findSelectedAnnotations(selection);
+        }
       }
       relayout(plot, EMPTY_PLOTLY_SELECTION); // Immediately remove selection indicator
     };
@@ -272,26 +306,64 @@ export const BaseTimeSeriesPlot = ({
     };
   }, [editMode, findSelectedAnnotations, plotId, plotReady]);
 
+  // The subplot lock whilst drawing is cleared once an action is no longer ongoing
+  useEffect(() => {
+    if (ongoingAction) return;
+    lockedSubplotElementRef.current = null;
+  }, [ongoingAction]);
+
   useEffect(() => {
     if (!plotReady) {
       // Plot may not have loaded yet - this will rerun after loading
       return;
     }
 
-    const plot = document.getElementById(plotId);
+    const plot = document.getElementById(plotId) as ExtendedPlotlyHTMLElement;
 
     if (!plot) {
       console.error("Could not locate plot to set drag mode");
       return;
     }
 
+    // Set directly rather than via config, since that would trigger a full replot
+    plot._context.doubleClick = isDrawing ? false : "reset+autosize";
+
     if (isDrawing) {
-      relayout(plot, { dragmode: false });
+      relayout(
+        plot,
+        muteHoverWhileDrawing
+          ? { dragmode: false, hovermode: false }
+          : { dragmode: false },
+      );
       return;
     }
 
-    relayout(plot, { dragmode: "pan" });
-  }, [isDrawing, plotId, plotReady]);
+    relayout(
+      plot,
+      muteHoverWhileDrawing
+        ? { dragmode: "pan", hovermode: "closest" }
+        : { dragmode: "pan" },
+    );
+  }, [isDrawing, muteHoverWhileDrawing, plotId, plotReady]);
+
+  useEffect(() => {
+    if (!plotReady || !focusXRange) return;
+
+    const plot = document.getElementById(plotId) as ExtendedPlotlyHTMLElement;
+    if (!plot) {
+      console.error("Could not locate plot to focus x range");
+      return;
+    }
+
+    const [x0, x1] = focusXRange;
+    const [viewStart, viewEnd] = plot._fullLayout.xaxis.range;
+    // Keep the current zoom unless the annotation doesn't fit, then pad it to ~80% of the view
+    const span = Math.max(viewEnd - viewStart, (x1 - x0) * 1.25);
+    const centre = (x0 + x1) / 2;
+    relayout(plot, { "xaxis.range": [centre - span / 2, centre + span / 2] });
+
+    setFocusXRange(null);
+  }, [focusXRange, plotId, plotReady, setFocusXRange]);
 
   useEffect(() => {
     if (!plotReady) {
@@ -307,16 +379,18 @@ export const BaseTimeSeriesPlot = ({
     function getClickData(
       event: MouseEvent,
       _plot: PlotlyHTMLElement,
-    ): TimeSeriesAnnotationPoint {
+      resolveAgainst?: HTMLElement | null, // This is used to ensure the annotation is resolved against the starting subplot
+    ): TimeSeriesAnnotationPoint & { axisSize: { x: number; y: number } } {
       const plot = _plot as ExtendedPlotlyHTMLElement;
       let xaxis = plot._fullLayout.xaxis; // x-axis descriptor
       let yaxis = plot._fullLayout.yaxis; // y-axis descriptor
 
-      const bb = (event.target as HTMLElement).getBoundingClientRect();
+      const target = resolveAgainst ?? (event.target as HTMLElement); // If a resolve target is not set, the event target is used instead
+      const bb = target.getBoundingClientRect();
       const relX = event.clientX - bb.left; // click X in pixels, relative to plot
       const relY = event.clientY - bb.top; // click Y in pixels, relative to plot
 
-      const subplotId = (event.target as HTMLElement).dataset.subplot; // e.g. "x2y2"
+      const subplotId = target.dataset.subplot; // e.g. "x2y2"
       if (subplotId) {
         const m = subplotId.match(/^x(\d*)y(\d*)$/); // ['', '2', '2']
         // m[1]/m[2] hold numeric suffixes empty string -> primary axis
@@ -336,7 +410,12 @@ export const BaseTimeSeriesPlot = ({
       const x = xaxis.p2d(relX); // data-space X at click
       const y = yaxis.p2d(relY); // data-space Y at click
 
-      return { x, y };
+      const axisSize = {
+        x: Math.abs(xaxis.range[1] - xaxis.range[0]),
+        y: Math.abs(yaxis.range[1] - yaxis.range[0]),
+      };
+
+      return { x, y, axisSize };
     }
 
     const draggableElements =
@@ -350,15 +429,14 @@ export const BaseTimeSeriesPlot = ({
       event.preventDefault();
     };
 
-    const handleCancelSelection = (event: MouseEvent) => {
+    const handleCancelSelection = (event: PointerEvent) => {
       if (!event.ctrlKey) {
         findSelectedAnnotations(null);
       }
     };
 
-    const startAnnotationCreation = (event: MouseEvent) => {
+    const startAnnotationCreation = (event: PointerEvent) => {
       if (event.ctrlKey) {
-        console.log(editMode);
         if (!editMode) {
           ToastQueue.info(
             "Change to Edit Mode to draw annotations - see help popup in annotation toolbar for more info",
@@ -367,15 +445,25 @@ export const BaseTimeSeriesPlot = ({
           return;
         }
         if (activeAnnotationTool) {
+          // If a subplot has not been locked yet (e.g the annotation has just started) the current subplot should be stored
+          if (!lockedSubplotElementRef.current) {
+            lockedSubplotElementRef.current =
+              event.currentTarget as HTMLElement;
+          }
           setOngoingAction(true);
           isDraggingRef.current = true;
-          const clickLocation = getClickData(event, plot);
+          const clickLocation = getClickData(
+            event,
+            plot,
+            lockedSubplotElementRef.current,
+          );
           toolingCallbacks
             .get(activeAnnotationTool.type)
             ?.start(
               clickLocation.x,
               clickLocation.y,
               activeAnnotationTool.label,
+              clickLocation.axisSize,
             );
         } else {
           ToastQueue.info(
@@ -386,44 +474,92 @@ export const BaseTimeSeriesPlot = ({
       }
     };
 
-    const updateAnnotation = (event: MouseEvent) => {
+    const updateAnnotation = (event: PointerEvent) => {
       if (activeAnnotationTool && isDraggingRef.current) {
-        const clickLocation = getClickData(event, plot);
+        const clickLocation = getClickData(
+          event,
+          plot,
+          lockedSubplotElementRef.current,
+        );
         toolingCallbacks
           .get(activeAnnotationTool.type)
           ?.move(clickLocation.x, clickLocation.y);
       }
     };
 
-    const finishAnnotationCreation = (event: MouseEvent) => {
-      setOngoingAction(false);
+    const hoverAnnotation = (event: PointerEvent) => {
+      if (!activeAnnotationTool) return;
+      const now = Date.now();
+      if (now - lastHoverTime.current < 20) return;
+      lastHoverTime.current = now;
+      const clickLocation = getClickData(
+        event,
+        plot,
+        lockedSubplotElementRef.current,
+      );
+      toolingCallbacks
+        .get(activeAnnotationTool.type)
+        ?.hover?.(clickLocation.x, clickLocation.y, clickLocation.axisSize);
+    };
+
+    const finishAnnotationCreation = (event: PointerEvent) => {
       isDraggingRef.current = false;
+      // Subplot lock release is handled by the ongoingAction effect above -
+      // for hover-based tools (e.g. polygon) the session continues past this pointerup
       if (activeAnnotationTool) {
-        const clickLocation = getClickData(event, plot);
-        toolingCallbacks
-          .get(activeAnnotationTool.type)
-          ?.end(clickLocation.x, clickLocation.y);
+        const clickLocation = getClickData(
+          event,
+          plot,
+          lockedSubplotElementRef.current,
+        );
+        const callback = toolingCallbacks.get(activeAnnotationTool.type);
+
+        // If hover behaviour is specified the callbacks should handle finishing the ongoing action
+        if (!callback?.hover) {
+          setOngoingAction(false);
+        }
+        callback?.end(clickLocation.x, clickLocation.y);
+        return;
       }
+
+      setOngoingAction(false); // Ensure this is always called even if the tool callback isn't found
+    };
+
+    // Double-click to finish a shape (e.g. close a polygon), same gating as starting one
+    const doubleClickAnnotation = (event: MouseEvent) => {
+      if (!event.ctrlKey || !editMode || !activeAnnotationTool) return;
+      const clickLocation = getClickData(
+        event,
+        plot,
+        lockedSubplotElementRef.current,
+      );
+      toolingCallbacks
+        .get(activeAnnotationTool.type)
+        ?.doubleClick?.(clickLocation.x, clickLocation.y);
     };
 
     draggableElements.forEach((element) => {
       element.addEventListener("contextmenu", handleContextMenu);
-      element.addEventListener("mousedown", handleCancelSelection);
-      element.addEventListener("mousedown", startAnnotationCreation);
+      element.addEventListener("pointerdown", handleCancelSelection);
+      element.addEventListener("pointerdown", startAnnotationCreation);
+      element.addEventListener("pointermove", hoverAnnotation);
+      element.addEventListener("dblclick", doubleClickAnnotation);
 
       if (editMode) {
-        element.addEventListener("mousemove", updateAnnotation);
-        element.addEventListener("mouseup", finishAnnotationCreation);
+        element.addEventListener("pointermove", updateAnnotation);
+        element.addEventListener("pointerup", finishAnnotationCreation);
       }
     });
 
     return () => {
       draggableElements.forEach((element) => {
         element.removeEventListener("contextmenu", handleContextMenu);
-        element.removeEventListener("mousedown", handleCancelSelection);
-        element.removeEventListener("mousedown", startAnnotationCreation);
-        element.removeEventListener("mousemove", updateAnnotation);
-        element.removeEventListener("mouseup", finishAnnotationCreation);
+        element.removeEventListener("pointerdown", handleCancelSelection);
+        element.removeEventListener("pointerdown", startAnnotationCreation);
+        element.removeEventListener("pointermove", hoverAnnotation);
+        element.removeEventListener("dblclick", doubleClickAnnotation);
+        element.removeEventListener("pointermove", updateAnnotation);
+        element.removeEventListener("pointerup", finishAnnotationCreation);
       });
     };
   }, [
@@ -439,9 +575,10 @@ export const BaseTimeSeriesPlot = ({
   ]);
 
   return (
-    <div className="w-full px-6 py-3 space-y-3 flex-col">
+    // No vertical padding: the caller sizes the plot to this container.
+    <div className="w-full h-full px-6">
       {/* Div where plot is inserted */}
-      <div id={plotId} className="" aria-label="time-series">
+      <div id={plotId} className="" aria-label={ariaLabel}>
         <>
           {React.Children.map(children, (child) => {
             return React.isValidElement(child)

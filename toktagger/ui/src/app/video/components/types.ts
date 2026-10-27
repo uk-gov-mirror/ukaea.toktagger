@@ -1,55 +1,59 @@
+/**
+ * Types used across the video view: the drawing tools, the selection, one table row (InstanceProfile)
+ * and the backend payload shapes.
+ */
 "use client";
 
 import type { ImageAnnotation } from "@annotorious/react";
+import type { CreatedByFields } from "@/types";
 
 /** Frame number within a video (0-based). */
 export type FrameIndex = number;
 
-export type DrawingTool = "rectangle" | "polygon" | "point";
-export type AnnotoriousDrawingTool = Exclude<DrawingTool, "point">;
+export type DrawingTool = "rectangle" | "polygon" | "point" | "frame";
+export type ActiveDrawingTool = DrawingTool | null;
+export type AnnotoriousDrawingTool = Exclude<DrawingTool, "point" | "frame">;
 
-/**
- * Stable identifier for a tracked instance in the UI/session.
- * Format: "<className>::<trackId>"
- */
+/** Identifies an instance as "className::trackId". */
 export type TrackKey = `${string}::${string}`;
 
 /** How the current selection was produced (user picked it vs. auto-assigned). */
 export type SelectionSource = "explicit" | "auto" | null;
 
-/**
- * The "armed" selection used when creating new annotations.
- * - className: required to enable drawing
- * - trackId: optional; when null, a new id can be allocated automatically
- */
+/** The class label and track ID the next annotation will use. With no track ID, a new track starts. */
 export type Selection = {
   className: string | null;
   trackId: string | null;
   source: SelectionSource;
 };
 
-/**
- * UI summary for one tracked instance across frames.
- * `frames` is unique + sorted; `count` is total boxes across all frames.
- */
+export enum VideoAnnotationType {
+  BOUNDING_BOX = "BOUNDING BOX",
+  POLYGON = "POLYGON",
+  POINT = "POINT",
+  FRAME_LABEL = "FRAME LABEL",
+}
+
+/** One annotations-table row: an instance across all frames. `type` and `createdBy` come from its first annotation. */
 export type InstanceProfile = {
   key: TrackKey;
   className: string;
   classId: number;
   trackId: string;
+  type: VideoAnnotationType;
+  createdBy: CreatedByFields;
   frames: number[]; // unique, sorted
-  count: number; // total boxes across frames
+  count: number; // total shapes across frames
 };
 
 /** In-memory annotation storage keyed by frame, using the native Annotorious model. */
 export type ByFrameMap = Map<FrameIndex, ImageAnnotation[]>;
 
-/**
- * Minimal backend payload for a video bounding box annotation.
- * This matches what we emit back to the server.
- */
-export type VideoBoundingBox = {
+/** Backend payloads for video shapes. The same shapes also exist as Zod schemas in src/types.ts. */
+export type VideoBoundingBox = Partial<CreatedByFields> & {
   type: "video_bounding_box";
+  /** Backend _id when this annotation already exists; absent for a new shape. */
+  _id?: string | null;
   frame: number;
   track_id: string;
   label: string;
@@ -57,40 +61,38 @@ export type VideoBoundingBox = {
   y_min: number;
   width: number;
   height: number;
-  created_by?: string;
   timestamp?: string;
   class_id?: number;
 };
 
-export type VideoPolygon = {
+export type VideoPolygon = Partial<CreatedByFields> & {
   type: "video_polygon";
+  /** Backend _id when this annotation already exists; absent for a new shape. */
+  _id?: string | null;
   frame: number;
   track_id: string;
   label: string;
-  segmentation: number[];
-  created_by?: string;
+  segmentation: number[][];
   timestamp?: string;
   class_id?: number;
 };
 
-export type VideoPoint = {
+export type VideoPoint = Partial<CreatedByFields> & {
   type: "video_point";
+  /** Backend _id when this annotation already exists; absent for a new shape. */
+  _id?: string | null;
   frame: number;
   track_id: string;
   label: string;
   x: number;
   y: number;
-  created_by?: string;
   timestamp?: string;
   class_id?: number;
 };
 
 export type VideoAnnotationShape = VideoBoundingBox | VideoPolygon | VideoPoint;
 
-/**
- * Supported label set for this UI.
- * These ids are used when exporting to backend formats that expect a numeric class id.
- */
+/** Maps label names to the numeric class_id saved with each shape. The UI's labels come from the project. */
 export const class_labels: { id: number; name: string }[] = [
   { id: 1, name: "UFO" },
   { id: 2, name: "Minor UFO" },
@@ -121,11 +123,7 @@ export function parseTrackKey(key: TrackKey): {
   return { className: key.slice(0, idx), trackId: key.slice(idx + 2) };
 }
 
-/**
- * Construct a stable source identifier for the current frame.
- * Used for `target.source` so downstream exports/debugging can associate an annotation
- * with a specific project/sample/frame.
- */
+/** The frame ID stored on each annotation's target.source, linking it to its project, sample and frame. */
 export function buildSourceKey(args: {
   projectId: string;
   sampleId: string;
