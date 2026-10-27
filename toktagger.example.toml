@@ -122,7 +122,7 @@
 # Whether to hot reload the TokTagger server on changes to files.
 # reload = false
 
-# The number of Gunicorn worker processes to use. If set to 1, runs a single-process uvicorn server instead.
+# The number of uvicorn worker processes to use.
 # workers = 1
 
 # The directory to use for storing entries in the Mongita database, if used.
@@ -131,8 +131,8 @@
 # Comma-separated addresses of reverse proxies whose X-Forwarded-* headers TokTagger trusts. Use `*` only when the proxy is the only host that can reach TokTagger.
 # forwarded_allow_ips = '127.0.0.1'
 
-# Seconds after which Gunicorn restarts a silent worker, and the graceful shutdown period.
-# gunicorn_timeout = 120
+# Seconds to wait for open requests to complete when the server stops.
+# shutdown_timeout = 120
 
 # Origins allowed to make cross-origin requests to the API, for example the frontend dev server. Set to an empty list when the frontend is served by TokTagger itself.
 # cors_origins = ['http://localhost:5173']
