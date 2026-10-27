@@ -86,7 +86,7 @@ toktagger --workers 1 --reload
 
 ### Multi-User / Team Deployment
 
-For server deployments, run with multiple workers and disable the automatic browser launch:
+For server deployments, run with multiple workers and disable the automatic browser launch. Multiple workers operate on Linux, macOS and Windows:
 
 ```sh
 toktagger --workers 4 --no-browser

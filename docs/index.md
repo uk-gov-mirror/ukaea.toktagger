@@ -64,7 +64,7 @@ This starts the application at `http://localhost:8002`. On the first start, TokT
 
 ### Multi-User / Team Deployment
 
-For concurrent multi-user access, run with multiple workers:
+For concurrent multi-user access, run with multiple workers. Multiple workers operate on Linux, macOS and Windows:
 
 ```sh
 toktagger --workers 4 --no-browser

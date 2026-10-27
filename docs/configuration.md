@@ -13,8 +13,10 @@ These settings should be defined under the `[server]` heading in the TOML file:
 | host            | SERVER_HOST             | str          | localhost                               | Address of the host to launch TokTagger on.                              |
 | port            | SERVER_PORT             | int          | 8002                                    | The port to use for the TokTagger Rest API.                              |
 | reload          | SERVER_RELOAD           | bool         | False                                   | Whether to hot reload the TokTagger server on changes to files.          |
-| workers         | SERVER_WORKERS          | int          | 1                                        | The number of uvicorn worker processes to use. |
+| workers         | SERVER_WORKERS          | int          | 1                                       | The number of uvicorn worker processes to use. Linux, macOS and Windows support more than one worker. When workers is more than 1, TokTagger ignores reload. |
 | cache_dir       | SERVER_CACHE_DIR        | pathlib.Path | ~/.cache/toktagger                      | The directory to use for storing entries in the Mongita database.        |
+| forwarded_allow_ips | SERVER_FORWARDED_ALLOW_IPS | str   | 127.0.0.1                               | Comma-separated addresses of reverse proxies whose X-Forwarded-* headers TokTagger trusts. Use `*` only when the proxy is the only host that can reach TokTagger. |
+| shutdown_timeout | SERVER_SHUTDOWN_TIMEOUT | int         | 120                                     | Seconds to wait for open requests to complete when the server stops.    |
 | cors_origins    | SERVER_CORS_ORIGINS     | list[str]    | ["http://localhost:5173"]               | Browser origins that can call the API from another site. Use a JSON list in the environment variable. |
 
 ## Database Settings
