@@ -1,6 +1,6 @@
 [project]
 name = "toktagger"
-version = "0.3.1"
+version = "0.4.0"
 requires-python = ">=3.11,<3.14"
 authors = [
 ]
@@ -45,7 +45,7 @@ dependencies = [
   "cryptography>=48.0.1",
   "httpx>=0.28.1",
   "canaille[front,oidc,server,sqlite]>=0.2.7",
-  "joserfc>=1.6,<1.7",
+  "joserfc>=1.6,<1.8",
 ]
 [project.optional-dependencies]
 models = [
