@@ -1,7 +1,11 @@
 """Session credentials for tests: minted directly, or by signing in through Canaille."""
 
+import contextlib
 import functools
+import math
 import re
+import time
+from collections.abc import Iterator
 
 import requests
 
@@ -17,6 +21,24 @@ CSRF_PATTERN = re.compile(
 
 
 TEST_CSRF = "test-csrf"
+
+_last_sign_in: dict[str, float] = {}
+
+
+@contextlib.contextmanager
+def new_token_second(username: str) -> Iterator[None]:
+    """Run a sign-in in a later whole second than the user's previous sign-in.
+
+    Canaille issues identical tokens to one user who signs in twice in the same second,
+    and then fails with a unique-constraint error.
+    """
+    if username in _last_sign_in:
+        next_second = math.floor(_last_sign_in[username]) + 1
+        time.sleep(max(0.0, next_second - time.time()))
+    try:
+        yield
+    finally:
+        _last_sign_in[username] = time.time()
 
 
 def get_auth_token(user_id: str) -> str:
@@ -55,9 +77,10 @@ def sign_in(username: str, password: str) -> requests.Session:
         page.url, data={"csrf_token": _csrf_token(page.text), "login": username}
     )
     assert 'name="password"' in page.text, f"unknown user {username}: {page.text[:300]}"
-    page = session.post(
-        page.url, data={"csrf_token": _csrf_token(page.text), "password": password}
-    )
+    with new_token_second(username):
+        page = session.post(
+            page.url, data={"csrf_token": _csrf_token(page.text), "password": password}
+        )
     returned = page.url.startswith(f"{TOKTAGGER_URL}/ui/") and "error=" not in page.url
     assert returned, (
         f"sign-in did not return to TokTagger: {page.url} {_page_text(page)}"
@@ -67,11 +90,7 @@ def sign_in(username: str, password: str) -> requests.Session:
 
 @functools.cache
 def session_cookies(username: str, password: str) -> dict[str, str]:
-    """TokTagger's session cookies for a user, signing in only once per user.
-
-    Canaille issues identical tokens to one user who signs in twice in the same second,
-    and then fails with a unique-constraint error, so tests share one sign-in per user.
-    """
+    """TokTagger's session cookies for a user, signing in only once per user."""
     session = sign_in(username, password)
     return {
         name: session.cookies[name]

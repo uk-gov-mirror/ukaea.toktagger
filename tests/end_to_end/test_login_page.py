@@ -5,6 +5,7 @@ from playwright.sync_api import expect
 
 from tests.conftest import E2E_ADMIN_PASSWORD
 from tests import endpoints
+from tests.identity import new_token_second
 
 BASE_URL = "http://localhost:8002"
 
@@ -13,7 +14,9 @@ def _sign_in_at_provider(page, username, password):
     page.get_by_role("textbox", name="Login").fill(username)
     page.get_by_role("button", name="Continue").click()
     page.get_by_role("textbox", name="Password").fill(password)
-    page.get_by_role("button", name="Sign in").click()
+    with new_token_second(username):
+        with page.expect_response(lambda response: "/auth/callback" in response.url):
+            page.get_by_role("button", name="Sign in").click()
 
 
 def test_sign_in_through_identity_provider(server_setup, guest_page):
