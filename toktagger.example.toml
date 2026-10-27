@@ -134,6 +134,9 @@
 # Seconds to wait for open requests to complete when the server stops.
 # shutdown_timeout = 120
 
+# Seconds a worker can be unresponsive before uvicorn restarts it. Slow data loaders (e.g. UDA) can block a worker for longer than the uvicorn default of 5 seconds.
+# healthcheck_timeout = 60
+
 # Origins allowed to make cross-origin requests to the API, for example the frontend dev server. Set to an empty list when the frontend is served by TokTagger itself.
 # cors_origins = ['http://localhost:5173']
 
