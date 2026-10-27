@@ -64,7 +64,7 @@ This starts the application at `http://localhost:8002`. On the first start, TokT
 
 ### Multi-User / Team Deployment
 
-For concurrent multi-user access, run with multiple Gunicorn workers:
+For concurrent multi-user access, run with multiple workers:
 
 ```sh
 toktagger --workers 4 --no-browser

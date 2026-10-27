@@ -215,14 +215,14 @@ A script can also send an access token of the identity provider. TokTagger check
 
 ## Multi-User Deployment
 
-For team use, run the API under **Gunicorn**. Then the server can serve many requests at the same time:
+For team use, run the API with more than one worker. Then the server can serve many requests at the same time:
 
 ```sh
 # Command-line (installed package)
 toktagger --workers 4 --host 0.0.0.0 --port 8002
 ```
 
-Use the `toktagger` command or `python -m toktagger.api.run` for Gunicorn. These commands start the identity provider and the shared services one time, before the workers start. Do not start `toktagger.api.asgi:app` directly with `auth.provider = "canaille"`.
+Use the `toktagger` command or `python -m toktagger.api.run` for more than one worker. These commands start the identity provider and the shared services one time, before the workers start. Do not start `toktagger.api.asgi:app` directly with `auth.provider = "canaille"`.
 
 Set `AUTH_SECRET_KEY` so that all workers sign sessions with the same key.
 

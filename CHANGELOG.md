@@ -8,7 +8,7 @@
 * Added `auth.session_refresh_seconds`. A browser session reads the account from the identity provider again after this time (default 5 minutes). A change to the global role or a disabled account takes effect within this time. Access tokens from scripts do not change the global role.
 * Removed `POST /auth/token`. Scripts send an identity provider access token and read it from `TOKTAGGER_API_TOKEN`.
 * Added personal API tokens. A user creates and revokes them on the Profile page, or with `/users/me/tokens`. A script sends one as a Bearer token. Added `auth.api_token_max_lifetime_days` (default 365).
-* Added `server.forwarded_allow_ips`, `server.gunicorn_timeout` and `server.cors_origins`.
+* Added `server.forwarded_allow_ips`, `server.shutdown_timeout` and `server.cors_origins`.
 * Replaced `api.dockerfile` with a multi-stage `Dockerfile`. `docker-compose.yml` is now the production stack (Caddy, TokTagger, Keycloak, Postgres, MongoDB). See `docs/deployment.md`.
 
 ## [v0.3.1](https://github.com/ukaea/toktagger/releases/tag/v0.3.1) - 2025-07-03

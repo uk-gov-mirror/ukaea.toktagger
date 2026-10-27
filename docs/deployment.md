@@ -7,7 +7,7 @@ This guide shows how to run TokTagger on a shared server with Docker Compose. Th
 | Service | Purpose |
 |---|---|
 | `caddy` | Reverse proxy. It gets TLS certificates and it is the only service that publishes ports (80 and 443). |
-| `api` | TokTagger, in the production image. It runs under Gunicorn. |
+| `api` | TokTagger, in the production image. It runs under uvicorn. |
 | `keycloak` | The identity provider. It keeps the user accounts. |
 | `postgres` | The database of Keycloak. |
 | `mongo` | The database of TokTagger. |
@@ -68,7 +68,7 @@ The user can now sign in to TokTagger as a global admin. To add other users, do 
 | `KEYCLOAK_ADMIN_PASSWORD` | The password of the Keycloak administrator |
 | `POSTGRES_PASSWORD` | The password of the Keycloak database |
 | `MONGO_USERNAME`, `MONGO_PASSWORD` | The credentials of the TokTagger database |
-| `SERVER_WORKERS` | The number of Gunicorn workers. The default is 4. |
+| `SERVER_WORKERS` | The number of uvicorn workers. The default is 4. |
 | `TOKTAGGER_EXTRAS` | Set to `models` to install the optional machine learning packages in the image |
 
 The `api` service sets `SERVER_FORWARDED_ALLOW_IPS` to `*`. Only Caddy can reach the `api` service, so this is safe. Do not publish the port of the `api` service.
@@ -147,7 +147,7 @@ docker compose -f docker-compose.yml -f docker-compose.custom.yml up -d --build
 Do these two steps again after each update of TokTagger.
 
 !!! warning
-    `run.py` starts the server with `server.run()`, which uses one Uvicorn process. The stack ignores `SERVER_WORKERS` for this server. Gunicorn workers import `toktagger.api.asgi:app` and do not import your script, so they do not know your data loaders or models.
+    `run.py` starts the server with `server.run()`, which uses one Uvicorn process. The stack ignores `SERVER_WORKERS` for this server. Uvicorn workers import `toktagger.api.cli:create_app` and do not import your script, so they do not know your data loaders or models.
 
 ## Data and backups
 

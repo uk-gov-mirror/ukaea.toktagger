@@ -24,19 +24,26 @@ def test_warn_if_insecure(monkeypatch, caplog, public_url, warns):
     assert bool(caplog.records) is warns
 
 
-def test_gunicorn_receives_proxy_and_timeout_settings(monkeypatch):
+def test_run_server_passes_workers_and_proxy_settings(monkeypatch):
     monkeypatch.setattr(config.settings.server, "forwarded_allow_ips", "10.0.0.5")
-    monkeypatch.setattr(config.settings.server, "gunicorn_timeout", 90)
+    monkeypatch.setattr(config.settings.server, "shutdown_timeout", 90)
     monkeypatch.setattr(main, "models_dependencies_installed", lambda: False)
-    process = MagicMock()
-    process.wait.return_value = 0
-    popen = MagicMock(return_value=process)
-    monkeypatch.setattr(main.subprocess, "Popen", popen)
+    uvicorn_run = MagicMock()
+    monkeypatch.setattr(main.uvicorn, "run", uvicorn_run)
 
-    main.run_with_gunicorn("0.0.0.0", 8002, 2)
+    main.run_server("0.0.0.0", 8002, 2, reload=False)
 
-    args = popen.call_args.args[0]
-    assert args[args.index("--forwarded-allow-ips") + 1] == "10.0.0.5"
-    assert args[args.index("--timeout") + 1] == "90"
-    assert args[args.index("--graceful-timeout") + 1] == "90"
-    assert "--access-logfile" in args
+    kwargs = uvicorn_run.call_args.kwargs
+    assert kwargs["workers"] == 2
+    assert kwargs["forwarded_allow_ips"] == "10.0.0.5"
+    assert kwargs["timeout_graceful_shutdown"] == 90
+
+
+def test_run_server_ignores_reload_with_several_workers(monkeypatch):
+    monkeypatch.setattr(main, "models_dependencies_installed", lambda: False)
+    uvicorn_run = MagicMock()
+    monkeypatch.setattr(main.uvicorn, "run", uvicorn_run)
+
+    main.run_server("localhost", 8002, 2, reload=True)
+
+    assert uvicorn_run.call_args.kwargs["reload"] is False

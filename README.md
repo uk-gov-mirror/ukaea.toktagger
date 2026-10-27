@@ -70,7 +70,7 @@ This starts a single-process instance at `http://localhost:8002`. On the first s
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--workers N` | `1` | Number of Gunicorn worker processes. If set to 1, runs a single-process uvicorn server instead |
+| `--workers N` | `1` | Number of uvicorn worker processes |
 | `--host HOST` | `localhost` | Host to bind to |
 | `--port PORT` | `8002` | Port to listen on |
 | `--no-browser` | off | Suppress automatic browser launch |
@@ -97,13 +97,10 @@ The default host is `localhost`. Only the local machine can connect to it. To le
 > [!WARNING]
 > `--host 0.0.0.0` makes TokTagger available to all devices that can reach the machine on port 8002. The traffic is not encrypted. Use it only on a trusted network. For other deployments, use the `docker-compose.yml` stack, which puts TokTagger behind a TLS proxy.
 
-Or directly via Gunicorn (use `python -m gunicorn` to ensure the correct virtual environment is used):
+Or directly via uvicorn (use `python -m uvicorn` to make sure that the correct virtual environment is used):
 
 ```sh
-python -m gunicorn toktagger.api.asgi:app \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --workers 4 \
-    --bind 0.0.0.0:8002
+python -m uvicorn toktagger.api.asgi:app --workers 4 --host 0.0.0.0 --port 8002
 ```
 
 `docker-compose.yml` is the production stack. It runs TokTagger with Keycloak, MongoDB and a Caddy proxy that handles TLS. See the [Deployment](docs/deployment.md) guide.

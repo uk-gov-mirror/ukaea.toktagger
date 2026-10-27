@@ -24,10 +24,10 @@ _internal_token: str | None = None
 def get_internal_token() -> str:
     """Return a stable internal token for trusted server-to-server calls.
 
-    Under multiple Gunicorn workers, all workers share one Ray cluster and
+    Under multiple uvicorn workers, all workers share one Ray cluster and
     call back into each other's server-to-server endpoints, so they must all
     use the same token. TOKTAGGER_INTERNAL_TOKEN is set once by the parent
-    process (see `run_with_gunicorn` in main.py) and inherited by every
+    process (see `run_server` in main.py) and inherited by every
     worker; falling back to a random per-process token is only correct when
     there is a single process (e.g. --workers 1).
     """

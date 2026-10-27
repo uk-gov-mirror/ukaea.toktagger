@@ -1,10 +1,7 @@
-"""ASGI entry point for Gunicorn + UvicornWorker.
+"""ASGI entry point for a standalone uvicorn deployment.
 
 Usage:
-    gunicorn toktagger.api.asgi:app \
-        --worker-class uvicorn.workers.UvicornWorker \
-        --workers 4 \
-        --bind 0.0.0.0:8002
+    uvicorn toktagger.api.asgi:app --workers 4 --host 0.0.0.0 --port 8002
 """
 
 from toktagger.api.cli import create_app

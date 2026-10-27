@@ -11,8 +11,7 @@ import os
 os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
 
 import pathlib
-import subprocess
-import sys
+import signal
 import tempfile
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
@@ -94,7 +93,7 @@ async def lifespan(app: FastAPI):
 
 
 # Ray places detached actors in an anonymous, per-driver namespace unless one
-# is given explicitly - each `ray.init()` call (i.e. each Gunicorn worker)
+# is given explicitly - each `ray.init()` call (i.e. each uvicorn worker)
 # would otherwise get its own anonymous namespace and be unable to see named
 # actors (WorkerModelRegistry, TaskRegistry, per-model actors) created by
 # other workers, even when all workers share the same underlying cluster.
@@ -123,8 +122,8 @@ def _ray_runtime_env() -> dict:
 def start_ray_head() -> None:
     """Start a new Ray cluster head node.
 
-    Call this once, in the parent process, before spawning Gunicorn workers -
-    each worker then attaches to this cluster (see `run_with_gunicorn`) instead
+    Call this once, in the parent process, before spawning uvicorn workers -
+    each worker then attaches to this cluster (see `run_server`) instead
     of independently starting its own.
     """
     num_gpus = None
@@ -156,61 +155,34 @@ def warn_if_insecure() -> None:
         )
 
 
-def run_with_gunicorn(host: str, port: int, workers: int) -> None:
-    """Launch the app under Gunicorn with the given number of worker processes.
+def run_server(host: str, port: int, workers: int, reload: bool) -> None:
+    """Launch the app under uvicorn with the given number of worker processes.
 
-    Starts a single shared Ray cluster head node up front (if models are
-    installed) and points workers at it via RAY_ADDRESS, since each Gunicorn
-    worker attaching independently would otherwise bootstrap its own separate
-    cluster.
+    With several workers, starts a single shared Ray cluster head node up front
+    (if models are installed) and points workers at it via RAY_ADDRESS, since
+    each worker attaching independently would otherwise bootstrap its own
+    separate cluster.
     """
-    if models_dependencies_installed():
-        os.environ["TOKTAGGER_INTERNAL_TOKEN"] = get_internal_token()
-        start_ray_head()
-        os.environ["RAY_ADDRESS"] = "auto"
+    if workers > 1:
+        if reload:
+            logger.warning("reload is ignored when workers > 1")
+            reload = False
+        if models_dependencies_installed():
+            os.environ["TOKTAGGER_INTERNAL_TOKEN"] = get_internal_token()
+            start_ray_head()
+            os.environ["RAY_ADDRESS"] = "auto"
 
-    args = [
-        sys.executable,
-        "-m",
-        "gunicorn",
-        "toktagger.api.asgi:app",
-        "--worker-class",
-        "uvicorn.workers.UvicornWorker",
-        "--workers",
-        str(workers),
-        "--bind",
-        f"{host}:{port}",
-        "--forwarded-allow-ips",
-        config.settings.server.forwarded_allow_ips,
-        "--timeout",
-        str(config.settings.server.gunicorn_timeout),
-        "--graceful-timeout",
-        str(config.settings.server.gunicorn_timeout),
-        # Gunicorn drops uvicorn's per-request access logs unless an access log target is set
-        "--access-logfile",
-        "-",
-    ]
-    process = subprocess.Popen(args)
     try:
-        try:
-            returncode = process.wait()
-        except KeyboardInterrupt:
-            # Ctrl-C delivers SIGINT to the whole foreground process group,
-            # including gunicorn - whose arbiter treats SIGINT as a "quick
-            # shutdown" and already kills its own worker processes (each an
-            # independent Ray driver connected to the shared GCS). Wait for
-            # that to finish rather than SIGKILLing just the arbiter (as
-            # subprocess.run(check=True) would), which would orphan the
-            # workers - left unable to reach GCS once we shut down the Ray
-            # head below, they only notice and self-terminate ~60s later.
-            returncode = process.wait()
-        except SystemExit:
-            process.terminate()
-            process.wait()
-            raise
-        else:
-            if returncode:
-                raise subprocess.CalledProcessError(returncode, args)
+        uvicorn.run(
+            "toktagger.api.cli:create_app",
+            factory=True,
+            host=host,
+            port=port,
+            workers=workers,
+            reload=reload,
+            forwarded_allow_ips=config.settings.server.forwarded_allow_ips,
+            timeout_graceful_shutdown=config.settings.server.shutdown_timeout,
+        )
     finally:
         if models_dependencies_installed() and ray.is_initialized():
             ray.shutdown()
@@ -223,10 +195,12 @@ class Server:
 
     def _setup_ray(self):
         # If RAY_ADDRESS is set, a Ray cluster head node was already started
-        # elsewhere (see start_ray_head/run_with_gunicorn) - attach to it
+        # elsewhere (see start_ray_head/run_server) - attach to it
         # instead of starting a new one. Ray forbids passing num_cpus/num_gpus
         # when connecting to an existing cluster, so that config only applies
         # to start_ray_head().
+        # ray.init() replaces uvicorn's SIGTERM handler, which breaks graceful worker shutdown
+        uvicorn_sigterm_handler = signal.getsignal(signal.SIGTERM)
         if "RAY_ADDRESS" in os.environ:
             ray.init(
                 namespace=RAY_NAMESPACE,
@@ -236,6 +210,7 @@ class Server:
             )
         else:
             start_ray_head()
+        signal.signal(signal.SIGTERM, uvicorn_sigterm_handler)
 
         # Detect available resources
         cluster_resources = ray.cluster_resources()
@@ -265,7 +240,7 @@ class Server:
                 "More model actors requested than the detected hardware supports!"
             )
 
-        # Create a ray actor for use as a model registry. Multiple Gunicorn
+        # Create a ray actor for use as a model registry. Multiple uvicorn
         # workers call _setup_ray() concurrently on startup, so the
         # get_actor/create pair below is not atomic - guard the create
         # against losing that race.
@@ -291,7 +266,7 @@ class Server:
 
         # Create a ray actor for use as the shared task/actor registry, so
         # max_actors/max_gpu_actors limits and in-flight task IDs are tracked
-        # cluster-wide rather than independently per Gunicorn worker.
+        # cluster-wide rather than independently per uvicorn worker.
         try:
             ray.get_actor("TaskRegistry")
         except ValueError:

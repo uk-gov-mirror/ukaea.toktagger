@@ -2,7 +2,7 @@
 
 Mongita is a single-process database: DiskEngine reads a collection's document index
 ($.file_attrs) once and never re-reads it, and put_metadata writes that in-memory
-index back over the file. Running several Gunicorn workers against one store therefore
+index back over the file. Running several uvicorn workers against one store therefore
 used to lose documents outright -- whichever worker wrote next replaced the other
 workers' index entries, orphaning their documents inside $.data.
 

@@ -155,7 +155,7 @@ class Server(pydantic.BaseModel):
     )
     workers: int = pydantic.Field(
         1,
-        description="The number of Gunicorn worker processes to use. If set to 1, runs a single-process uvicorn server instead.",
+        description="The number of uvicorn worker processes to use.",
         gt=0,
     )
     cache_dir: pathlib.Path = pydantic.Field(
@@ -167,9 +167,9 @@ class Server(pydantic.BaseModel):
         "127.0.0.1",
         description="Comma-separated addresses of reverse proxies whose X-Forwarded-* headers TokTagger trusts. Use `*` only when the proxy is the only host that can reach TokTagger.",
     )
-    gunicorn_timeout: int = pydantic.Field(
+    shutdown_timeout: int = pydantic.Field(
         120,
-        description="Seconds after which Gunicorn restarts a silent worker, and the graceful shutdown period.",
+        description="Seconds to wait for open requests to complete when the server stops.",
         gt=0,
     )
     cors_origins: list[str] = pydantic.Field(

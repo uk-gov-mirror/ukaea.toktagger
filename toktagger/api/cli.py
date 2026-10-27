@@ -3,11 +3,9 @@ import threading
 import time
 import webbrowser
 
-import uvicorn
-
 from toktagger.api.auth.canaille import managed_idp
 from toktagger.api.config import settings
-from toktagger.api.main import Server, run_with_gunicorn, warn_if_insecure
+from toktagger.api.main import Server, run_server, warn_if_insecure
 from toktagger.api.models import models_dependencies_installed
 
 
@@ -66,7 +64,7 @@ def main():
     argparser.add_argument(
         "--workers",
         type=int,
-        help="Number of Gunicorn worker processes (use 1 for single-worker uvicorn dev mode)",
+        help="Number of uvicorn worker processes (use 1 for single-worker dev mode)",
     )
     args = argparser.parse_args()
     apply_cli_overrides(settings, args)
@@ -79,23 +77,12 @@ def main():
                 args=(settings.server.host, settings.server.port),
             ).start()
 
-        if settings.server.workers > 1:
-            if settings.server.reload:
-                print("Warning: --reload is ignored when --workers > 1 (gunicorn mode)")
-            run_with_gunicorn(
-                settings.server.host,
-                settings.server.port,
-                settings.server.workers,
-            )
-        else:
-            uvicorn.run(
-                "toktagger.api.cli:create_app",
-                factory=True,
-                host=settings.server.host,
-                port=settings.server.port,
-                reload=settings.server.reload,
-                forwarded_allow_ips=settings.server.forwarded_allow_ips,
-            )
+        run_server(
+            settings.server.host,
+            settings.server.port,
+            settings.server.workers,
+            settings.server.reload,
+        )
 
 
 if __name__ == "__main__":

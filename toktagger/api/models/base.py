@@ -467,7 +467,7 @@ class WorkerRegistry:
 class ActorRegistry:
     """Registry to keep track of Ray actors, and the task they are associated with.
 
-    Runs as a single named, detached Ray actor shared by all Gunicorn workers,
+    Runs as a single named, detached Ray actor shared by all uvicorn workers,
     so actor limits and task IDs are tracked cluster-wide rather than
     independently per worker process.
     """

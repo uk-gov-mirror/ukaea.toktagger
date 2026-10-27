@@ -27,7 +27,7 @@ class AsyncMongitaClient:
     merely stale reads: whichever worker writes next replaces the other's index
     entries, leaving their documents in `$.data` but unreachable -- silent data loss.
 
-    To make several gunicorn workers safe, this class keeps a version counter beside
+    To make several uvicorn workers safe, this class keeps a version counter beside
     the store. Every operation runs inside the cross-process FileLock, and reads the
     counter first: if another worker has written since our last operation, all cached
     state is dropped and re-read from disk. Writes bump the counter. Read-only
@@ -142,7 +142,7 @@ class AsyncMongitaClient:
         """Run fn on the worker thread with the Mongita client, holding the FileLock.
 
         The single worker thread serialises operations in this worker; FileLock
-        serialises them across gunicorn workers. If the awaiting coroutine is
+        serialises them across uvicorn workers. If the awaiting coroutine is
         cancelled, an operation that has not started is dropped and one that has
         started still completes.
 

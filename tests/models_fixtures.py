@@ -102,7 +102,7 @@ async def models_api_client(monkeypatch, settings, db_client, ray_session):
             continue
 
     # TaskRegistry is a detached, named actor shared across the whole Ray
-    # cluster (production behaviour: shared by all Gunicorn workers). Kill it
+    # cluster (production behaviour: shared by all uvicorn workers). Kill it
     # too, so the next test's _setup_ray() creates a fresh one instead of
     # inheriting this test's tasks/actors/limits from the shared ray_session.
     ray.kill(app.state.task_registry)
