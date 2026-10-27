@@ -1,6 +1,7 @@
 "use client";
 import React, {
   createContext,
+  useCallback,
   useContext,
   useState,
   useEffect,
@@ -28,8 +29,15 @@ import {
   TaskType,
   DataParams,
 } from "@/types";
-import { BACKEND_API_URL } from "@/app/core";
+import {
+  ApiError,
+  BACKEND_API_URL,
+  apiFetch,
+  ensureOk,
+  isOwnAnnotation,
+} from "@/app/core";
 import { getSignalNames } from "@/app/utils";
+import { useProjectRole } from "@/app/hooks/useProjectRole";
 
 const viewParamsKey = (projectId: string) => `view-params-${projectId}`;
 const colorMapKey = (projectId: string) => `color-map-${projectId}`;
@@ -68,6 +76,8 @@ interface SampleContextType {
   sample: Sample | null;
   data: Data | null;
   annotations: Annotation[];
+  // The annotations as the server last returned them, so a save can tell which the user removed locally.
+  serverAnnotations: Annotation[];
   dataParams: DataParams;
   viewParams: ViewParams | Profile2DViewParams;
   plotProps: PlotProps;
@@ -76,7 +86,22 @@ interface SampleContextType {
   isLoading: boolean;
   isValidated: boolean | null;
   error: string | null;
+  // HTTP status behind `error`, when it came from the API - lets the page tell "no access" (403) apart from a genuine failure.
+  errorStatus: number | null;
+  // Sourced here, not per-consumer, so remounts on sample change (see page.tsx) don't reset a local role hook and re-enable gated controls.
+  canAnnotate: boolean;
+  // Held here for the same reason as canAnnotate, so the nav bar does not re-fetch the preference on every sample.
+  showOthers: boolean;
+  setShowOthers: React.Dispatch<React.SetStateAction<boolean>>;
   setAnnotations: React.Dispatch<React.SetStateAction<Annotation[]>>;
+  setServerAnnotations: React.Dispatch<React.SetStateAction<Annotation[]>>;
+  // Replaces the working set with a freshly fetched one, so `serverAnnotations` stays the baseline a save diffs against.
+  syncAnnotationsFromServer: (annotations: Annotation[]) => void;
+  // Takes only other authors' annotations from a fetch, keeping the local working copy of the user's own, so a visibility change does not discard unsaved work.
+  mergeOthersFromServer: (
+    annotations: Annotation[],
+    userId: string | undefined,
+  ) => void;
   setDataParams: React.Dispatch<React.SetStateAction<DataParams>>;
   setViewParams: React.Dispatch<
     React.SetStateAction<ViewParams | Profile2DViewParams>
@@ -112,9 +137,8 @@ function extractDetail(payload: unknown): string {
 }
 
 async function getData<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, { signal });
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(extractDetail(payload));
+  const response = await ensureOk(await apiFetch(url, { signal }));
+  const payload: unknown = await response.json();
   return payload as T;
 }
 
@@ -195,6 +219,8 @@ export function SampleProvider({
   const [sample, setSample] = useState<Sample | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [serverAnnotations, setServerAnnotations] = useState<Annotation[]>([]);
+  const { canAnnotate, showOthers, setShowOthers } = useProjectRole(projectId);
 
   const [viewParams, setViewParams] = useState<
     ViewParams | Profile2DViewParams
@@ -229,6 +255,7 @@ export function SampleProvider({
   const [isValidated, setIsValidated] = useState<boolean | null>(null);
 
   const [error, setError] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [videoFrameBounds, setVideoFrameBounds] = useState<{
     min: number | null;
     max: number | null;
@@ -275,6 +302,7 @@ export function SampleProvider({
     const refreshData = async () => {
       setIsLoading(true);
       setError(null);
+      setErrorStatus(null);
 
       try {
         // Fetch project, sample, and annotations in parallel
@@ -291,6 +319,7 @@ export function SampleProvider({
         const sampleKey = `${projectId}:${sampleId}`;
         if (loadedAnnotationsSampleKeyRef.current !== sampleKey) {
           setAnnotations(dbAnnotations);
+          setServerAnnotations(dbAnnotations);
           loadedAnnotationsSampleKeyRef.current = sampleKey;
         }
         setIsValidated(sampleData.validated_annotations);
@@ -307,11 +336,7 @@ export function SampleProvider({
           } as Profile2DViewParams;
         }
 
-        // ------------------------------------------------------------
-        // video projects must request image data parameters.
-        // Backend ImageDataLoader requires params.name === "image".
-        // frame: null means "backend picks first frame automatically".
-        // ------------------------------------------------------------
+        // Video projects must request image data (backend ImageDataLoader requires name === "image"); frame: null means "backend picks first frame".
         let effectiveDataParams: DataParams = dataParams;
 
         if (projectData.task === TaskType.Video) {
@@ -324,7 +349,7 @@ export function SampleProvider({
           };
         }
 
-        const response = await fetch(
+        const response = await apiFetch(
           `${BACKEND_API_URL}/projects/${projectId}/samples/${sampleId}/data`,
           {
             method: "POST",
@@ -367,8 +392,7 @@ export function SampleProvider({
               });
 
               setVideoFrameBounds((prev) => {
-                // Only tighten bounds for adjacent navigation attempts.
-                // Large jump probes (e.g. 0 -> 5000) should not clamp next/prev.
+                // Only tighten bounds for adjacent navigation attempts; large jump probes (e.g. 0 -> 5000) should not clamp next/prev.
                 if (Math.abs(requestedFrame - lastGood) !== 1) {
                   return prev;
                 }
@@ -391,6 +415,7 @@ export function SampleProvider({
           }
 
           setError(`Could not load the data for this sample. ${detail}`);
+          setErrorStatus(response.status);
           setData(null);
           return;
         }
@@ -424,8 +449,7 @@ export function SampleProvider({
             bootstrappedVideoSampleIdRef.current = sampleId;
             lastGoodVideoFrameRef.current = frame;
 
-            // Only the initial frame:null request needs the backend response to
-            // establish the requested frame. Explicit requests already carry it.
+            // Only the initial frame:null request needs the backend response to establish the requested frame; explicit requests already carry it.
             if (requestedFrame === null || requestedFrame === undefined) {
               setDataParams((prev) => {
                 if (prev.name === "image" && prev.frame === frame) {
@@ -454,7 +478,17 @@ export function SampleProvider({
         ) {
           return;
         }
-        setError(err instanceof Error ? err.message : "An error occurred");
+        if (err instanceof ApiError && err.status === 403) {
+          // Reported as a refusal rather than as a missing project, so a user who lost access - or never had it - can act on the message.
+          setError(err.message || "You are not a member of this project.");
+          setErrorStatus(403);
+        } else if (err instanceof ApiError && err.status === 404) {
+          setError("Project not found.");
+          setErrorStatus(404);
+        } else {
+          setError(err instanceof Error ? err.message : "An error occurred");
+          setErrorStatus(err instanceof ApiError ? err.status : null);
+        }
         setData(null);
       } finally {
         if (isCurrentRequest()) {
@@ -470,6 +504,26 @@ export function SampleProvider({
     };
   }, [projectId, sampleId, dataParams, viewParams, plotProps]);
 
+  const syncAnnotationsFromServer = useCallback((fetched: Annotation[]) => {
+    setAnnotations(fetched);
+    setServerAnnotations(fetched);
+  }, []);
+
+  const mergeOthersFromServer = useCallback(
+    (fetched: Annotation[], userId: string | undefined) => {
+      const others = fetched.filter(
+        (annotation) => !isOwnAnnotation(annotation, userId),
+      );
+      const merge = (previous: Annotation[]) => [
+        ...previous.filter((annotation) => isOwnAnnotation(annotation, userId)),
+        ...others,
+      ];
+      setAnnotations(merge);
+      setServerAnnotations(merge);
+    },
+    [],
+  );
+
   const annotationLabels =
     project?.task === TaskType.Video
       ? (project.video_bounding_box_labels || []).map((name, i) => ({
@@ -483,6 +537,7 @@ export function SampleProvider({
     sample,
     data,
     annotations,
+    serverAnnotations,
     dataParams,
     viewParams,
     plotProps,
@@ -491,7 +546,14 @@ export function SampleProvider({
     isLoading,
     isValidated,
     error,
+    errorStatus,
+    canAnnotate,
+    showOthers,
+    setShowOthers,
     setAnnotations,
+    setServerAnnotations,
+    syncAnnotationsFromServer,
+    mergeOthersFromServer,
     setPlotProps,
     setViewParams,
     setDataParams,
