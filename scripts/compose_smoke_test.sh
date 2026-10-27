@@ -7,6 +7,8 @@ export AUTH_SECRET_KEY=smoke-secret KEYCLOAK_CLIENT_SECRET=smoke-client-secret
 export KEYCLOAK_ADMIN_PASSWORD=smokeadmin POSTGRES_PASSWORD=smokepostgres MONGO_PASSWORD=smokemongo
 # GitHub runners have 4 CPUs, below the default max_actors of 5
 export MODELS_MAX_ACTORS=2
+# MongoDB 8.x exits on runner kernels 6.19 to 7.0.13 (SERVER-125742); 7.0 runs on them
+export MONGO_VERSION=7.0
 project=toktagger-smoke
 compose=(docker compose -p "$project")
 resolve=(--resolve localhost:443:127.0.0.1 --resolve keycloak.localhost:443:127.0.0.1)

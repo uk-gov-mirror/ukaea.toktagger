@@ -68,6 +68,7 @@ The user can now sign in to TokTagger as a global admin. To add other users, do 
 | `KEYCLOAK_ADMIN_PASSWORD` | The password of the Keycloak administrator |
 | `POSTGRES_PASSWORD` | The password of the Keycloak database |
 | `MONGO_USERNAME`, `MONGO_PASSWORD` | The credentials of the TokTagger database |
+| `MONGO_VERSION` | The tag of the `mongo` image. The default is `8.0`. MongoDB 8.x does not start on Linux kernels 6.19 to 7.0.13 (see [SERVER-125742](https://jira.mongodb.org/browse/SERVER-125742)). On these kernels, set `7.0` before the first start. You cannot go back to an older version after MongoDB writes data to the volume. |
 | `SERVER_WORKERS` | The number of uvicorn workers. The default is 4. |
 | `TOKTAGGER_EXTRAS` | Set to `models` to install the optional machine learning packages in the image |
 

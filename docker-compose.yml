@@ -44,7 +44,7 @@ services:
       - toktagger_data:/data
 
   mongo:
-    image: mongo:8.0
+    image: mongo:${MONGO_VERSION:-8.0}
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-toktagger}
