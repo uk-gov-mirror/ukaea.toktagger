@@ -2,6 +2,7 @@
 import {
   Form,
   Button,
+  ActionButton,
   DialogTrigger,
   Dialog,
   Divider,
@@ -29,7 +30,8 @@ import {
 import AddCircle from "@spectrum-icons/workflow/AddCircle";
 import { useState, useEffect } from "react";
 import { z } from "zod/v4";
-import { BACKEND_API_URL } from "@/app/core";
+import * as d3 from "d3";
+import { BACKEND_API_URL, apiFetch } from "@/app/core";
 import NumericalRange, {
   NumericalRangeType,
 } from "@/app/components/ui/numerical_range";
@@ -52,9 +54,13 @@ const SignalNameHelp = ({ helpText }: { helpText: string | null }) => (
 export const AddSamplesEditor = ({
   project,
   onModify,
+  // Which samples a project holds is project configuration, so only a project
+  // admin may add them - mirrors require_project_admin_role on POST /samples.
+  canManageSamples = true,
 }: {
   project: Project;
   onModify?: () => void;
+  canManageSamples?: boolean;
 }) => {
   const dataLoader = project.data_loader;
 
@@ -87,7 +93,7 @@ export const AddSamplesEditor = ({
   useEffect(() => {
     async function fetchDataSchema() {
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           `${BACKEND_API_URL}/meta/dataloader/${dataLoader}`,
         );
         if (response.ok) {
@@ -96,7 +102,7 @@ export const AddSamplesEditor = ({
           // e.g., "ShotData", "FileData", "TimeSeriesFileData"
           setDataSchema(schema);
 
-          const helpResponse = await fetch(
+          const helpResponse = await apiFetch(
             `${BACKEND_API_URL}/meta/dataloader/${dataLoader}/help`,
           );
           const helpText = z
@@ -151,23 +157,22 @@ export const AddSamplesEditor = ({
       reader.onload = (e) => {
         try {
           const content = e.target?.result as string;
-          // Parse CSV: split by lines, skip header (first line), get first column
-          const lines = content.split(/\r?\n/).filter((line) => line.trim());
-          if (lines.length <= 1) {
+          // Parse CSV properly so quoted fields containing newlines stay in one row
+          const rows = d3
+            .csvParseRows(content)
+            .filter((row) => row.some((cell) => cell.trim()));
+          if (rows.length <= 1) {
             ToastQueue.negative("CSV file is empty or has no data rows", {
               timeout: 3000,
             });
             return;
           }
-          // Skip header (index 0), parse remaining lines
-          const ids = lines
+          // Skip header (index 0), take the first column of remaining rows
+          const ids = rows
             .slice(1)
-            .map((line) => {
-              // Get first column (split by comma, take first element)
-              const firstColumn = line.split(",")[0].trim();
-              return parseInt(firstColumn, 10);
-            })
-            .filter((id) => !isNaN(id));
+            .map((row) => row[0].trim())
+            .filter((firstColumn) => /^\d+$/.test(firstColumn))
+            .map((firstColumn) => parseInt(firstColumn, 10));
 
           if (ids.length === 0) {
             ToastQueue.negative("No valid shot IDs found in first column", {
@@ -198,7 +203,7 @@ export const AddSamplesEditor = ({
       if (useDirectories) {
         apiUrl = `${BACKEND_API_URL}/paths/directories?dir_path=${dirPath}&file_type=${fileType}`;
       }
-      const response = await fetch(apiUrl);
+      const response = await apiFetch(apiUrl);
 
       if (response.ok) {
         const result = await response.json();
@@ -317,7 +322,7 @@ export const AddSamplesEditor = ({
       });
 
       // POST to API
-      const response = await fetch(
+      const response = await apiFetch(
         `${BACKEND_API_URL}/projects/${project._id}/samples`,
         {
           method: "POST",
@@ -355,10 +360,10 @@ export const AddSamplesEditor = ({
 
   return (
     <DialogTrigger>
-      <Button variant="primary">
+      <ActionButton isQuiet isDisabled={!canManageSamples}>
         <AddCircle />
         <Text>Add Samples</Text>
-      </Button>
+      </ActionButton>
       {(close) => (
         <Dialog>
           <Heading>Add Samples to Project</Heading>

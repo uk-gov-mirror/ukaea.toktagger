@@ -1,8 +1,13 @@
+/**
+ * Pure helpers for track IDs, instances, propagation and byFrame updates.
+ * There is no React here, so this is the easiest place to read the rules.
+ */
 "use client";
 
 import type { ImageAnnotation } from "@annotorious/react";
-import type { Annotation } from "@/types";
+import type { Annotation, CreatedByFields } from "@/types";
 import {
+  pickCreatedBy,
   VideoBoundingBoxSchema,
   VideoFrameLabelSchema,
   VideoPointSchema,
@@ -14,8 +19,19 @@ import type {
   InstanceProfile,
   TrackKey,
 } from "./types";
-import { classIdForName, makeTrackKey, buildSourceKey } from "./types";
-import { getAnnotationCreator, getLabelTrack } from "./anno-utils";
+import {
+  classIdForName,
+  makeTrackKey,
+  buildSourceKey,
+  VideoAnnotationType,
+} from "./types";
+import {
+  getAnnotationAuthor,
+  getAnnotationCreator,
+  getLabelTrack,
+  isPointAnno,
+  isPolygonAnno,
+} from "./anno-utils";
 
 /** True when global annotation shortcuts should yield to text entry controls. */
 export function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -31,36 +47,25 @@ export function isEditableEventTarget(target: EventTarget | null): boolean {
   );
 }
 
-/**
- * Simple deep clone for annotation payloads.
- * Annotorious annotations are plain data objects, so JSON cloning is sufficient here.
- */
+/** Deep clone through JSON, which is enough for plain annotation data. */
 export function deepClone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
 
-/**
- * Normalize a track id into a stable, readable key for comparisons and lookups.
- * We keep this intentionally conservative (no heavy validation), just formatting.
- */
+/** Normalises a track ID for comparing: trimmed, lower case, with spaces turned into dashes. */
 export function canonicalizeTrackId(trackId: string): string {
   const s = trackId.trim();
   if (!s) return "";
   return s.replace(/\s+/g, "-").toLowerCase();
 }
 
-/**
- * Best-effort coercion to a non-empty track id.
- * Used primarily in equality checks and deletion matching.
- */
+/** Like canonicalizeTrackId, but never empty (falls back to "1"). Used when matching for deletion. */
 export function ensureTrackId(trackId: string): string {
   const c = canonicalizeTrackId(trackId);
   return c.length > 0 ? c : "1";
 }
 
-/* ------------------------------------------------------------------ */
-/* Human-readable track ids (e.g. mellow-glove-4)                      */
-/* ------------------------------------------------------------------ */
+// Human-readable track IDs, e.g. mellow-glove-4
 
 const READABLE_ADJECTIVES = [
   "bright",
@@ -139,10 +144,7 @@ function randomReadableSlug(): string {
   return `${adj}-${noun}-${n}`;
 }
 
-/**
- * Generate a readable track id that doesn't collide with an existing set
- * (collisions checked after canonicalization).
- */
+/** A new readable track ID, such as brave-glow-4, that is not already in `existingTrackIds`. */
 export function uniqueReadableTrackId(
   existingTrackIds: Iterable<string>,
 ): string {
@@ -170,10 +172,7 @@ export function uniqueReadableTrackId(
   return canonicalizeTrackId(candidate);
 }
 
-/**
- * Collect all track ids for a given class across all frames.
- * This is used to avoid allocating duplicates when creating new instances.
- */
+/** Every track ID a class's shapes use across all frames, so new IDs don't repeat one. */
 export function existingTrackIdsForClass(
   byFrame: ByFrameMap,
   className: string,
@@ -211,10 +210,7 @@ export function existingFrameLabelTrackIdsForClass(
   return out;
 }
 
-/**
- * Build the current per-class numeric track-id counters from seeded annotations.
- * The returned map stores the highest numeric id seen for each class.
- */
+/** The highest numeric track ID used by each class, for allocateNextTrackId. */
 export function buildNextTrackIdState(
   annotations: Annotation[],
 ): Map<string, number> {
@@ -245,10 +241,7 @@ export function buildNextTrackIdState(
   return nextTrackNums;
 }
 
-/**
- * Advance the numeric track-id counter for a class and return the allocated id.
- * The map is mutated intentionally because the owning session keeps the state.
- */
+/** Bumps a class's numeric track ID counter and returns the new ID. Mutates the map on purpose: the session owns it. */
 export function allocateNextTrackId(
   nextTrackNums: Map<string, number>,
   className: string,
@@ -291,10 +284,14 @@ export function flattenByFrame(byFrame: ByFrameMap): ImageAnnotation[] {
   return out;
 }
 
-/**
- * Derive instance profiles from the per-frame overlays.
- * Profiles are keyed by (className, trackId) and include counts + which frames they appear in.
- */
+function shapeAnnotationType(a: ImageAnnotation): VideoAnnotationType {
+  if (isPointAnno(a)) return VideoAnnotationType.POINT;
+  return isPolygonAnno(a)
+    ? VideoAnnotationType.POLYGON
+    : VideoAnnotationType.BOUNDING_BOX;
+}
+
+/** One InstanceProfile per class + track ID in byFrame, listing the frames it appears on. */
 export function deriveInstances(
   byFrame: ByFrameMap,
   getLabelTrack: (a: ImageAnnotation) => {
@@ -320,6 +317,8 @@ export function deriveInstances(
           className,
           classId: classIdForName(className),
           trackId,
+          type: shapeAnnotationType(a),
+          createdBy: getAnnotationAuthor(a),
           frames: [frame],
           count: 1,
         });
@@ -333,8 +332,7 @@ export function deriveInstances(
   const out = Array.from(map.values());
   for (const inst of out) inst.frames.sort((a, b) => a - b);
 
-  // Show instances by the first frame they appear in, with stable ordering
-  // for ties based on alphabetical track id.
+  // Sort by first frame, then by track ID so ties keep a stable order
   out.sort(
     (a, b) =>
       (a.frames[0] ?? Number.POSITIVE_INFINITY) -
@@ -345,9 +343,7 @@ export function deriveInstances(
   return out;
 }
 
-/**
- * Remove all annotations belonging to a specific (className, trackId) pair across all frames.
- */
+/** Removes every shape of one instance (class + track ID) from all frames. */
 export function deleteTrackAcrossFrames(
   byFrame: ByFrameMap,
   match: { className: string; trackId: string },
@@ -436,7 +432,12 @@ export function deriveFrameLabelInstances(
 ): InstanceProfile[] {
   const framesByKey = new Map<
     TrackKey,
-    { className: string; trackId: string; frames: Set<number> }
+    {
+      className: string;
+      trackId: string;
+      createdBy: CreatedByFields;
+      frames: Set<number>;
+    }
   >();
 
   for (const annotation of annotations) {
@@ -450,6 +451,7 @@ export function deriveFrameLabelInstances(
     const entry = framesByKey.get(key) ?? {
       className,
       trackId,
+      createdBy: pickCreatedBy(annotation),
       frames: new Set<number>(),
     };
     entry.frames.add(annotation.frame);
@@ -463,6 +465,8 @@ export function deriveFrameLabelInstances(
       className: entry.className,
       classId: classIdForName(entry.className),
       trackId: entry.trackId,
+      type: VideoAnnotationType.FRAME_LABEL,
+      createdBy: entry.createdBy,
       frames,
       count: frames.length,
     };

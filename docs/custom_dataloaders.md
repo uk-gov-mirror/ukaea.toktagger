@@ -104,6 +104,8 @@ server = Server()
 server.run()
 ```
 
+To run your data loader in the Docker Compose stack, read [Add custom data loaders and models](deployment.md#add-custom-data-loaders-and-models).
+
 ## Data Types and Schemas
 
 ### Sample Data Types
@@ -405,24 +407,3 @@ config.settings = UpdatedSettings()
 server = Server()
 server.run()
 ```
-
-## Using Docker
-If you are using the docker compose option to run the server, you can provide a custom script similar to the one above to add your own data loaders. To do this, create a file similar to the one above, but making sure to pass the following arguments into `server.run()`:
-
-```python
-server.run(
-    host="0.0.0.0",
-    port=8002
-)
-```
-
-You can then provide the path to your script when running docker compose. For example, say we have the above script in a file called `custom_toktagger.py` - We simply need to add `CUSTOM_SCRIPT=./custom_toktagger.py` before the docker compose command, and a SQL URL as an environment variable:
-
-```sh
-CUSTOM_SCRIPT=./custom_toktagger.py SQL_URL=<Your URL> docker compose --env-file .env.dev -f docker-compose.dev.yml up --build
-```
-
-!!! tip
-    Make sure you provide the **path** to your script, and not a string. 
-    
-    e.g, provide `CUSTOM_SCRIPT=./custom_toktagger.py`, and **not** `CUSTOM_SCRIPT=custom_toktagger.py`.

@@ -1,7 +1,7 @@
 import pytest
+from toktagger.api import config
 from toktagger.api.core.data_loaders import DataLoader, LoaderRegistry
 from toktagger.api.schemas.samples import ShotData
-import toktagger.api.config as config
 
 
 @pytest.mark.asyncio
