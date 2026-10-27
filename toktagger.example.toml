@@ -60,6 +60,9 @@
 # URL at which the browser reaches the managed Canaille server, and the issuer URL. If unset, it is http://<server.host>:<canaille_port>. Only used when provider is canaille.
 # canaille_public_url = '<your value here>'
 
+# Time in seconds to wait for the managed Canaille server to start. Only used when provider is canaille.
+# canaille_ready_timeout = 60
+
 # Password for the first Canaille admin user. If unset, a random password is generated and printed at first start. Only used when provider is canaille.
 # canaille_bootstrap_password = '<your value here>'
 
