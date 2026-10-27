@@ -39,11 +39,11 @@ export const TimeSeriesView = () => {
 
     let plotData: Partial<Plotly.PlotData>[] = Object.entries(
       viewData.values,
-    ).map(([key, value]: [string, TimeSeriesData]) => {
+    ).map(([key, value]: [string, TimeSeriesData | null]) => {
       return {
         name: key,
-        x: value.time,
-        y: value.values,
+        x: value?.time ?? [],
+        y: value?.values ?? [],
         mode: "lines",
       };
     });
@@ -112,7 +112,6 @@ export const TimeSeriesView = () => {
         //grid: { rows: 1, columns: 1, pattern: "independent" },
         dragmode: "pan",
         autosize: true,
-        height: window.innerHeight * 0.9,
         xaxis: {
           minallowed: minTime,
           maxallowed: maxTime,
