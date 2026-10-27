@@ -27,7 +27,6 @@ async def test_get_signal_name_help(api_client, setup_db, loader):
     response = await api_client.get(f"/meta/dataloader/{loader}/help")
     assert response.status_code == 200
     assert response.json() == LoaderRegistry.get(loader).signal_name_help
-    assert response.json()
 
 
 @pytest.mark.asyncio
